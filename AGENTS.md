@@ -92,8 +92,12 @@ Before handing off changes:
   edit files or commit.
 - Use the review to produce a concise commit message that describes the full
   staged change.
-- Commit without asking for confirmation of the message unless an applicable
-  workflow or explicit user instruction requires confirmation.
+- A direct user request such as “commit”, “let's commit”, or “go” after the
+  change is sufficient authorization to commit. Do not ask for separate
+  confirmation of the commit message; choose it from the reviewed diff and
+  report it as part of the handoff. Ask the user only when the commit scope is
+  materially ambiguous, includes unrelated changes, or would require a
+  destructive operation outside the request.
 - Include all intended uncommitted changes after reviewing their scope; do not
   silently omit tracked or untracked files that belong to the change.
 
