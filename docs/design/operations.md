@@ -14,34 +14,78 @@ A basic workflow is:
 stateDiagram-v2
     [*] --> Draft
     Draft --> Review
-    Review --> Published
+    Review --> Published: initial publication
+    Draft --> Published: publish version
+    Published --> Archived: replaced by next version
 ```
 
-Publication is an application command, not merely:
+Creating a next-version draft does not transition the current published
+version; it creates a separate draft version alongside it. The published
+version transitions to `archived` only when that next version is published.
 
-```sql
-UPDATE documents SET status = 'published'
+The create-next-version operation accepts only the current published version
+as its source. It must reject drafts and all other unpublished versions as
+parents. A draft's working revisions, local recovery snapshots, and unsaved
+preview state do not change this rule.
+
+The state belongs to a numbered document version. Published and archived
+versions are immutable, except for the deliberately mutable
+`archive_accessible` access-control field. A published document is never edited
+in place.
+Publication is an application command, not merely changing a status field:
+
+```text
+set version.state = "published"
 ```
 
 Conceptually:
 
 ```mermaid
 flowchart TB
-    publish["publish(document)"] --> validate["Validate document"]
+    edit["Edit published document"] --> copy["Create next-version draft\n(deep copy)"]
+    copy --> draft["Draft version N+1"]
+    draft --> publish["publish(next_version)"]
+    publish --> validate["Validate draft"]
     validate --> permissions["Verify permissions"]
     permissions --> metadata["Verify required metadata"]
-    metadata --> revision["Create revision"]
-    revision --> state["Update publication state"]
-    state --> transaction["Commit transaction"]
-    transaction --> invalidate["Invalidate affected cache"]
+    metadata --> concurrency["Check expected version/revision and current parent"]
+    concurrency --> revision["Freeze/record publication version"]
+    revision --> state["Publish N+1; archive N"]
+    state --> transaction["Commit one transaction"]
+    transaction --> event["Emit post-commit cache event"]
+    event --> invalidate["Invalidate affected cache"]
     invalidate --> result["Return result"]
 ```
+
+Creating the next version and publishing it are separate operations. The copy
+must duplicate all sections and nested objects logically; a physical
+copy-on-write representation is allowed only if it preserves independent
+version isolation. The publication transaction must fail on stale state and
+must leave the previous publication in place if validation, authorization,
+concurrency checks, or persistence fails.
+
+The database publication swap is atomic: the new version is published and the
+old version is archived together, or neither change is committed. Cache
+invalidation is post-commit derived-state work and must be retryable; a cache
+failure must not roll back the canonical publication swap.
+
+The archive operation retains the replaced version as a read-only historical
+record. Its `archive_accessible` field defaults to true and may be changed by
+the author or an authorized manager. Changing archive visibility must not
+modify the version's content. Ordinary public routes resolve only the current
+published version; a historical route may resolve an archived version only
+when it is accessible. Editorial management may inspect inaccessible archives
+read-only.
 
 The same publishing service is called from:
 
 * the web editor;
 * MCP;
 * future APIs.
+
+The service is also responsible for rejecting writes against published or
+archived versions. A request to edit one must first use the create-next-version
+operation.
 
 ---
 
@@ -54,6 +98,8 @@ Example:
 ```text
 /                         public homepage
 /articles/:slug           public article
+/articles/:slug/versions/:version
+                          public read-only historical version, when accessible
 /series/:slug             public series
 /subjects/:slug           public subject
 
@@ -171,8 +217,14 @@ draft remains untouched
 If validation fails:
 
 ```text
-document remains unpublished
+the new version remains unpublished and the current published version remains
+current
 ```
+
+If archiving or publication persistence fails, the transaction rolls back and
+the current publication remains unchanged. If cache invalidation fails after a
+successful commit, canonical content remains valid and the affected public and
+historical pages can be regenerated or invalidated by retry.
 
 ### MCP conflict
 

@@ -16,7 +16,7 @@ flowchart TB
     editors --> ai["AI client<br/>MCP over HTTPS"]
     browser --> verso["Verso application"]
     ai --> verso
-    verso --> sqlite[("SQLite<br/>canonical state")]
+    verso --> sqlite[("SQLite<br/>canonical versioned state")]
     verso --> assets["Asset store<br/>filesystem or S3-compatible"]
 ```
 
@@ -95,9 +95,9 @@ SQLite is the sole database backend for the initial versions of Verso.
 It stores canonical structured application state including:
 
 ```text
-documents
-sections
-revisions
+document lineages and versions
+sections and nested objects
+working revisions
 
 users
 roles
@@ -245,7 +245,7 @@ flowchart TB
     ai["AI client"] --> mcp["OAuth-authenticated MCP"]
     mcp --> application["Application service"]
     application --> authorization["Authorization"]
-    application --> concurrency["Concurrency check"]
+    application --> concurrency["Version/revision check"]
     application --> validation["Validation"]
     validation --> sqlite[("SQLite")]
 ```

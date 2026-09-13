@@ -70,6 +70,13 @@ Sections may be:
 * duplicated;
 * removed.
 
+These operations apply only to a draft version. Opening a published or
+archived version is read-only. An editor who chooses to edit a published
+version must explicitly create the next version; Verso deep-copies the source
+version's sections and owned nested objects into that draft and records the
+source as `based_on_version_id`. The editor then edits the new draft without
+changing the source version.
+
 ---
 
 ## 3. Live Side Preview
@@ -148,6 +155,9 @@ Only server-side `save draft` (including an optional server-side draft autosave
 checkpoint) and `publish` mutate canonical Verso state. Local recovery autosave
 does not create a Verso revision or mutate SQLite.
 
+For a published document, `save draft` means saving the explicitly created
+next-version draft. It never means modifying the published version.
+
 ---
 
 ## 5. Local Draft Recovery and Client-Side Preview
@@ -170,7 +180,7 @@ site/deployment namespace
 account identity, when authenticated
 stable client-generated draft identity
 server document identity, when known
-base server revision, if known
+base server version and working revision, if known
 draft content
 schema version
 updated_at
@@ -197,7 +207,9 @@ should expose whether recovery data is being persisted.
 When opening a document, the editor should compare the local snapshot with the
 server draft. If the local snapshot is newer or diverges, the editor should
 offer explicit restore, merge, or discard actions. A successful server save or
-publish should advance the local base revision or clear the obsolete snapshot.
+publish should advance the local base version and working revision or clear the
+obsolete snapshot. A local snapshot based on a published version must not be
+silently applied to a different next-version lineage.
 
 The local recovery path and client-side renderer share the same current draft:
 

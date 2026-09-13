@@ -65,8 +65,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 
 - [System architecture](design/system.md) — deployment model, technology
   direction, SQLite, internal layering, and representative request paths.
-- [Content model](design/content.md) — documents, typed sections, assets,
-  interactive modules, and revisions.
+- [Content model](design/content.md) — document versions, typed sections,
+  assets, interactive modules, and working revisions.
 - [Rendering and cache](design/rendering.md) — server rendering, published
   page caching, invalidation, and draft-cache boundaries.
 - [Web editor and preview](design/editor.md) — HTMX editing, client/server
@@ -89,3 +89,11 @@ These boundaries apply throughout the architecture:
 - All interfaces use shared application/domain services.
 - Preview, save, and publish are distinct operations.
 - Published interactive modules are versioned and immutable.
+- Published document versions are immutable; editing one creates an explicitly
+  linked next-version draft through a deep copy of its sections and owned
+  objects.
+- A next-version draft may be based only on the current published version;
+  unpublished drafts cannot be forked in the initial design.
+- Publishing a next version atomically archives the previous published version
+  and makes the new version current; archived versions remain read-only and
+  are publicly accessible by default unless archive visibility is disabled.

@@ -46,6 +46,7 @@ document:update:any
 
 document:review
 document:publish
+document:archive:manage
 
 asset:read
 asset:upload
@@ -156,6 +157,7 @@ get_document
 
 create_document
 update_document_metadata
+create_next_version
 
 list_sections
 get_section
@@ -173,6 +175,7 @@ preview_section
 
 submit_for_review
 publish_document
+set_archive_visibility
 unpublish_document
 
 list_assets
@@ -181,6 +184,18 @@ upload_asset
 ```
 
 The tool set should remain small, composable, and domain-oriented.
+
+Document and section update tools operate on a draft version identified by its
+version identity. `create_next_version` accepts only the current published
+version as its source; attempting to use an unpublished draft or other
+unpublished version as the parent fails. `set_archive_visibility` changes only
+the read-only archive's accessibility and requires the archive-management
+capability.
+
+Draft snapshotting, archiving an abandoned draft to preserve it before
+starting another draft from the same published parent, and rebasing onto a
+newer published version are possible future extensions, not current MCP
+operations.
 
 ---
 
@@ -193,7 +208,9 @@ For example:
 ```text
 update_section(
     document_id,
+    version_id,
     section_id,
+    expected_version,
     expected_revision,
     data
 )
@@ -213,7 +230,13 @@ Benefits include:
 
 ## 8. Optimistic Concurrency
 
-Verso should use optimistic concurrency for editorial mutations.
+Verso should use optimistic concurrency for editorial mutations. The expected
+version and working-revision identity must be checked when saving or publishing
+a draft. Publishing must also verify atomically that the draft's
+`based_on_version_id` is still the logical document's current published
+version. A mutation against a published or archived version fails with an
+immutable-version error; the caller must create or select the appropriate
+draft next version first.
 
 Example:
 
@@ -224,8 +247,16 @@ AI submits:
 expected_revision = 42
 ```
 
-If the document has become revision 43 in the meantime, the mutation fails rather than overwriting newer work.
+If the document has become revision 43 in the meantime, the mutation fails
+rather than overwriting newer work. Restoring a working revision or historical
+publication version creates or updates a draft; it never edits the historical
+source. Publishing a next version atomically archives the old published
+version and promotes the draft.
 
 The same mechanism applies to human editors.
+
+If `unpublish_document` is supported, it is a publication-resolution command:
+it may remove a version from ordinary public resolution but must not modify the
+version's content, turn it back into an editable draft, or rewrite its history.
 
 ---

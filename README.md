@@ -23,6 +23,7 @@ Verso is designed as a small, single-process application with:
 - an HTMX 4 web editor with minimal JavaScript;
 - client-side previews with local draft autosave and server-rendered,
   publication-equivalent previews;
+- immutable, explicitly numbered document versions with read-only archives;
 - versioned JavaScript/WASM interactive modules;
 - remote MCP access for AI-assisted editing;
 - OAuth-compatible authentication and capability-oriented authorization.
@@ -33,9 +34,18 @@ independently.
 
 ## Content and state model
 
-A document contains metadata and an ordered list of sections. Sections may be
-text, image, interactive, quote, or other supported kinds. Canonical document
-state lives in SQLite and binary assets live in the configured asset store.
+A logical document contains an explicitly numbered sequence of versions. Each
+version owns metadata and an ordered list of sections, which may be text,
+image, interactive, quote, or other supported kinds. Published and archived
+versions are immutable. Editing a published version creates an explicitly
+linked next-version draft by logically deep-copying all sections and owned
+nested objects; publishing it archives the old version and makes the new one
+current. Archived versions remain read-only and publicly accessible by default,
+unless the author disables their archive visibility. Canonical document state
+lives in SQLite and binary assets live in the configured asset store.
+
+Only the current published version may be the source of a next-version draft;
+unpublished drafts cannot be forked in the initial design.
 
 Rendered HTML and CDN output are derived, disposable state. Local autosaved
 drafts are recoverable but noncanonical browser state, while current unsaved

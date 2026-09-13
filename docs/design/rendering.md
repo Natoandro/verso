@@ -16,7 +16,7 @@ Conceptually:
 flowchart TB
     request["HTTP request"] --> cdn["Outer / CDN cache"]
     cdn -->|miss| cache["Filesystem cache"]
-    cache -->|miss| load["Load canonical content"]
+    cache -->|miss| load["Load current published version"]
     load --> render["Render sections"]
     render --> template["Render document template"]
     template --> write["Write filesystem cache"]
@@ -141,7 +141,7 @@ Readers should never observe partially generated pages.
 
 Cache invalidation should be event-driven.
 
-Publishing or updating a published document may invalidate:
+Publishing a next document version may invalidate:
 
 ```text
 /document/:slug
@@ -154,7 +154,16 @@ sitemap
 related-document indexes
 ```
 
-Only pages affected by the operation should need invalidation.
+Only pages affected by the operation should need invalidation. The ordinary
+slug route must stop resolving to the archived version and start resolving to
+the newly published version after the publication transaction commits.
+
+Historical pages for accessible archived versions are immutable derived output
+and may be cached independently. If an author hides an archive, its historical
+route and any corresponding cache entry must no longer be publicly served. The
+visibility mutation must emit an invalidation event, and the request path must
+also enforce the access check so a stale cache entry cannot expose the archive.
+Authorized editorial inspection remains private and read-only.
 
 The first implementation may use straightforward invalidation rather than sophisticated dependency graphs.
 
@@ -185,6 +194,8 @@ The key rule is:
 
 > Mutable editorial state is not cached as public rendered output.
 
-Immutable historical revisions may later be cached safely if useful.
+Immutable historical document versions may be cached safely if useful, subject
+to their `archive_accessible` setting. Drafts and unsaved previews remain
+uncacheable as public output.
 
 ---
