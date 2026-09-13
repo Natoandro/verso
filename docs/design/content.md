@@ -285,9 +285,210 @@ created_at
 uploaded_by
 ```
 
+## 9. Document Exchange Archives
+
+Verso should provide a portable document exchange archive for moving a
+complete document version between hosts. Here, complete means the logical
+document/version content, its sections, and all document-owned assets required
+to render it; the host's theme and site configuration are separate. The
+archive is a content snapshot, not a database backup and not a
+publication-history export.
+
+The canonical exchange container should be a ZIP archive. ZIP is widely
+available, supports compression and random access, and is convenient for
+offline editing. Import adapters for tar or tar.gz may be added later, but
+they are not part of the initial interchange contract. The logical contents
+should be:
+
+```text
+manifest.yaml
+document.yaml
+sections/
+  001-introduction.md
+  002-figure.md
+  003-simulation.md
+assets/
+  sha256-<content-checksum>.png
+  sha256-<content-checksum>.wasm
+presentation/                       # optional preview bundle
+  manifest.yaml
+  theme.yaml
+  templates/
+  styles/
+  assets/
+```
+
+`manifest.yaml` identifies the archive format and its integrity rules. It
+should include at least:
+
+```yaml
+format: verso-document
+format_version: 1
+source:
+  document_id: 42
+  version_id: 107
+  version_number: 3
+  state: published
+  exported_at: 2026-09-14T10:30:00Z
+document:
+  path: document.yaml
+  checksum: sha256:...
+sections:
+  - path: sections/001-introduction.md
+    checksum: sha256:...
+assets:
+  - path: assets/sha256-abc123.png
+    checksum: sha256:...
+    content_type: image/png
+presentation:
+  path: presentation/manifest.yaml
+  checksum: sha256:...
+```
+
+The `sections` list is ordered and is the authoritative section order. An
+exporter also gives each section filename an ordinal prefix for readability
+and deterministic exports. The prefix uses the same width for every section
+in that archive, for example `001`, `002`, and `010`; it is not required or
+trusted when importing an archive. Importers use manifest order and do not
+require a particular filename convention.
+
+The source identifiers and state are provenance. They do not cause an import
+to reuse the source host's numerical document ID, version ID, or publication
+state. A target host assigns its own local identities and always imports the
+content as a draft.
+
+`document.yaml` contains the logical document's portable metadata and the
+selected version's version-owned metadata. Server-local fields such as
+timestamps, permissions, cache locations, and internal object keys must not
+be required to reconstruct the document. The archive may retain them as
+optional provenance, but an importer must not treat them as authoritative.
+
+Each section is represented by a Markdown file with YAML front matter. The
+front matter identifies its type and structured fields; the body contains the
+section's Markdown content. A non-text section may have an empty Markdown body
+while its front matter points to the relevant asset or module files. Section
+ordering is not stored in front matter.
+
+For example:
+
+```markdown
+---
+kind: image
+alt: Prime decomposition diagram
+caption: Decomposition of a rational prime
+display: wide
+asset: assets/sha256-abc123.png
+---
+```
+
+The format must preserve the complete ordered section tree and every nested
+structured object owned by the exported version. Asset references are archive
+paths during transfer. On import, the application verifies each declared
+checksum, stores the bytes through the configured asset store, and remaps the
+references to local asset identities. Shared immutable assets are included
+once and may be referenced by multiple sections or modules. Versioned
+interactive modules include their JavaScript, CSS, WASM, and static assets in
+the archive so the imported document retains the same module version.
+
+Archive-internal cross-references use local archive paths rather than database
+identifiers. A reference may be archive-rooted, such as
+`/assets/sha256-abc123.png` or `/sections/002-figure.md#diagram`, or relative
+to the file containing the reference, such as `../assets/sha256-abc123.png`.
+The exporter should use one consistent style within an archive. These paths
+are resolved within the archive root and must never be interpreted as host
+filesystem paths. Importers must normalize them and reject traversal outside
+the archive. They remap valid section, nested-object, asset, and
+interactive-module paths to local identities as needed. A future multi-document
+archive can use the same path scheme; the initial archive contains one logical
+document.
+
+A complete export must include every required asset byte. An unresolved
+external resource must either be embedded before export or cause the complete
+export to fail; silently preserving a remote URL would make the archive unable
+to reconstruct the document offline. Unused assets from the host-wide asset
+library are not part of a document archive.
+
+The checksums in the manifest are SHA-256 digests of the exact uncompressed
+payload bytes stored at the listed archive paths, including `document.yaml`,
+each section file, each document asset, and each presentation-bundle file.
+ZIP compression metadata is not included in the digest. Asset filenames may
+include the asset content digest for deduplication and inspection, but the
+manifest checksum remains authoritative. An archive signature may be added
+later; the initial format does not treat ZIP's container checksum as a
+security boundary.
+
+The optional `presentation/` bundle is exported explicitly for an authorized
+administrator or manager who needs a local preview to match the publication's
+final design. It may include the selected theme, theme configuration,
+templates, CSS, document layouts, and presentation assets, each with its own
+manifest. The presentation manifest inventories every presentation-bundle file
+and owns its checksums. It is presentation input, not canonical document
+content: credentials, authentication data, deployment secrets, host-wide
+unrelated content, and external service configuration must not be exported.
+Required presentation assets should be embedded or the preview export must
+identify that it cannot be fully reproduced offline. A document-only archive
+remains valid without this optional bundle. On import, the bundle may be
+installed as or loaded by an authorized local preview profile; it must not
+silently replace the target host's live theme or site configuration.
+
+Export operates on the currently published version or on an explicitly
+selected persisted draft version, subject to authorization. It exports the
+version content and required assets, not browser-only unsaved changes, server
+working-revision history, or other documents in the same logical lineage.
+
+Import is an application/domain operation and is transactional. The importer
+must validate the archive format, paths, metadata, section ordering, asset
+checksums, asset references, and supported section/module types before
+changing canonical state. It must reject path traversal, duplicate or
+ambiguous entries, ZIP symlinks and other special entries, invalid checksums,
+incomplete required assets, and archives exceeding configured file-count or
+uncompressed-size limits. A
+failure must leave the target document unchanged and must not create canonical
+asset references. New asset bytes must first be written to an isolated staging
+area, then promoted using content-addressed, idempotent names only after
+validation. If the database update fails, staged/promoted-but-unreferenced
+bytes are removed immediately when possible and are reclaimed by a later
+startup or maintenance reconciliation pass. A crash must therefore be able to
+leave at most reclaimable unreferenced blobs, never a document pointing at
+unavailable bytes. Cleanup may remove only blobs created by the failed import;
+pre-existing shared content-addressed blobs must never be removed. The import
+operation must not report success until the
+database references and required asset objects are both durable.
+
+An import has two target modes:
+
+* **new document:** create a new logical document with a new local numerical
+  document ID and one local draft version reconstructed from the archive. Its
+  `based_on_version_id` is null and its local `version_number` starts at 1;
+  source version numbers remain provenance only;
+* **existing draft:** replace the selected draft's document content and
+  metadata with the archive snapshot, retaining that draft's local version
+  identity, `version_number`, and `based_on_version_id`.
+
+If an existing logical document has no draft, importing into it creates a new
+next-version draft only from that document's current published version. The
+archive's source draft or source version is never used as the local parent.
+Importing into an existing draft updates that draft; it does not create a new
+version based on an unpublished draft. The update requires the expected draft
+revision and therefore fails on a concurrent edit rather than overwriting it.
+The initial design does not merge two drafts or rebase imported changes.
+
+Imported source IDs are retained only as provenance where useful. Local
+document, version, section, nested-object, and asset identities are assigned
+or mapped by the target application. Importing a published archive therefore
+creates editable draft state; publication still requires the ordinary
+validation, authorization, concurrency, and publication workflow.
+
+This archive format is intended to support offline editing: export a
+published version or persisted draft, edit the Markdown/front matter and
+included assets elsewhere, then import it into a new document or an existing
+draft. Archive schema evolution should be handled through an explicit
+`format_version` and compatibility rules rather than by guessing at missing
+fields.
+
 ---
 
-## 9. Strict Publication Versioning
+## 10. Strict Publication Versioning
 
 Publication versions are immutable. Once a version is published, no operation
 may change its publication content or identity: this includes metadata,
@@ -360,7 +561,7 @@ archive inaccessible through ordinary public access. Archive visibility must
 not be implemented by deleting the version, overwriting it, or changing its
 content.
 
-## 10. Revisions
+## 11. Revisions
 
 Draft editing should have recoverable revision history, while publication
 versions provide the durable history of what was published. These are related
@@ -403,7 +604,7 @@ reason
 
 ---
 
-## 11. Revision Policy
+## 12. Revision Policy
 
 Working revisions may be created:
 

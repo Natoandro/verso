@@ -158,6 +158,8 @@ get_document
 create_document
 update_document_metadata
 create_next_version
+export_document
+import_document_archive
 
 list_sections
 get_section
@@ -191,6 +193,17 @@ version as its source; attempting to use an unpublished draft or other
 unpublished version as the parent fails. `set_archive_visibility` changes only
 the read-only archive's accessibility and requires the archive-management
 capability.
+
+`export_document` produces the portable document exchange archive described in
+the [content model](content.md#9-document-exchange-archives), from the current
+published version or an explicitly selected persisted draft. It includes the
+complete section tree and required assets. An authorized administrator or
+manager may request the optional presentation bundle for matching local
+previews. `import_document_archive` validates the archive and either creates a
+new local document draft or updates an explicitly selected existing draft. It
+must not publish content, reuse source host identities as authoritative local
+IDs, create a new draft from an unpublished source draft, or silently
+overwrite a concurrent draft update.
 
 Draft snapshotting, archiving an abandoned draft to preserve it before
 starting another draft from the same published parent, and rebasing onto a

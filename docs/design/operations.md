@@ -87,6 +87,38 @@ The service is also responsible for rejecting writes against published or
 archived versions. A request to edit one must first use the create-next-version
 operation.
 
+### 1.1 Document exchange
+
+The document exchange archive defined in the [content model](content.md#9-document-exchange-archives)
+is handled by application services. Export accepts the current published
+version or an explicitly selected persisted draft and produces a self-contained
+ZIP archive containing the version snapshot, Markdown sections with YAML front
+matter, and all required document asset bytes. An authorized administrator or
+manager may explicitly include the optional presentation bundle—theme,
+templates, styles, layouts, and presentation assets—for local previews that
+match the final design. Export does not include unsaved browser state or
+working-revision history.
+
+Import always produces editable draft state. It may create a new logical
+document with a new local numerical document ID, or replace the content of an
+explicitly selected existing draft. If the target logical document has no
+draft, the service may create its next-version draft only from the target's
+current published version; the archive's source version is provenance, never
+the local parent. Importing into an existing draft updates that draft and does
+not fork an unpublished version. A new document starts with a local draft
+version 1 and no `based_on_version_id`; an existing draft retains its local
+version identity, number, and publication parent.
+
+Import must validate the complete archive before committing canonical changes.
+Asset bytes should be staged in an isolated area, verified by their manifest
+SHA-256 checksums, and promoted under idempotent content-addressed names with
+references remapped to local identities. Invalid archives, unsupported
+content, checksum failures, or storage errors must leave the target draft
+unchanged and must not create canonical references to unavailable assets.
+Unreferenced staged blobs must be cleaned up immediately when possible and by
+startup or maintenance reconciliation after a crash. Imported content remains
+a draft until the normal publication service validates and publishes it.
+
 ---
 
 ## 2. Public and Editorial Route Separation

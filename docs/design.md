@@ -66,7 +66,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 - [System architecture](design/system.md) — deployment model, technology
   direction, SQLite, internal layering, and representative request paths.
 - [Content model](design/content.md) — document versions, typed sections,
-  assets, interactive modules, and working revisions.
+  assets, interactive modules, working revisions, and portable exchange
+  archives.
 - [Rendering and cache](design/rendering.md) — server rendering, published
   page caching, invalidation, and draft-cache boundaries.
 - [Web editor and preview](design/editor.md) — HTMX editing, client/server
@@ -97,3 +98,7 @@ These boundaries apply throughout the architecture:
 - Publishing a next version atomically archives the previous published version
   and makes the new version current; archived versions remain read-only and
   are publicly accessible by default unless archive visibility is disabled.
+- Document exchange archives contain a complete version snapshot, its ordered
+  sections, and required asset bytes; optional presentation bundles may carry
+  the selected theme for authorized local previews; imports assign local
+  identities and always produce draft state.
