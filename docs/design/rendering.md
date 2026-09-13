@@ -14,7 +14,9 @@ Conceptually:
 
 ```mermaid
 flowchart TB
-    request["HTTP request"] --> cdn["Outer / CDN cache"]
+    request["HTTP request"] --> resolve["Resolve document ID and canonical slug"]
+    resolve -->|canonical URL / verified cache key| cdn["Outer / CDN cache"]
+    resolve -->|stale slug or ID-only URL| redirect["Redirect to canonical URL"]
     cdn -->|miss| cache["Filesystem cache"]
     cache -->|miss| load["Load current published version"]
     load --> render["Render sections"]
@@ -101,6 +103,29 @@ SQLite remains the source of truth.
 
 ---
 
+## 3.1. Planned Inactivity Eviction
+
+Automatic eviction of cache entries that have not been used for a configured
+period is a planned feature, not part of the initial implementation. The
+initial cache may grow until an operator removes entries or the cache storage
+is otherwise managed externally.
+
+When implemented, eviction should apply only to disposable rendered output.
+It may remove inactive current-publication pages and independently cached
+historical pages; the next request must regenerate any removed entry from the
+canonical version. It must never delete or mutate document versions, sections,
+assets, or other canonical state. Cache eviction should also be safe around
+concurrent reads and writes, and should tolerate a race by leaving a valid
+regenerable cache miss rather than affecting publication.
+
+The inactivity policy, including how access is tracked and whether it is
+configurable, can be decided when cache maintenance is implemented. It should
+not be confused with archive visibility: hiding an archived version is an
+access-control mutation that requires immediate invalidation, whereas
+inactivity eviction is best-effort storage maintenance.
+
+---
+
 ## 4. Why the Cache Is Not Stored in SQLite
 
 Rendered HTML should normally not be stored inside the database.
@@ -144,7 +169,9 @@ Cache invalidation should be event-driven.
 Publishing a next document version may invalidate:
 
 ```text
-/document/:slug
+/<collection>/<document-id>/<current-slug>
+old current-slug URL
+/<collection>/<document-id> ID-only redirect response
 /
 series pages
 subject pages
@@ -155,8 +182,18 @@ related-document indexes
 ```
 
 Only pages affected by the operation should need invalidation. The ordinary
-slug route must stop resolving to the archived version and start resolving to
-the newly published version after the publication transaction commits.
+ID-and-slug route must stop resolving to the archived version and start
+resolving to the newly published version after the publication transaction
+commits. A request using an outdated slug must redirect to the new canonical
+ID-and-slug URL rather than creating a second public identity for the document.
+The old-slug page and any ID-only redirect response must therefore be
+invalidated in the filesystem cache and any configured outer/CDN cache.
+
+The request path must resolve the document ID and current canonical slug
+before serving a URL-keyed page cache entry, unless the cache entry is known to
+be keyed by a still-canonical URL. This prevents a stale old-slug page from
+bypassing redirect handling. Cache invalidation is still required for already
+cached responses at every configured cache layer.
 
 Historical pages for accessible archived versions are immutable derived output
 and may be cached independently. If an author hides an archive, its historical

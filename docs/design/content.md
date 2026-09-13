@@ -32,7 +32,7 @@ flowchart TB
 Logical document metadata may include:
 
 ```text
-id
+id (stable numerical document identifier)
 type
 
 status (derived from the current version)
@@ -40,6 +40,12 @@ status (derived from the current version)
 created_at
 created_by
 ```
+
+The document ID is stable for the lifetime of the logical document and is the
+authoritative key for public document lookup. It must not change when a new
+version is published or when the current version's slug changes. The `slug`
+stored in version-owned metadata is a presentation field for the current
+public URL, not part of document identity.
 
 Version-owned metadata may include:
 

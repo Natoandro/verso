@@ -93,12 +93,27 @@ operation.
 
 Public and private functionality should remain logically distinct.
 
+Public document URLs use the document's stable numerical ID and the current
+version's canonical slug:
+
+```text
+/<collection>/<document-id>/<current-slug>
+```
+
+The document ID is authoritative for lookup. The collection and slug are
+routing and presentation fields; the slug is not part of document identity and
+may change when a later version becomes current. If a request supplies a slug
+that differs from the current canonical slug, Verso redirects to the
+canonical ID-and-slug URL. An ID-only request (for example,
+`/<collection>/<document-id>`) may likewise redirect to that canonical URL.
+
 Example:
 
 ```text
 /                         public homepage
-/articles/:slug           public article
-/articles/:slug/versions/:version
+/articles/:document-id/:current-slug
+                          public current article
+/articles/:document-id/versions/:version
                           public read-only historical version, when accessible
 /series/:slug             public series
 /subjects/:slug           public subject
@@ -257,7 +272,8 @@ The first versions do not need to provide:
 * local MCP editing;
 * Git-based storage;
 * Git-based publishing;
-* mandatory client-side SPA frameworks.
+* mandatory client-side SPA frameworks;
+* automatic cache eviction based on inactivity.
 
 These may be evaluated if actual requirements appear.
 
