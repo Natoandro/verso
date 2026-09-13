@@ -15,14 +15,15 @@ assuming those exist.
   abstractions, or extension points for hypothetical future requirements.
 - Treat SQLite as the initial sole database backend, filesystem assets as the
   initial asset store, and filesystem HTML as disposable derived cache state.
-- Keep canonical state, derived state, and ephemeral editor/preview state
-  distinct. Cache or preview behavior must not be able to corrupt canonical
-  content.
+- Keep canonical state, derived state, recoverable local draft state, and
+  ephemeral editor/preview state distinct. Cache or preview behavior must not
+  be able to corrupt canonical content.
 - Route all mutations through application/domain services. Web handlers, MCP,
   and future interfaces must not manipulate SQLite directly or implement
   separate authorization logic.
-- Preserve server-side rendering as the canonical rendering path. Editor
-  previews should use the same renderer as public pages.
+- Preserve server-side rendering as the publication authority. Client-side
+  editor previews may provide immediate feedback and local recovery, but must
+  remain compatible with the server renderer and fall back to it when needed.
 - Treat preview, save, and publish as separate operations. Previewing unsaved
   state must not persist it.
 - Use optimistic concurrency for editorial mutations and fail on stale

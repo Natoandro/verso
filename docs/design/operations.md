@@ -1,21 +1,20 @@
 # Verso — Operations and Boundaries
 
-Publishing, configuration, customization, failure behavior, scope, and design philosophy.
+## Scope
 
-This document is part of the [Verso architecture index](../design.md).
+This document defines cross-cutting operational policy: publication commands, public/private route boundaries, deployment configuration, UI customization, failure behavior, initial non-goals, and the canonical/derived/recoverable-local/ephemeral state boundary. It does not define the detailed content schema, renderer internals, or MCP tool catalog.
 
-## 41. Publication Workflow
+Related: [system architecture](system.md), [content model](content.md), [rendering and cache](rendering.md), [web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+
+## 1. Publication Workflow
 
 A basic workflow is:
 
-```text
-draft
-  │
-  ▼
-review
-  │
-  ▼
-published
+```mermaid
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Review
+    Review --> Published
 ```
 
 Publication is an application command, not merely:
@@ -26,17 +25,16 @@ UPDATE documents SET status = 'published'
 
 Conceptually:
 
-```text
-publish(document)
-      │
-      ├── validate document
-      ├── verify permissions
-      ├── verify required metadata
-      ├── create revision
-      ├── update publication state
-      ├── commit transaction
-      ├── invalidate affected cache
-      └── return result
+```mermaid
+flowchart TB
+    publish["publish(document)"] --> validate["Validate document"]
+    validate --> permissions["Verify permissions"]
+    permissions --> metadata["Verify required metadata"]
+    metadata --> revision["Create revision"]
+    revision --> state["Update publication state"]
+    state --> transaction["Commit transaction"]
+    transaction --> invalidate["Invalidate affected cache"]
+    invalidate --> result["Return result"]
 ```
 
 The same publishing service is called from:
@@ -47,7 +45,7 @@ The same publishing service is called from:
 
 ---
 
-## 42. Public and Editorial Route Separation
+## 2. Public and Editorial Route Separation
 
 Public and private functionality should remain logically distinct.
 
@@ -70,7 +68,7 @@ Draft content must never be exposed by ordinary public routes.
 
 ---
 
-## 43. Configuration
+## 3. Configuration
 
 Verso should use a deployment configuration file such as:
 
@@ -122,7 +120,7 @@ Environment variables or dedicated secret mechanisms may override sensitive conf
 
 ---
 
-## 44. UI Customization
+## 4. UI Customization
 
 Verso should separate publication data from presentation.
 
@@ -144,13 +142,13 @@ The first implementation should define a small, coherent theme contract rather t
 
 ---
 
-## 47. Failure Principles
+## 5. Failure Principles
 
 Verso should prefer failure modes that preserve canonical content.
 
 Examples:
 
-#### Cache failure
+### Cache failure
 
 If cache writing fails:
 
@@ -160,7 +158,7 @@ canonical publication remains valid
 
 The page can be rendered again.
 
-#### Preview failure
+### Preview failure
 
 If preview rendering fails:
 
@@ -168,7 +166,7 @@ If preview rendering fails:
 draft remains untouched
 ```
 
-#### Publishing failure
+### Publishing failure
 
 If validation fails:
 
@@ -176,7 +174,7 @@ If validation fails:
 document remains unpublished
 ```
 
-#### MCP conflict
+### MCP conflict
 
 If another editor modified a document:
 
@@ -188,7 +186,7 @@ rather than overwriting the newer version.
 
 ---
 
-## 48. Non-Goals for Initial Versions
+## 6. Non-Goals for Initial Versions
 
 The first versions do not need to provide:
 
@@ -213,16 +211,16 @@ These may be evaluated if actual requirements appear.
 
 ---
 
-## 49. Design Philosophy
+## 7. Design Philosophy
 
-Verso should distinguish clearly between three categories of state.
+Verso should distinguish clearly between four categories of state.
 
 ### Canonical state
 
-```text
-SQLite
-+
-asset storage
+```mermaid
+flowchart LR
+    sqlite[("SQLite")] --> canonical["Canonical publication state"]
+    assets["Asset storage"] --> canonical
 ```
 
 This represents the publication.
@@ -231,23 +229,46 @@ This represents the publication.
 
 ### Derived state
 
-```text
-rendered HTML
-filesystem cache
-CDN cache
+```mermaid
+flowchart LR
+    html["Rendered HTML"] --> filesystem["Filesystem cache"] --> cdn["CDN cache"]
+    derived["Derived state"] -. regenerable from canonical state .-> html
 ```
 
 This can always be regenerated.
 
 ---
 
-### Ephemeral state
+### Recoverable local draft state
 
 ```text
-unsaved editor changes
-preview requests
-temporary rendering buffers
-pending HTMX operations
+browser autosave
+IndexedDB or localStorage
+local draft snapshot
+```
+
+This state is durable enough to recover interrupted editing, but it is not
+canonical and is not guaranteed to exist on another browser or device. It may
+be restored, merged, or discarded explicitly by the editor.
+
+```mermaid
+flowchart LR
+    editor["Editor state"] --> autosave["Browser autosave"]
+    autosave --> local["IndexedDB / localStorage"]
+    local --> recovery["Restore or merge"]
+    recovery --> server["Explicit save to Verso"]
+```
+
+---
+
+### Ephemeral state
+
+```mermaid
+flowchart TB
+    ephemeral["Ephemeral state"] --> unsaved["Unsaved editor changes"]
+    ephemeral --> preview["Preview requests"]
+    ephemeral --> buffers["Temporary rendering buffers"]
+    ephemeral --> htmx["Pending HTMX operations"]
 ```
 
 This should not become canonical accidentally.
@@ -256,39 +277,26 @@ The architecture should preserve these boundaries consistently.
 
 ---
 
-## 50. Summary
+## 8. Summary
 
 Verso is a self-hosted publishing server built around:
 
-```text
-                    ┌─────────────────┐
-                    │     Editors     │
-                    └────────┬────────┘
-                             │
-                 ┌───────────┴───────────┐
-                 │                       │
-              Web CMS                 AI MCP
-              HTMX 4                  OAuth
-                 │                       │
-                 └───────────┬───────────┘
-                             ▼
-                    ┌────────────────┐
-                    │     Verso      │
-                    │                │
-                    │ Domain model   │
-                    │ App services   │
-                    │ Renderer       │
-                    │ Authorization  │
-                    │ Preview engine │
-                    │ Cache manager  │
-                    └───────┬────────┘
-                            │
-             ┌──────────────┼──────────────┐
-             ▼              ▼              ▼
-          SQLite          Assets      FS page cache
-             │
-             ▼
-       canonical state
+```mermaid
+flowchart TB
+    editors["Editors"] --> web["Web CMS<br/>HTMX 4"]
+    editors --> mcp["AI MCP<br/>OAuth"]
+    web --> verso["Verso application"]
+    mcp --> verso
+    verso --> domain["Domain model"]
+    verso --> services["Application services"]
+    verso --> renderer["Renderer"]
+    verso --> authorization["Authorization"]
+    verso --> preview["Preview engine"]
+    verso --> cache["Cache manager"]
+    domain --> canonical["Canonical state"]
+    canonical --> sqlite[("SQLite")]
+    canonical --> assets["Assets"]
+    verso --> pagecache["Filesystem page cache"]
 ```
 
 The central architectural decisions are:

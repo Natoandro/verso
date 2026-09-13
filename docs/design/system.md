@@ -1,44 +1,23 @@
 # Verso — System Architecture
 
-Deployment, technology, persistence, internal layering, and request paths.
+## Scope
 
-This document is part of the [Verso architecture index](../design.md).
+This document defines Verso's runtime topology: the single application, its deployment shape, technology direction, persistence boundary, internal dependency direction, and representative request paths. It does not define the document schema, rendering rules, editor behavior, or identity policy.
 
-## 3. High-Level Architecture
+Related: [content model](content.md), [rendering and cache](rendering.md), [web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+
+## 1. High-Level Architecture
 
 Verso is primarily a single application.
 
-```text
-                         ┌───────────────────────┐
-                         │        Editors        │
-                         └───────────┬───────────┘
-                                     │
-                 ┌───────────────────┴───────────────────┐
-                 │                                       │
-             Web Browser                             AI Client
-                 │                                       │
-              HTTPS                                  MCP/HTTPS
-                 │                                       │
-                 └───────────────────┬───────────────────┘
-                                     ▼
-                         ┌───────────────────────┐
-                         │         Verso         │
-                         │                       │
-                         │ Public web server     │
-                         │ Admin/editor UI       │
-                         │ MCP server            │
-                         │ Auth                  │
-                         │ Domain services       │
-                         │ Renderer              │
-                         │ Cache manager         │
-                         │ Asset management      │
-                         └───────────┬───────────┘
-                                     │
-                     ┌───────────────┴───────────────┐
-                     ▼                               ▼
-                  SQLite                         Asset store
-                                                filesystem
-                                                or S3-compatible
+```mermaid
+flowchart TB
+    editors["Editors"] --> browser["Web browser<br/>HTTPS"]
+    editors --> ai["AI client<br/>MCP over HTTPS"]
+    browser --> verso["Verso application"]
+    ai --> verso
+    verso --> sqlite[("SQLite<br/>canonical state")]
+    verso --> assets["Asset store<br/>filesystem or S3-compatible"]
 ```
 
 All interfaces operate through the same application/domain layer.
@@ -47,7 +26,7 @@ The web interface and MCP interface must never independently manipulate SQLite.
 
 ---
 
-## 4. Initial Technology Direction
+## 2. Initial Technology Direction
 
 The implementation is intentionally experimental.
 
@@ -72,7 +51,7 @@ SQLite, filesystem caching, and a single-process server are deliberate design ch
 
 ---
 
-## 5. Deployment Model
+## 3. Deployment Model
 
 The default deployment should be approximately:
 
@@ -96,25 +75,20 @@ No separate database server is required.
 
 A production environment may place a reverse proxy or CDN in front of Verso:
 
-```text
-Internet
-   │
-   ▼
-Cloudflare / nginx / Caddy / Traefik
-   │
-   ▼
-Verso
-   │
-   ├── SQLite
-   ├── asset storage
-   └── filesystem cache
+```mermaid
+flowchart TB
+    internet["Internet"] --> edge["Reverse proxy or CDN<br/>Cloudflare / nginx / Caddy / Traefik"]
+    edge --> verso["Verso"]
+    verso --> sqlite[("SQLite")]
+    verso --> assets["Asset storage"]
+    verso --> cache["Filesystem cache"]
 ```
 
 Verso itself should not depend on a specific reverse proxy.
 
 ---
 
-## 6. SQLite
+## 4. SQLite
 
 SQLite is the sole database backend for the initial versions of Verso.
 
@@ -154,7 +128,7 @@ The domain/application layers should nevertheless avoid unnecessary coupling to 
 
 ---
 
-## 45. Internal Layering
+## 5. Internal Layering
 
 A possible implementation structure is:
 
@@ -208,110 +182,72 @@ This structure is illustrative rather than prescriptive.
 
 The dependency direction should remain roughly:
 
-```text
-interfaces
-    ↓
-application
-    ↓
-domain
+```mermaid
+flowchart TB
+    interfaces["Interfaces"] --> application["Application services"]
+    application --> domain["Domain model"]
+    infrastructure["Infrastructure adapters"] --> application
 ```
 
 Infrastructure provides implementations needed by the application layer.
 
 ---
 
-## 46. Request Paths
+## 6. Request Paths
 
 ### Public request
 
-```text
-Browser
-   │
-   ▼
-CDN
-   │ miss
-   ▼
-Verso
-   │
-   ▼
-filesystem cache
-   │ miss
-   ▼
-SQLite
-   │
-   ▼
-renderer
-   │
-   ▼
-filesystem cache
-   │
-   ▼
-response
+```mermaid
+flowchart TB
+    request["HTTP request"] --> cdn["CDN / outer cache"]
+    cdn -->|miss| verso["Verso"]
+    verso --> cache["Filesystem page cache"]
+    cache -->|miss| sqlite[("SQLite")]
+    sqlite --> renderer["Renderer"]
+    renderer --> cache
+    cache --> response["Response"]
 ```
 
 ---
 
 ### Draft editor request
 
-```text
-Browser
-   │
-   ▼
-Verso
-   │
-   ├── authenticate
-   ├── authorize
-   │
-   ▼
-SQLite
-   │
-   ▼
-editor response
+```mermaid
+flowchart TB
+    browser["Editor browser"] --> verso["Verso"]
+    verso --> authenticate["Authenticate"]
+    authenticate --> authorize["Authorize"]
+    authorize --> sqlite[("SQLite")]
+    sqlite --> response["Editor response"]
+    response --> browser
+    cache["Public page cache"] -. not used .-> response
 ```
-
-No public page cache is involved.
 
 ---
 
 ### Live preview request
 
-```text
-Browser editor state
-        │
-        ▼
-Verso preview endpoint
-        │
-        ▼
-production renderer
-        │
-        ▼
-HTML fragment
-        │
-        ▼
-HTMX swap
+```mermaid
+flowchart TB
+    state["Browser unsaved state"] --> endpoint["Preview endpoint"]
+    endpoint --> renderer["Production renderer"]
+    renderer --> fragment["HTML fragment"]
+    fragment --> swap["HTMX swap"]
+    endpoint -. no mutation .-> sqlite[("SQLite")]
 ```
-
-No SQLite mutation is required.
 
 ---
 
 ### MCP edit
 
-```text
-AI client
-    │
-    ▼
-OAuth-authenticated MCP
-    │
-    ▼
-application service
-    │
-    ├── authorization
-    ├── concurrency check
-    ├── validation
-    │
-    ▼
-SQLite
+```mermaid
+flowchart TB
+    ai["AI client"] --> mcp["OAuth-authenticated MCP"]
+    mcp --> application["Application service"]
+    application --> authorization["Authorization"]
+    application --> concurrency["Concurrency check"]
+    application --> validation["Validation"]
+    validation --> sqlite[("SQLite")]
 ```
 
 ---

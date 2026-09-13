@@ -1,10 +1,12 @@
 # Verso — Identity and MCP
 
-Authentication, authorization, remote MCP, and concurrent AI editing.
+## Scope
 
-This document is part of the [Verso architecture index](../design.md).
+This document defines the unified user identity, capability authorization, and remote MCP boundary. It owns OAuth-compatible MCP access, semantic tool design, AI edit granularity, and optimistic concurrency; it does not define document structure or rendering.
 
-## 33. Authentication
+Related: [system architecture](system.md), [content model](content.md), [web editor and preview](editor.md), and [operations and boundaries](operations.md).
+
+## 1. Authentication
 
 Verso has one unified user identity model.
 
@@ -27,7 +29,7 @@ Roles are convenience groupings around permissions.
 
 ---
 
-## 34. Authorization
+## 2. Authorization
 
 The actual authorization model should be capability-oriented.
 
@@ -60,7 +62,7 @@ Interfaces do not implement their own independent security logic.
 
 ---
 
-## 35. MCP
+## 3. MCP
 
 MCP is a first-class remote interface for AI-assisted editing.
 
@@ -70,56 +72,36 @@ Local stdio-based editing is outside the initial scope.
 
 Architecture:
 
-```text
-AI client
-    │
-    │ MCP over HTTPS
-    ▼
-Verso MCP endpoint
-    │
-    ▼
-authentication
-    │
-    ▼
-authorization
-    │
-    ▼
-application services
-    │
-    ▼
-SQLite
+```mermaid
+flowchart TB
+    ai["AI client"] -->|MCP over HTTPS| mcp["Verso MCP endpoint"]
+    mcp --> authentication["Authentication"]
+    authentication --> authorization["Authorization"]
+    authorization --> application["Application services"]
+    application --> sqlite[("SQLite")]
 ```
 
 MCP must never bypass the application service layer.
 
 ---
 
-## 36. MCP Authentication
+## 4. MCP Authentication
 
 Remote MCP access should use OAuth-compatible authorization.
 
 Typical flow:
 
-```text
-AI client
-    │
-    ▼
-Verso MCP endpoint
-    │
-    ▼
-authorization discovery
-    │
-    ▼
-browser/user authentication
-    │
-    ▼
-authorization approval
-    │
-    ▼
-access token
-    │
-    ▼
-authenticated MCP requests
+```mermaid
+sequenceDiagram
+    participant AI as AI client
+    participant M as Verso MCP endpoint
+    participant B as Browser
+    AI->>M: MCP request
+    M-->>AI: Authorization discovery
+    AI->>B: Open authorization flow
+    B->>M: Authenticate and approve
+    M-->>AI: Access token
+    AI->>M: Authenticated MCP requests
 ```
 
 The resulting identity maps to an ordinary Verso user.
@@ -128,7 +110,7 @@ An AI acts with the authority granted to that user and token.
 
 ---
 
-## 37. MCP Scopes
+## 5. MCP Scopes
 
 OAuth scopes provide another authorization boundary.
 
@@ -161,7 +143,7 @@ This allows AI-assisted drafting without allowing unattended publication.
 
 ---
 
-## 38. MCP Tool Design
+## 6. MCP Tool Design
 
 MCP should expose semantic editorial operations rather than raw database access.
 
@@ -202,7 +184,7 @@ The tool set should remain small, composable, and domain-oriented.
 
 ---
 
-## 39. AI Editing Granularity
+## 7. AI Editing Granularity
 
 AI editing should normally target individual sections.
 
@@ -229,7 +211,7 @@ Benefits include:
 
 ---
 
-## 40. Optimistic Concurrency
+## 8. Optimistic Concurrency
 
 Verso should use optimistic concurrency for editorial mutations.
 

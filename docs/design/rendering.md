@@ -1,62 +1,50 @@
 # Verso — Rendering and Cache
 
-Public rendering, preview-independent cache behavior, and invalidation.
+## Scope
 
-This document is part of the [Verso architecture index](../design.md).
+This document defines the server transformation from canonical content to public HTML and the lifecycle of derived page output. It owns rendering, filesystem caching, invalidation, atomic writes, and draft-cache boundaries; it does not define editorial UX or persistence schemas. Client-side previews are covered in [web editor and preview](editor.md); the server renderer remains their authority.
 
-## 15. Public Rendering
+Related: [content model](content.md), [system architecture](system.md), [web editor and preview](editor.md), and [operations and boundaries](operations.md).
+
+## 1. Public Rendering
 
 Verso renders public pages on the server.
 
 Conceptually:
 
-```text
-HTTP request
-     │
-     ▼
-outer/CDN cache
-     │ miss
-     ▼
-filesystem cache
-     │ miss
-     ▼
-load canonical content
-     │
-     ▼
-render sections
-     │
-     ▼
-render document template
-     │
-     ▼
-write filesystem cache
-     │
-     ▼
-response
+```mermaid
+flowchart TB
+    request["HTTP request"] --> cdn["Outer / CDN cache"]
+    cdn -->|miss| cache["Filesystem cache"]
+    cache -->|miss| load["Load canonical content"]
+    load --> render["Render sections"]
+    render --> template["Render document template"]
+    template --> write["Write filesystem cache"]
+    write --> response["Response"]
 ```
 
 Server rendering is therefore primarily performed when a page is not already cached.
 
 ---
 
-## 16. Rendering Pipeline
+## 2. Rendering Pipeline
 
 Rendering should be conceptually pure:
 
-```text
-Document
-   ↓
-Rendered Document
+```mermaid
+flowchart LR
+    document["Document"] --> rendered["Rendered document"]
 ```
 
 Each section type has a renderer:
 
-```text
-Text        → Markdown → HTML
-Image       → <figure>...
-Interactive → module container + loader
-Quote       → <blockquote>
-Embed       → configured embed representation
+```mermaid
+flowchart TB
+    text["Text"] --> markdown["Markdown"] --> html["HTML"]
+    image["Image"] --> figure["Figure element"]
+    interactive["Interactive"] --> loader["Module container + loader"]
+    quote["Quote"] --> blockquote["Blockquote"]
+    embed["Embed"] --> configured["Configured embed representation"]
 ```
 
 The rendering engine should not care whether the document was requested by:
@@ -67,9 +55,22 @@ The rendering engine should not care whether the document was requested by:
 * a future API;
 * internal cache regeneration.
 
+The server renderer is authoritative for publication output. The editor may
+also use a compatible client-side renderer for immediate previews of local
+drafts. Client output is provisional and may be incomplete for features that
+require server-side document context.
+
+```mermaid
+flowchart LR
+    canonical["Canonical document"] --> server["Server production renderer"]
+    local["Local draft snapshot"] --> client["Client-side preview renderer"]
+    server --> public["Published HTML / authoritative preview"]
+    client --> provisional["Provisional local preview"]
+```
+
 ---
 
-## 17. Published Page Cache
+## 3. Published Page Cache
 
 Rendered published pages should use filesystem caching.
 
@@ -100,7 +101,7 @@ SQLite remains the source of truth.
 
 ---
 
-## 18. Why the Cache Is Not Stored in SQLite
+## 4. Why the Cache Is Not Stored in SQLite
 
 Rendered HTML should normally not be stored inside the database.
 
@@ -119,28 +120,24 @@ The filesystem also benefits naturally from the operating system's page cache.
 
 ---
 
-## 19. Cache Writes
+## 5. Cache Writes
 
 Cache generation should use atomic replacement.
 
 Conceptually:
 
-```text
-article.html.tmp
-       │
-       │ complete render
-       ▼
-atomic rename
-       │
-       ▼
-article.html
+```mermaid
+flowchart TB
+    temporary["article.html.tmp"] -->|complete render| rename["Atomic rename"]
+    rename --> page["article.html"]
+    readers["Readers"] -. never observe partial output .-> page
 ```
 
 Readers should never observe partially generated pages.
 
 ---
 
-## 20. Cache Invalidation
+## 6. Cache Invalidation
 
 Cache invalidation should be event-driven.
 
@@ -163,26 +160,19 @@ The first implementation may use straightforward invalidation rather than sophis
 
 ---
 
-## 21. Draft Rendering and Caching
+## 7. Draft Rendering and Caching
 
 Drafts and mutable editorial views should not use the public filesystem page cache.
 
 A draft request follows approximately:
 
-```text
-authenticated editor
-       │
-       ▼
-authorization check
-       │
-       ▼
-load current draft
-       │
-       ▼
-render current state
-       │
-       ▼
-return response
+```mermaid
+flowchart TB
+    editor["Authenticated editor"] --> authorize["Authorization check"]
+    authorize --> draft["Load current draft"]
+    draft --> render["Render current state"]
+    render --> response["Return response"]
+    cache["Public filesystem cache"] -. not used .-> response
 ```
 
 Private preview routes should normally use restrictive caching headers such as:

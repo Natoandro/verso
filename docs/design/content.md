@@ -1,12 +1,14 @@
 # Verso — Content Model
 
-Documents, typed sections, assets, interactive modules, and revisions.
+## Scope
 
-This document is part of the [Verso architecture index](../design.md).
+This document defines canonical publication content: documents, typed sections, assets, interactive modules, and recoverable revisions. It does not define how content is rendered, edited over HTTP, authorized, or exposed through MCP.
 
-## 7. Content Model
+Related: [system architecture](system.md), [rendering and cache](rendering.md), [web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
 
-### 7.1 Document
+## 1. Content Model
+
+### 1.1 Document
 
 The primary publication unit is a `Document`.
 
@@ -14,10 +16,10 @@ An article is one possible document type.
 
 Conceptually:
 
-```text
-Document
-├── metadata
-└── ordered sections
+```mermaid
+flowchart TB
+    document["Document"] --> metadata["Metadata"]
+    document --> sections["Ordered sections"]
 ```
 
 Common document metadata may include:
@@ -62,20 +64,21 @@ series_position
 
 ---
 
-## 8. Section-Based Content
+## 2. Section-Based Content
 
 Verso does not treat the entire document as one monolithic Markdown body.
 
 Instead:
 
-```text
-Document
-├── Text section
-├── Image section
-├── Text section
-├── Interactive section
-├── Quote section
-└── ...
+```mermaid
+flowchart TB
+    document["Document"] --> sections["Ordered sections"]
+    sections --> text1["1. Text section"]
+    sections --> image["2. Image section"]
+    sections --> text2["3. Text section"]
+    sections --> interactive["4. Interactive section"]
+    sections --> quote["5. Quote section"]
+    sections --> more["Additional section types"]
 ```
 
 A section has a common structure such as:
@@ -92,7 +95,7 @@ The `data` field contains type-specific structured content.
 
 ---
 
-## 9. Text Sections
+## 3. Text Sections
 
 Text sections contain Markdown.
 
@@ -122,7 +125,7 @@ A text section should remain a reasonably large semantic unit.
 
 ---
 
-## 10. Image Sections
+## 4. Image Sections
 
 An image section references an asset rather than embedding image bytes in SQLite.
 
@@ -141,7 +144,7 @@ The corresponding binary object lives in the configured asset store.
 
 ---
 
-## 11. Interactive Sections
+## 5. Interactive Sections
 
 Interactive sections should reference controlled, versioned interactive modules.
 
@@ -171,16 +174,17 @@ The module is stored as an asset or collection of assets and referenced from SQL
 
 ---
 
-## 12. Interactive Module Versioning
+## 6. Interactive Module Versioning
 
 Interactive modules should be immutable once published.
 
 For example:
 
-```text
-monte-carlo-area@1
-monte-carlo-area@2
-monte-carlo-area@3
+```mermaid
+flowchart LR
+    v1["monte-carlo-area@1"] --> v2["monte-carlo-area@2"]
+    v2 --> v3["monte-carlo-area@3"]
+    v1 -. existing publications may continue using v1 .-> publication["Existing publication"]
 ```
 
 An existing publication may continue using version 1 even after later versions are introduced.
@@ -189,23 +193,24 @@ This prevents changes to an interactive implementation from silently modifying o
 
 ---
 
-## 13. Arbitrary Script Execution
+## 7. Arbitrary Script Execution
 
 Verso should not execute arbitrary editor-provided JavaScript directly in the main publication context.
 
 The preferred model is:
 
-```text
-registered/versioned module
-+
-structured configuration
+```mermaid
+flowchart TB
+    module["Registered, versioned module"] --> config["Structured configuration"]
+    config --> container["Module container"]
+    arbitrary["Arbitrary editor-provided script"] -. rejected .-> page["Main publication context"]
 ```
 
 If arbitrary HTML/CSS/JavaScript documents are supported later, they should execute inside a sandboxed iframe with an intentionally restrictive capability model.
 
 ---
 
-## 14. Asset Storage
+## 8. Asset Storage
 
 Binary assets are stored separately from SQLite.
 
@@ -248,7 +253,7 @@ uploaded_by
 
 ---
 
-## 31. Revisions
+## 9. Revisions
 
 Published and editorial content should have recoverable revision history.
 
@@ -263,10 +268,10 @@ while revisions contain immutable document snapshots.
 
 Conceptually:
 
-```text
-revision
-├── document metadata
-└── ordered sections
+```mermaid
+flowchart TB
+    revision["Revision snapshot"] --> metadata["Document metadata"]
+    revision --> sections["Ordered sections"]
 ```
 
 Revision metadata may include:
@@ -283,15 +288,19 @@ reason
 
 ---
 
-## 32. Revision Policy
+## 10. Revision Policy
 
 Revisions may be created:
 
 * on explicit save;
 * on submission for review;
 * on publication;
-* at configurable autosave checkpoints.
+* at configurable server-side draft autosave checkpoints.
 
 Not every keystroke should produce a permanent revision.
+
+Browser recovery snapshots are not revisions. They remain local, noncanonical
+draft state until an editor explicitly restores and saves them to Verso. Local
+recovery autosave and server-side draft autosave are separate mechanisms.
 
 ---

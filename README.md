@@ -21,7 +21,8 @@ Verso is designed as a small, single-process application with:
 - filesystem assets initially, with possible S3-compatible storage later;
 - filesystem caching for published HTML;
 - an HTMX 4 web editor with minimal JavaScript;
-- server-rendered live previews using the publication renderer;
+- client-side previews with local draft autosave and server-rendered,
+  publication-equivalent previews;
 - versioned JavaScript/WASM interactive modules;
 - remote MCP access for AI-assisted editing;
 - OAuth-compatible authentication and capability-oriented authorization.
@@ -36,11 +37,12 @@ A document contains metadata and an ordered list of sections. Sections may be
 text, image, interactive, quote, or other supported kinds. Canonical document
 state lives in SQLite and binary assets live in the configured asset store.
 
-Rendered HTML and CDN output are derived, disposable state. Unsaved editor
-changes and preview requests are ephemeral state. This separation is central
-to the design: cache failures must not damage publications, previews must not
-save drafts, and publishing must be an explicit validated application
-operation.
+Rendered HTML and CDN output are derived, disposable state. Local autosaved
+drafts are recoverable but noncanonical browser state, while current unsaved
+changes and preview requests are ephemeral runtime state. This separation is
+central to the design: cache failures must not damage publications, local
+recovery must not silently save drafts to Verso, and publishing must be an
+explicit validated application operation.
 
 ## Intended deployment
 

@@ -29,7 +29,8 @@ The initial implementation focuses on:
 * AI-assisted editing through a remote MCP server;
 * SQLite as the sole database backend;
 * HTMX 4 for the editorial interface;
-* server-rendered live previews;
+* client-side live previews with local draft recovery;
+* server-rendered, publication-equivalent previews;
 * filesystem caching of published pages;
 * filesystem or S3-compatible storage for large assets;
 * support for interactive JavaScript and WASM modules;
@@ -68,8 +69,9 @@ The initial system should deliberately avoid generalizing for hypothetical futur
   interactive modules, and revisions.
 - [Rendering and cache](design/rendering.md) — server rendering, published
   page caching, invalidation, and draft-cache boundaries.
-- [Web editor and preview](design/editor.md) — HTMX editing, live previews,
-  partial rendering, and stale-response protection.
+- [Web editor and preview](design/editor.md) — HTMX editing, client/server
+  previews, local draft recovery, partial rendering, and stale-response
+  protection.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,
   MCP tools, and optimistic concurrency.
 - [Operations and boundaries](design/operations.md) — publication workflow,
@@ -82,7 +84,8 @@ These boundaries apply throughout the architecture:
 
 - SQLite and the asset store are canonical publication state.
 - Rendered HTML, filesystem caches, and CDN output are derived state.
-- Unsaved editor changes and preview requests are ephemeral state.
+- Local autosaved drafts are recoverable but noncanonical browser state; current
+  unsaved changes and preview requests remain ephemeral runtime state.
 - All interfaces use shared application/domain services.
 - Preview, save, and publish are distinct operations.
 - Published interactive modules are versioned and immutable.
