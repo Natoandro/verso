@@ -5,8 +5,9 @@ and interactive content. It is intended for technical articles, research
 notes, mathematical writing, essays, tutorials, image-rich documents, and
 small multi-author publications.
 
-The project is currently at the architecture/design stage. The complete
-system specification is in [`docs/design.md`](docs/design.md).
+The project is currently at the architecture/design stage. The architecture
+index and topic specifications are linked from
+[`docs/design.md`](docs/design.md).
 
 ## Planned architecture
 

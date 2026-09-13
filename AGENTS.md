@@ -64,7 +64,8 @@ Update documentation when behavior or architectural decisions change.
 
 - `README.md` is the project-facing introduction, status, scope, and intended
   deployment overview.
-- `docs/design.md` is the detailed system architecture specification.
+- `docs/design.md` is the architecture index; its linked files in
+  `docs/design/` contain the detailed specifications by concern.
 - Keep examples clearly labeled as intended/planned until they are actually
   implemented.
 - Do not claim that commands, routes, storage backends, or integrations work
@@ -82,6 +83,18 @@ Before handing off changes:
    failure leaves canonical state intact.
 5. For mutations, verify authorization, validation, revision/concurrency
    checks, and cache invalidation are handled by the application service.
+
+## Commit workflow
+
+- Before committing, create an independent review subagent to inspect all
+  uncommitted changes and propose the commit message. The subagent must not
+  edit files or commit.
+- Use the review to produce a concise commit message that describes the full
+  staged change.
+- Commit without asking for confirmation of the message unless an applicable
+  workflow or explicit user instruction requires confirmation.
+- Include all intended uncommitted changes after reviewing their scope; do not
+  silently omit tracked or untracked files that belong to the change.
 
 ## Current repository state
 
