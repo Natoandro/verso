@@ -1,104 +1,218 @@
-# Verso — System Architecture Overview
+# Verso — System Architecture Specification
 
-## 1. Purpose
+## 1. Overview
 
-Verso is a configurable, self-hosted publishing system for structured and interactive content.
+Verso is a configurable, self-hosted publishing system for structured, rich, and interactive content.
 
-It is designed primarily for long-form publications such as:
+It is designed for publications such as:
 
 * technical articles;
 * research notes;
 * mathematical writing;
 * essays;
 * tutorials;
-* image-rich articles;
-* articles containing interactive components.
+* image-rich documents;
+* interactive articles;
+* small multi-author publications.
 
-Verso is intended to be distributed as a standalone binary with configuration-driven customization.
+Verso is intended to be distributed primarily as a standalone native binary with configuration-driven customization.
 
 The initial implementation focuses on:
 
 * server-side rendered public pages;
-* a web-based editorial interface;
-* AI-assisted editing through an MCP server;
+* structured documents composed of typed sections;
+* an online web editor;
+* AI-assisted editing through a remote MCP server;
 * SQLite as the sole database backend;
-* structured document sections rather than monolithic article bodies;
-* filesystem and CDN caching for rendered pages;
-* optional object storage for media and executable assets.
+* HTMX 4 for the editorial interface;
+* server-rendered live previews;
+* filesystem caching of published pages;
+* filesystem or S3-compatible storage for large assets;
+* support for interactive JavaScript and WASM modules;
+* configurable publication appearance and behavior.
 
-Verso is not tied to any particular publication or website.
+Verso is not tied to any particular publication.
+
+A site such as Bracket is simply one deployment of Verso.
 
 ---
 
-## 2. Core Architectural Principles
+# 2. Architectural Goals
 
-### 2.1 Single application
+Verso should prioritize:
 
-Verso should initially be deployable as one server application:
+1. **Simple deployment**
+2. **Minimal infrastructure**
+3. **Structured content**
+4. **Strong server-side rendering**
+5. **Excellent cacheability**
+6. **Safe multi-editor workflows**
+7. **First-class AI editing**
+8. **Portable content**
+9. **Predictable behavior**
+10. **Architectural simplicity over premature abstraction**
+
+The initial system should deliberately avoid generalizing for hypothetical future databases, distributed clusters, or plugin systems unless actual requirements justify them.
+
+---
+
+# 3. High-Level Architecture
+
+Verso is primarily a single application.
 
 ```text
-                ┌─────────────────────────┐
-                │          Verso          │
-                │                         │
-HTTP ──────────►│ Public site             │
-HTTP ──────────►│ Web editor              │
-MCP  ──────────►│ MCP server              │
-                │                         │
-                │ Domain services         │
-                │ Renderer                │
-                │ Cache manager           │
-                │ Storage services        │
-                └────────────┬────────────┘
-                             │
-                           SQLite
+                         ┌───────────────────────┐
+                         │        Editors        │
+                         └───────────┬───────────┘
+                                     │
+                 ┌───────────────────┴───────────────────┐
+                 │                                       │
+             Web Browser                             AI Client
+                 │                                       │
+              HTTPS                                  MCP/HTTPS
+                 │                                       │
+                 └───────────────────┬───────────────────┘
+                                     ▼
+                         ┌───────────────────────┐
+                         │         Verso         │
+                         │                       │
+                         │ Public web server     │
+                         │ Admin/editor UI       │
+                         │ MCP server            │
+                         │ Auth                  │
+                         │ Domain services       │
+                         │ Renderer              │
+                         │ Cache manager         │
+                         │ Asset management      │
+                         └───────────┬───────────┘
+                                     │
+                     ┌───────────────┴───────────────┐
+                     ▼                               ▼
+                  SQLite                         Asset store
+                                                filesystem
+                                                or S3-compatible
 ```
 
-The public website, editorial interface, MCP interface, rendering engine, and persistence layer should share the same domain model and application services.
+All interfaces operate through the same application/domain layer.
 
-No interface should directly manipulate the database independently.
+The web interface and MCP interface must never independently manipulate SQLite.
 
 ---
 
-### 2.2 SQLite-first
+# 4. Initial Technology Direction
 
-SQLite is the only database backend targeted initially.
+The implementation is intentionally experimental.
 
-A Verso deployment should require approximately:
+The initial target stack is:
+
+```text
+Language:              Zig
+Database:              SQLite
+Public rendering:      server-side HTML
+Editorial frontend:    HTMX 4 + minimal JavaScript
+Text content:          Markdown
+Asset storage:         filesystem initially
+Optional asset store:  S3-compatible storage / RustFS
+Interactive content:   JavaScript and/or WASM
+Page cache:            filesystem
+Outer cache:           CDN / reverse proxy
+AI integration:        remote MCP
+MCP authentication:    OAuth-compatible authorization
+```
+
+SQLite, filesystem caching, and a single-process server are deliberate design choices rather than placeholders for a more complex architecture.
+
+---
+
+# 5. Deployment Model
+
+The default deployment should be approximately:
 
 ```text
 verso
 verso.toml
-verso.db
-assets/
-cache/
+data/
+├── verso.db
+├── assets/
+└── cache/
 ```
 
-This keeps deployment and self-hosting simple.
+A basic installation should require little more than:
 
-SQLite stores structured application data including:
+```bash
+verso init
+verso serve
+```
 
-* users;
-* roles and permissions;
-* documents;
-* sections;
-* revisions;
-* publication state;
-* authors;
-* subjects;
-* series;
-* asset metadata;
-* interactive-module metadata;
-* MCP/OAuth authorization data.
+No separate database server is required.
 
-Large binary objects should normally not be stored directly inside SQLite.
+A production environment may place a reverse proxy or CDN in front of Verso:
+
+```text
+Internet
+   │
+   ▼
+Cloudflare / nginx / Caddy / Traefik
+   │
+   ▼
+Verso
+   │
+   ├── SQLite
+   ├── asset storage
+   └── filesystem cache
+```
+
+Verso itself should not depend on a specific reverse proxy.
 
 ---
 
-### 2.3 Structured documents
+# 6. SQLite
 
-The primary content unit is a `Document`.
+SQLite is the sole database backend for the initial versions of Verso.
 
-An article is one possible document type rather than the fundamental storage abstraction.
+It stores canonical structured application state including:
+
+```text
+documents
+sections
+revisions
+
+users
+roles
+permissions
+
+authors
+subjects
+series
+
+asset metadata
+interactive module metadata
+
+authentication data
+OAuth authorization data
+```
+
+Large binaries should generally not be stored inside SQLite.
+
+SQLite should normally operate in WAL mode for deployed instances.
+
+```sql
+PRAGMA journal_mode = WAL;
+```
+
+Verso should embrace SQLite rather than introduce premature abstractions for hypothetical PostgreSQL, MySQL, or other backends.
+
+The domain/application layers should nevertheless avoid unnecessary coupling to SQL implementation details.
+
+---
+
+# 7. Content Model
+
+## 7.1 Document
+
+The primary publication unit is a `Document`.
+
+An article is one possible document type.
 
 Conceptually:
 
@@ -106,23 +220,9 @@ Conceptually:
 Document
 ├── metadata
 └── ordered sections
-    ├── text
-    ├── image
-    ├── interactive
-    ├── embed
-    ├── quote
-    └── other future section types
 ```
 
-This allows Verso to support richer publications without requiring arbitrary HTML or MDX as the canonical content representation.
-
----
-
-## 3. Domain Model
-
-### 3.1 Document
-
-A document contains metadata such as:
+Common document metadata may include:
 
 ```text
 id
@@ -130,11 +230,15 @@ type
 slug
 title
 description
+
 status
+
 created_at
 updated_at
 published_at
+
 created_by
+updated_by
 ```
 
 Possible statuses include:
@@ -147,9 +251,9 @@ published
 archived
 ```
 
-Additional metadata may depend on the configured document type.
+Document-type-specific fields may be stored separately or as structured metadata.
 
-For example, an `article` may define:
+An article may additionally contain:
 
 ```text
 authors
@@ -160,11 +264,23 @@ series_position
 
 ---
 
-### 3.2 Sections
+# 8. Section-Based Content
 
-Each document contains an ordered list of sections.
+Verso does not treat the entire document as one monolithic Markdown body.
 
-A section has a common envelope:
+Instead:
+
+```text
+Document
+├── Text section
+├── Image section
+├── Text section
+├── Interactive section
+├── Quote section
+└── ...
+```
+
+A section has a common structure such as:
 
 ```text
 id
@@ -174,11 +290,15 @@ kind
 data
 ```
 
-`data` contains section-specific structured data.
+The `data` field contains type-specific structured content.
+
+---
+
+# 9. Text Sections
+
+Text sections contain Markdown.
 
 For example:
-
-#### Text section
 
 ```json
 {
@@ -186,295 +306,661 @@ For example:
 }
 ```
 
-#### Image section
+A text section may contain:
+
+* paragraphs;
+* headings;
+* lists;
+* equations;
+* citations;
+* footnotes;
+* code;
+* links;
+* inline images where appropriate.
+
+Verso should avoid turning every paragraph or equation into a separate database object.
+
+A text section should remain a reasonably large semantic unit.
+
+---
+
+# 10. Image Sections
+
+An image section references an asset rather than embedding image bytes in SQLite.
+
+Example:
 
 ```json
 {
-  "asset_id": "asset-id",
-  "alt": "Description of the figure",
-  "caption": "Prime decomposition in a quadratic field"
+  "asset_id": "01K...",
+  "alt": "Prime decomposition diagram",
+  "caption": "Decomposition of a rational prime",
+  "display": "wide"
 }
 ```
 
-#### Interactive section
+The corresponding binary object lives in the configured asset store.
+
+---
+
+# 11. Interactive Sections
+
+Interactive sections should reference controlled, versioned interactive modules.
+
+Example:
 
 ```json
 {
-  "module_id": "monte-carlo-area",
+  "module": "monte-carlo-area",
   "version": 2,
   "config": {
-    "samples": 5000
+    "samples": 5000,
+    "show_grid": true
   }
 }
 ```
 
-The renderer should map these section types to HTML without exposing storage-specific details.
+The module may consist of:
+
+```text
+JavaScript
+CSS
+WASM
+static assets
+```
+
+The module is stored as an asset or collection of assets and referenced from SQLite.
 
 ---
 
-## 4. Rendering Architecture
+# 12. Interactive Module Versioning
 
-Verso uses server-side rendering.
+Interactive modules should be immutable once published.
 
-A request follows approximately:
+For example:
 
 ```text
-HTTP request
-     │
-     ▼
-CDN cache
-     │ miss
-     ▼
-Verso page cache
-     │ miss
-     ▼
-load document from SQLite
-     │
-     ▼
-render sections
-     │
-     ▼
-render page template
-     │
-     ▼
-cache generated HTML
-     │
-     ▼
-response
+monte-carlo-area@1
+monte-carlo-area@2
+monte-carlo-area@3
 ```
 
-Rendered HTML is a derived artifact.
+An existing publication may continue using version 1 even after later versions are introduced.
 
-It must always be possible to delete the cache and regenerate pages from canonical content.
+This prevents changes to an interactive implementation from silently modifying old publications.
 
 ---
 
-## 5. Caching
+# 13. Arbitrary Script Execution
 
-Verso should distinguish between at least three cache levels:
+Verso should not execute arbitrary editor-provided JavaScript directly in the main publication context.
 
-```text
-1. CDN / reverse-proxy cache
-2. filesystem HTML cache
-3. optional in-memory cache
-```
-
-The initial implementation may omit the in-memory layer if unnecessary.
-
-### 5.1 Cache invalidation
-
-Cache invalidation should be event-driven rather than based primarily on short expiration times.
-
-Publishing or modifying a document may invalidate:
+The preferred model is:
 
 ```text
-/document/:slug
-/
-/series/:slug
-/subject/:slug
-/feed
-/sitemap
+registered/versioned module
++
+structured configuration
 ```
 
-Only affected derived pages should need regeneration.
+If arbitrary HTML/CSS/JavaScript documents are supported later, they should execute inside a sandboxed iframe with an intentionally restrictive capability model.
 
 ---
 
-## 6. Storage
+# 14. Asset Storage
 
-### 6.1 SQLite
+Binary assets are stored separately from SQLite.
 
-SQLite is the canonical store for structured content and metadata.
-
-Recommended concepts include:
-
-```text
-documents
-sections
-document_revisions
-users
-roles
-permissions
-authors
-subjects
-series
-assets
-interactive_modules
-oauth_clients
-oauth_tokens
-```
-
-The exact relational schema is implementation-specific and may evolve.
-
-SQLite should preferably operate in WAL mode for deployed instances.
-
----
-
-### 6.2 Assets
-
-Binary assets should live outside the primary database.
-
-Supported storage may initially include:
+The initial implementation should support:
 
 ```text
 local filesystem
 ```
 
-and later:
+The architecture may later support:
 
 ```text
 S3-compatible object storage
 RustFS
 ```
 
-Examples:
+Typical assets include:
 
 ```text
 images
 PDFs
 datasets
-downloadable files
+downloads
 JavaScript bundles
 WASM modules
+stylesheets
 ```
 
-SQLite stores their metadata and identifiers.
-
----
-
-## 7. Interactive Content
-
-Interactive sections should not normally contain arbitrary inline scripts executed in the main document context.
-
-The preferred model is a versioned interactive module:
+SQLite stores asset metadata such as:
 
 ```text
-interactive module
-├── id
-├── version
-├── script asset
-├── optional stylesheet
-├── optional WASM asset
-└── configuration schema
+id
+object key/path
+content type
+size
+checksum
+created_at
+uploaded_by
 ```
-
-A document section references the module:
-
-```json
-{
-  "module_id": "prime-factorization",
-  "version": 3,
-  "config": {
-    "field": "Q(sqrt(5))"
-  }
-}
-```
-
-This provides:
-
-* reproducibility;
-* version stability;
-* caching;
-* controlled execution;
-* easier review;
-* safer multi-editor operation.
-
-If arbitrary user-provided HTML/CSS/JavaScript is supported later, it should execute inside an appropriately sandboxed iframe rather than the main page context.
 
 ---
 
-## 8. Web Editing
+# 15. Public Rendering
 
-Verso provides an authenticated web interface for editing.
-
-The web application should use the same domain services as other interfaces.
+Verso renders public pages on the server.
 
 Conceptually:
+
+```text
+HTTP request
+     │
+     ▼
+outer/CDN cache
+     │ miss
+     ▼
+filesystem cache
+     │ miss
+     ▼
+load canonical content
+     │
+     ▼
+render sections
+     │
+     ▼
+render document template
+     │
+     ▼
+write filesystem cache
+     │
+     ▼
+response
+```
+
+Server rendering is therefore primarily performed when a page is not already cached.
+
+---
+
+# 16. Rendering Pipeline
+
+Rendering should be conceptually pure:
+
+```text
+Document
+   ↓
+Rendered Document
+```
+
+Each section type has a renderer:
+
+```text
+Text        → Markdown → HTML
+Image       → <figure>...
+Interactive → module container + loader
+Quote       → <blockquote>
+Embed       → configured embed representation
+```
+
+The rendering engine should not care whether the document was requested by:
+
+* a public page;
+* the editor preview;
+* MCP;
+* a future API;
+* internal cache regeneration.
+
+---
+
+# 17. Published Page Cache
+
+Rendered published pages should use filesystem caching.
+
+The filesystem cache is disposable derived state.
+
+Example:
+
+```text
+data/cache/
+├── index.html
+├── articles/
+│   └── example.html
+├── series/
+│   └── number-theory.html
+└── subjects/
+    └── mathematics.html
+```
+
+The entire cache directory should be safely removable:
+
+```bash
+rm -rf data/cache/*
+```
+
+Verso should regenerate missing entries automatically.
+
+SQLite remains the source of truth.
+
+---
+
+# 18. Why the Cache Is Not Stored in SQLite
+
+Rendered HTML should normally not be stored inside the database.
+
+SQLite contains canonical state.
+
+The filesystem contains regenerable output.
+
+This avoids:
+
+* database growth from derived HTML;
+* unnecessary SQLite writes;
+* coupling cache lifetime to database backups;
+* cache regeneration interfering with canonical transactions.
+
+The filesystem also benefits naturally from the operating system's page cache.
+
+---
+
+# 19. Cache Writes
+
+Cache generation should use atomic replacement.
+
+Conceptually:
+
+```text
+article.html.tmp
+       │
+       │ complete render
+       ▼
+atomic rename
+       │
+       ▼
+article.html
+```
+
+Readers should never observe partially generated pages.
+
+---
+
+# 20. Cache Invalidation
+
+Cache invalidation should be event-driven.
+
+Publishing or updating a published document may invalidate:
+
+```text
+/document/:slug
+/
+series pages
+subject pages
+author pages
+feed
+sitemap
+related-document indexes
+```
+
+Only pages affected by the operation should need invalidation.
+
+The first implementation may use straightforward invalidation rather than sophisticated dependency graphs.
+
+---
+
+# 21. Draft Rendering and Caching
+
+Drafts and mutable editorial views should not use the public filesystem page cache.
+
+A draft request follows approximately:
+
+```text
+authenticated editor
+       │
+       ▼
+authorization check
+       │
+       ▼
+load current draft
+       │
+       ▼
+render current state
+       │
+       ▼
+return response
+```
+
+Private preview routes should normally use restrictive caching headers such as:
+
+```text
+Cache-Control: private, no-store
+```
+
+The key rule is:
+
+> Mutable editorial state is not cached as public rendered output.
+
+Immutable historical revisions may later be cached safely if useful.
+
+---
+
+# 22. Web Editor
+
+Verso provides a browser-based editorial interface.
+
+The initial editor uses:
+
+```text
+HTML
++
+HTMX 4
++
+minimal JavaScript
+```
+
+A full SPA framework should not be required unless a concrete feature later justifies it.
+
+The editor operates through normal Verso application services.
 
 ```text
 Browser
    │
    ▼
-Web handlers
+web handler
    │
    ▼
-Application services
+application service
    │
    ├── authorization
    ├── validation
    ├── revision handling
-   ├── publishing
-   └── cache invalidation
+   ├── persistence
+   └── invalidation
    │
    ▼
 SQLite
 ```
 
-The UI may expose documents as ordered blocks:
+---
+
+# 23. Section-Oriented Editor
+
+The editor represents documents as ordered sections.
+
+Example:
 
 ```text
-Article
-
-[ Text section ]
-[ Image section ]
-[ Text section ]
-[ Interactive section ]
-
-+ Add section
+┌──────────────────────────────────┐
+│ Article title                    │
+├──────────────────────────────────┤
+│ ≡ Text                           │
+│   [Markdown editor............]  │
+├──────────────────────────────────┤
+│ ≡ Image                          │
+│   [diagram.png]                  │
+├──────────────────────────────────┤
+│ ≡ Interactive                    │
+│   Monte Carlo Area               │
+├──────────────────────────────────┤
+│                                  │
+│          + Add section           │
+└──────────────────────────────────┘
 ```
 
-Sections can be created, edited, reordered, or removed.
+Sections may be:
+
+* inserted;
+* edited;
+* reordered;
+* duplicated;
+* removed.
 
 ---
 
-## 9. Revision Model
+# 24. Live Side Preview
 
-Published content should have recoverable history.
+The editor should support an optional live preview pane.
 
-Verso may keep normalized current content while storing immutable revision snapshots.
+Example:
+
+```text
+┌────────────────────────────┬────────────────────────────┐
+│ Editor                     │ Preview                    │
+│                            │                            │
+│ Text / sections            │ Production-equivalent     │
+│                            │ rendered document          │
+│                            │                            │
+└────────────────────────────┴────────────────────────────┘
+```
+
+The canonical preview should be produced by the Verso server using the same rendering pipeline as publication.
+
+This guarantees:
+
+```text
+preview rendering
+≈
+published rendering
+```
+
+---
+
+# 25. Preview Is Not Save
+
+Preview operations should not automatically mutate SQLite.
+
+The editor may send the proposed unsaved state directly to the rendering service.
 
 Conceptually:
 
 ```text
-current document
-    │
-    ├── metadata
-    └── sections
-
-revision
-    │
-    └── complete document snapshot
+browser unsaved state
+       │
+       ▼
+preview request
+       │
+       ▼
+Verso renderer
+       │
+       ▼
+HTML fragment
 ```
 
-A revision records:
+No database write is required.
+
+The following operations remain distinct:
 
 ```text
-revision_id
-document_id
-revision_number
-snapshot
-editor_id
-created_at
-```
-
-This avoids requiring independent temporal history for every section row.
-
-Revision creation policy may be configurable, for example:
-
-```text
-on explicit save
-on publish
-periodic autosave checkpoint
+render preview
+save draft
+publish
 ```
 
 ---
 
-## 10. Authentication and Authorization
+# 26. Partial Preview Rendering
 
-Verso has a unified user identity model shared by:
+For ordinary text editing, Verso should avoid re-rendering the entire document unnecessarily.
+
+Example:
+
+```text
+editing one text section
+       │
+       ▼
+POST preview-section
+       │
+       ▼
+render only section
+       │
+       ▼
+HTMX swaps corresponding preview fragment
+```
+
+Possible behavior:
+
+```text
+text edit
+    → render affected section
+
+image caption change
+    → render image section
+
+section reorder
+    → render document body
+
+global metadata change
+    → render affected page/header region
+
+citation-numbering change
+    → full document render if needed
+```
+
+This keeps preview operations lightweight.
+
+---
+
+# 27. HTMX Preview Requests
+
+A text section may conceptually use:
+
+```html
+<textarea
+  hx-post="/admin/preview/section"
+  hx-trigger="input changed delay:250ms"
+  hx-target="#preview-section-id">
+</textarea>
+```
+
+The server returns production-equivalent HTML.
+
+A debounce around approximately 150–300 ms is appropriate for text editing.
+
+Exact behavior may be configurable.
+
+---
+
+# 28. Optimistic Preview Behavior
+
+The editor may provide lightweight client-side optimistic updates.
+
+Examples include:
+
+```text
+title text
+caption text
+alt text
+visibility
+layout selection
+editor UI state
+```
+
+However, the canonical rendered preview should remain server-generated.
+
+Verso should avoid implementing separate, competing Markdown rendering engines in the browser and server unless necessary.
+
+---
+
+# 29. Avoiding Stale Preview Responses
+
+Rapid typing may result in multiple overlapping preview requests.
+
+Verso must prevent older responses from overwriting newer preview state.
+
+Possible strategies include:
+
+* aborting obsolete requests;
+* assigning monotonically increasing preview sequence numbers;
+* rejecting or ignoring stale responses.
+
+Conceptually:
+
+```text
+request #41
+request #42
+request #43
+
+only #43 may become current
+```
+
+---
+
+# 30. Full-Document Preview
+
+Some features require document context:
+
+* citations;
+* footnotes;
+* cross-references;
+* numbering;
+* table of contents;
+* section references.
+
+For these cases, the browser may send the full current unsaved document state to a preview endpoint.
+
+Verso constructs an in-memory `Document`, renders it, and returns the result.
+
+This operation still does not imply persistence.
+
+---
+
+# 31. Revisions
+
+Published and editorial content should have recoverable revision history.
+
+Current document state may remain normalized in:
+
+```text
+documents
+sections
+```
+
+while revisions contain immutable document snapshots.
+
+Conceptually:
+
+```text
+revision
+├── document metadata
+└── ordered sections
+```
+
+Revision metadata may include:
+
+```text
+id
+document_id
+revision_number
+snapshot
+created_by
+created_at
+reason
+```
+
+---
+
+# 32. Revision Policy
+
+Revisions may be created:
+
+* on explicit save;
+* on submission for review;
+* on publication;
+* at configurable autosave checkpoints.
+
+Not every keystroke should produce a permanent revision.
+
+---
+
+# 33. Authentication
+
+Verso has one unified user identity model.
+
+The same identity system is used for:
 
 * web editing;
-* MCP editing;
+* MCP;
 * future APIs.
 
 Possible roles include:
@@ -486,30 +972,52 @@ author
 contributor
 ```
 
-Internally, permissions should preferably be capability-based, for example:
-
-```text
-document:create
-document:read:any
-document:update:self
-document:update:any
-document:review
-document:publish
-asset:upload
-user:manage
-```
-
-Roles are collections of permissions.
-
-Application services must perform authorization checks regardless of the interface making the request.
+Roles are convenience groupings around permissions.
 
 ---
 
-## 11. MCP Architecture
+# 34. Authorization
 
-MCP is a first-class remote interface for AI-assisted editorial work.
+The actual authorization model should be capability-oriented.
 
-The MCP server runs as part of the Verso application:
+Possible permissions include:
+
+```text
+document:create
+
+document:read:self
+document:read:any
+
+document:update:self
+document:update:any
+
+document:review
+document:publish
+
+asset:read
+asset:upload
+
+interactive:create
+interactive:publish
+
+user:manage
+```
+
+Application services perform authorization.
+
+Interfaces do not implement their own independent security logic.
+
+---
+
+# 35. MCP
+
+MCP is a first-class remote interface for AI-assisted editing.
+
+The initial focus is **online MCP access**.
+
+Local stdio-based editing is outside the initial scope.
+
+Architecture:
 
 ```text
 AI client
@@ -531,52 +1039,49 @@ application services
 SQLite
 ```
 
-MCP must never bypass the application service layer or manipulate SQLite directly.
+MCP must never bypass the application service layer.
 
 ---
 
-## 12. MCP Authentication
+# 36. MCP Authentication
 
-Remote MCP access should use OAuth-compatible authentication.
+Remote MCP access should use OAuth-compatible authorization.
 
-A typical flow is:
+Typical flow:
 
 ```text
 AI client
     │
     ▼
-Verso MCP resource
+Verso MCP endpoint
     │
     ▼
 authorization discovery
     │
     ▼
-user authenticates
+browser/user authentication
     │
     ▼
-client receives access token
+authorization approval
     │
     ▼
-MCP requests with bearer token
+access token
+    │
+    ▼
+authenticated MCP requests
 ```
 
-The authenticated MCP identity maps to a normal Verso user.
+The resulting identity maps to an ordinary Verso user.
 
-Therefore:
-
-```text
-MCP permissions == user permissions
-```
-
-An AI agent operating on behalf of an author must not acquire editor or owner privileges simply because it accesses the MCP interface.
+An AI acts with the authority granted to that user and token.
 
 ---
 
-## 13. MCP Scopes
+# 37. MCP Scopes
 
-OAuth scopes may provide an additional authorization layer.
+OAuth scopes provide another authorization boundary.
 
-Possible scopes include:
+Initial scopes may include:
 
 ```text
 content:read
@@ -588,22 +1093,28 @@ assets:read
 assets:write
 ```
 
-A common authorization grant may intentionally exclude publication:
+A recommended AI grant may include:
 
 ```text
 content:read
 content:write
 ```
 
-This allows an AI client to assist with drafting while requiring a human or separately authorized operation for publication.
+without:
+
+```text
+content:publish
+```
+
+This allows AI-assisted drafting without allowing unattended publication.
 
 ---
 
-## 14. MCP Tools
+# 38. MCP Tool Design
 
-The MCP interface should expose structured editorial operations rather than raw SQL or filesystem access.
+MCP should expose semantic editorial operations rather than raw database access.
 
-Possible tools include:
+Potential tools include:
 
 ```text
 list_documents
@@ -625,6 +1136,8 @@ list_revisions
 restore_revision
 
 preview_document
+preview_section
+
 submit_for_review
 publish_document
 unpublish_document
@@ -634,13 +1147,13 @@ get_asset
 upload_asset
 ```
 
-The exact tool surface should stay relatively small and composable.
+The tool set should remain small, composable, and domain-oriented.
 
 ---
 
-## 15. AI Editing Semantics
+# 39. AI Editing Granularity
 
-AI edits should preferably target sections rather than replacing entire documents.
+AI editing should normally target individual sections.
 
 For example:
 
@@ -653,17 +1166,40 @@ update_section(
 )
 ```
 
-The `expected_revision` field enables optimistic concurrency control.
+This is preferable to replacing an entire article when only one section is being edited.
 
-If another editor modifies the document before the AI submits its change, the operation should fail with a revision conflict rather than silently overwrite newer content.
+Benefits include:
 
-This is particularly important for simultaneous human and AI editing.
+* fewer accidental modifications;
+* lower token usage;
+* clearer revision history;
+* easier concurrency control;
+* better conflict handling.
 
 ---
 
-## 16. Publishing Workflow
+# 40. Optimistic Concurrency
 
-A basic editorial lifecycle may be:
+Verso should use optimistic concurrency for editorial mutations.
+
+Example:
+
+```text
+current revision = 42
+
+AI submits:
+expected_revision = 42
+```
+
+If the document has become revision 43 in the meantime, the mutation fails rather than overwriting newer work.
+
+The same mechanism applies to human editors.
+
+---
+
+# 41. Publication Workflow
+
+A basic workflow is:
 
 ```text
 draft
@@ -675,56 +1211,61 @@ review
 published
 ```
 
-Publishing should be treated as an application command rather than a simple database field update.
+Publication is an application command, not merely:
 
-For example:
+```sql
+UPDATE documents SET status = 'published'
+```
+
+Conceptually:
 
 ```text
 publish(document)
-    │
-    ├── validate publication requirements
-    ├── verify permissions
-    ├── create revision
-    ├── change publication state
-    ├── invalidate affected caches
-    └── return publication result
+      │
+      ├── validate document
+      ├── verify permissions
+      ├── verify required metadata
+      ├── create revision
+      ├── update publication state
+      ├── commit transaction
+      ├── invalidate affected cache
+      └── return result
 ```
 
-The same operation is used by:
+The same publishing service is called from:
 
-```text
-web UI
-MCP
-future API
-CLI
-```
+* the web editor;
+* MCP;
+* future APIs.
 
 ---
 
-## 17. Public Site and Editorial System Separation
+# 42. Public and Editorial Route Separation
 
-Although implemented by the same application, public and editorial functionality should remain logically separated.
+Public and private functionality should remain logically distinct.
 
-Example route namespaces:
+Example:
 
 ```text
-/                         public site
-/articles/:slug           public document
+/                         public homepage
+/articles/:slug           public article
+/series/:slug             public series
+/subjects/:slug           public subject
 
-/admin/...                 editorial UI
+/admin/...                 editorial application
 
 /mcp                       MCP endpoint
 
-/api/...                   internal or future API
+/auth/...                  authentication/authorization
 ```
 
-Public routes must never expose draft content without explicit authorization.
+Draft content must never be exposed by ordinary public routes.
 
 ---
 
-## 18. Configuration
+# 43. Configuration
 
-Verso should be configurable through a file such as:
+Verso should use a deployment configuration file such as:
 
 ```text
 verso.toml
@@ -760,78 +1301,95 @@ logo = "/assets/logo.svg"
 math = true
 interactive_sections = true
 
+[editor]
+preview_debounce_ms = 250
+
 [mcp]
 enabled = true
 allow_publish = false
 ```
 
-Configuration syntax and available options may evolve, but deployment-specific concerns should remain outside content data whenever possible.
+Secrets should not normally be stored directly inside publicly tracked configuration files.
+
+Environment variables or dedicated secret mechanisms may override sensitive configuration.
 
 ---
 
-## 19. UI Customization
+# 44. UI Customization
 
-Verso should separate application behavior from publication presentation.
+Verso should separate publication data from presentation.
 
-The public UI may be customized using:
+Customization may include:
 
 ```text
-configuration
-themes
+theme
 templates
-static assets
+CSS
 CSS variables
+logo
+typography
+navigation behavior
+homepage structure
+document layouts
 ```
 
-The first version does not need to support arbitrary theme engines.
-
-A minimal theme contract is preferable to premature generalization.
+The first implementation should define a small, coherent theme contract rather than a completely generic theme engine.
 
 ---
 
-## 20. Internal Layering
+# 45. Internal Layering
 
-A possible high-level implementation structure is:
+A possible implementation structure is:
 
 ```text
 src/
 ├── domain/
-│   ├── document
-│   ├── section
-│   ├── revision
-│   ├── user
-│   └── permissions
+│   ├── document.zig
+│   ├── section.zig
+│   ├── revision.zig
+│   ├── user.zig
+│   └── permission.zig
 │
 ├── application/
-│   ├── documents
-│   ├── publishing
-│   ├── revisions
-│   └── assets
+│   ├── documents.zig
+│   ├── sections.zig
+│   ├── publishing.zig
+│   ├── revisions.zig
+│   ├── preview.zig
+│   └── assets.zig
 │
 ├── storage/
-│   ├── sqlite
-│   └── assets
+│   ├── sqlite.zig
+│   ├── filesystem.zig
+│   └── object_store.zig
 │
 ├── render/
-│   ├── document
-│   ├── markdown
-│   ├── templates
-│   └── interactive
+│   ├── document.zig
+│   ├── markdown.zig
+│   ├── section.zig
+│   ├── templates.zig
+│   └── interactive.zig
 │
 ├── cache/
+│   └── filesystem.zig
+│
+├── auth/
+│   ├── sessions.zig
+│   ├── oauth.zig
+│   └── permissions.zig
 │
 ├── web/
-│   ├── public
-│   └── admin
+│   ├── public/
+│   └── admin/
 │
 ├── mcp/
 │
-├── auth/
-│
-└── main
+└── main.zig
 ```
 
-The exact module layout depends on the implementation language, but dependency direction should remain approximately:
+This structure is illustrative rather than prescriptive.
+
+The dependency direction should remain roughly:
 
 ```text
 interfaces
@@ -841,133 +1399,270 @@ application
 domain
 ```
 
-with infrastructure implementing storage and rendering services required by the application.
+Infrastructure provides implementations needed by the application layer.
 
 ---
 
-## 21. Deployment Model
+# 46. Request Paths
 
-The initial target deployment should remain simple:
+## Public request
 
 ```text
-Reverse proxy / CDN
+Browser
+   │
+   ▼
+CDN
+   │ miss
+   ▼
+Verso
+   │
+   ▼
+filesystem cache
+   │ miss
+   ▼
+SQLite
+   │
+   ▼
+renderer
+   │
+   ▼
+filesystem cache
+   │
+   ▼
+response
+```
+
+---
+
+## Draft editor request
+
+```text
+Browser
+   │
+   ▼
+Verso
+   │
+   ├── authenticate
+   ├── authorize
+   │
+   ▼
+SQLite
+   │
+   ▼
+editor response
+```
+
+No public page cache is involved.
+
+---
+
+## Live preview request
+
+```text
+Browser editor state
         │
         ▼
-      Verso
+Verso preview endpoint
         │
-   ┌────┴─────┐
-   ▼          ▼
-SQLite      assets
+        ▼
+production renderer
+        │
+        ▼
+HTML fragment
+        │
+        ▼
+HTMX swap
 ```
 
-A production deployment may use:
-
-```text
-Cloudflare
-Caddy
-nginx
-Traefik
-```
-
-in front of Verso, but the application should not depend on any particular reverse proxy.
-
-The public site should make extensive use of HTTP caching where appropriate.
+No SQLite mutation is required.
 
 ---
 
-## 22. Non-Goals for the Initial Version
+## MCP edit
 
-The first version does not need to provide:
+```text
+AI client
+    │
+    ▼
+OAuth-authenticated MCP
+    │
+    ▼
+application service
+    │
+    ├── authorization
+    ├── concurrency check
+    ├── validation
+    │
+    ▼
+SQLite
+```
 
+---
+
+# 47. Failure Principles
+
+Verso should prefer failure modes that preserve canonical content.
+
+Examples:
+
+### Cache failure
+
+If cache writing fails:
+
+```text
+canonical publication remains valid
+```
+
+The page can be rendered again.
+
+### Preview failure
+
+If preview rendering fails:
+
+```text
+draft remains untouched
+```
+
+### Publishing failure
+
+If validation fails:
+
+```text
+document remains unpublished
+```
+
+### MCP conflict
+
+If another editor modified a document:
+
+```text
+operation returns conflict
+```
+
+rather than overwriting the newer version.
+
+---
+
+# 48. Non-Goals for Initial Versions
+
+The first versions do not need to provide:
+
+* PostgreSQL;
+* MySQL;
 * multiple database engines;
-* distributed application instances;
-* collaborative character-by-character editing;
-* arbitrary user code execution in the main page context;
+* distributed Verso server clusters;
+* real-time character-by-character collaborative editing;
+* CRDTs;
+* arbitrary script execution in the main page;
+* visual no-code page building;
+* generic relational-data construction;
+* third-party plugin marketplaces;
+* dozens of publishing workflow states;
 * complex workflow engines;
-* plugin marketplaces;
-* generic no-code database construction;
-* compatibility with every CMS content model;
-* full visual page-building.
+* local MCP editing;
+* Git-based storage;
+* Git-based publishing;
+* mandatory client-side SPA frameworks.
 
-These can be evaluated later if real requirements emerge.
-
----
-
-## 23. Initial Technology Direction
-
-The implementation is intentionally experimental.
-
-A possible initial stack is:
-
-```text
-Language:          Zig
-Database:          SQLite
-Public rendering:  server-side HTML
-Content text:      Markdown inside text sections
-Assets:            filesystem initially
-Interactive code:  JavaScript and/or WASM
-Caching:           filesystem + HTTP/CDN
-AI integration:    remote MCP server
-Authentication:    web sessions + OAuth-compatible MCP authorization
-```
-
-The architecture should avoid unnecessary abstractions intended solely to support hypothetical future technologies.
-
-SQLite, filesystem storage, and a single application process should be treated as deliberate first-class design decisions rather than temporary placeholders.
+These may be evaluated if actual requirements appear.
 
 ---
 
-## 24. Summary
+# 49. Design Philosophy
 
-Verso is a small, configurable publishing server centered around structured documents.
+Verso should distinguish clearly between three categories of state.
 
-Its core architecture is:
+## Canonical state
 
 ```text
-                        ┌──────────────┐
-                        │   Editors    │
-                        └──────┬───────┘
-                               │
-                ┌──────────────┼──────────────┐
-                │                             │
-             Web CMS                      AI Client
-                │                             │
-                │                         MCP + OAuth
-                │                             │
-                └──────────────┬──────────────┘
-                               ▼
-                    ┌────────────────────┐
-                    │       Verso        │
-                    │                    │
-                    │ Application layer  │
-                    │ Domain model       │
-                    │ Renderer           │
-                    │ Authorization      │
-                    │ Cache manager      │
-                    └─────────┬──────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    ▼                   ▼
-                 SQLite              Assets
-                    │
-                    ▼
-              canonical content
-
-Public request
-      │
-      ▼
-CDN → page cache → renderer → SQLite
+SQLite
++
+asset storage
 ```
 
-The key design goals are:
+This represents the publication.
 
-* simple self-hosting;
-* structured and interactive publishing;
-* server-rendered public content;
-* strong cacheability;
-* safe multi-editor workflows;
-* first-class AI-assisted editing through MCP;
-* portable content;
-* minimal infrastructure;
-* room for experimentation without unnecessarily generalizing the initial implementation.
+---
+
+## Derived state
+
+```text
+rendered HTML
+filesystem cache
+CDN cache
+```
+
+This can always be regenerated.
+
+---
+
+## Ephemeral state
+
+```text
+unsaved editor changes
+preview requests
+temporary rendering buffers
+pending HTMX operations
+```
+
+This should not become canonical accidentally.
+
+The architecture should preserve these boundaries consistently.
+
+---
+
+# 50. Summary
+
+Verso is a self-hosted publishing server built around:
+
+```text
+                    ┌─────────────────┐
+                    │     Editors     │
+                    └────────┬────────┘
+                             │
+                 ┌───────────┴───────────┐
+                 │                       │
+              Web CMS                 AI MCP
+              HTMX 4                  OAuth
+                 │                       │
+                 └───────────┬───────────┘
+                             ▼
+                    ┌────────────────┐
+                    │     Verso      │
+                    │                │
+                    │ Domain model   │
+                    │ App services   │
+                    │ Renderer       │
+                    │ Authorization  │
+                    │ Preview engine │
+                    │ Cache manager  │
+                    └───────┬────────┘
+                            │
+             ┌──────────────┼──────────────┐
+             ▼              ▼              ▼
+          SQLite          Assets      FS page cache
+             │
+             ▼
+       canonical state
+```
+
+The central architectural decisions are:
+
+* **Zig** for the server implementation;
+* **SQLite-only** initially;
+* **structured documents composed of sections**;
+* **Markdown inside text sections**;
+* **versioned JS/WASM interactive modules**;
+* **server-side rendering**;
+* **filesystem caching for published pages**;
+* **no public caching of mutable drafts**;
+* **HTMX 4 for the web editor**;
+* **server-rendered, production-equivalent side previews**;
+* **preview, save, and publish as distinct operations**;
+* **remote MCP as a first-class AI editing interface**;
+* **OAuth and permission-scoped MCP access**;
+* **optimistic concurrency for human and AI edits**;
+* **one shared application/domain layer for web, MCP, rendering, and publication**.
+
+Verso should remain small enough to self-host easily while providing enough structure to support sophisticated technical and interactive publications.
 
