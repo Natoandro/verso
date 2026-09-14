@@ -5,114 +5,606 @@
 This is the ordered backlog derived from the [architecture](design.md); it
 describes planned, not implemented, work.
 
-`BOOT-001` and `SCHEMA-001` are prerequisites. Every later row is a complete
+`BOOT-001` and `SCHEMA-001` are prerequisites. Every later item is a complete
 vertical slice with an observable interface, shared application services, and
 focused verification. Its listed architectural divisions are its only
 subtasks, with a maximum of four.
 
-`todo` means not implemented; change it to `done` only when the stated outcome
-and verification are complete, with a short implementation note or PR
-reference. Public rendering comes before authentication because it is
-anonymous and read-only; earlier editor work remains browser-local and creates
-no unauthenticated server mutation path. Rendering slices construct any needed
-published fixtures through application services for integration tests; they do
-not introduce a public or unauthenticated publishing interface.
+`[ ]` means not implemented; change it to `[x]` only when the stated outcome
+and every nested division are complete, with a short implementation note or
+PR reference. Public rendering comes before authentication because it is
+anonymous and read-only; earlier editor work remains browser-local and
+creates no unauthenticated server mutation path. Rendering slices construct
+any needed published fixtures through application services for integration
+tests; they do not introduce a public or unauthenticated publishing
+interface.
 
 ## Prerequisites — bootstrap and schema
 
 These are deliberately not feature slices. They must be complete before
 starting `DOC-001`.
 
-| Code | Prerequisite | Required outcome | Status |
-| --- | --- | --- | --- |
-| `BOOT-001` | Application bootstrap | A Zig executable loads validated `verso.toml`, establishes the `data/` layout, starts a single-process HTTP server, has structured error/log output, and provides the planned `init` and `serve` commands. | todo |
-| `SCHEMA-001` | Initial SQLite migration | One versioned initial migration creates the full initial canonical schema, constraints, indexes, migration ledger, and WAL-safe connection setup required by this plan. It distinguishes document/version/section/revision state, identity and grants, assets, cache invalidation work, idempotency results, and audit/provenance data. | todo |
+- [ ] **BOOT-001 — Application bootstrap**
 
-The initial migration is the schema-design checkpoint. A later task may use its
-tables but must not quietly introduce a new data model; a genuinely missing
-schema decision requires an explicit architecture update and migration task.
+  Build the initial executable around a validated `verso.toml`, the `data/`
+  directory layout, a single-process HTTP server, structured errors and logs,
+  and the planned `init` and `serve` commands. Verify that startup rejects
+  invalid configuration and that both commands expose the intended behavior.
+
+- [ ] **SCHEMA-001 — Initial SQLite migration**
+
+  Create one versioned initial migration with the canonical schema,
+  constraints, indexes, migration ledger, and WAL-safe connection setup
+  required by this plan. Verify that it distinguishes document, version,
+  section, and revision state; identities and grants; assets; cache
+  invalidation work; idempotency results; and audit/provenance data.
+
+The initial migration is the schema-design checkpoint. A later task may use
+its tables but must not quietly introduce a new data model; a genuinely
+missing schema decision requires an explicit architecture update and
+migration task.
 
 ## 1. Core document drafts and typed sections
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `DOC-001` | A local operator can create a new, unlisted text document draft through a narrow bootstrap command that calls the ordinary document application service. The draft has a stable document ID, version 1, metadata, and a text section; invalid types and duplicate mutable drafts are rejected. This temporary bootstrap surface is removed from normal use once protected editorial creation is delivered in `IAM-003`. | domain; application; SQLite storage; CLI | todo |
-| `DOC-002` | The same draft supports inserting, editing, moving, duplicating, and deleting text and image section records through application services. Ordering is stable and validation rejects invalid positions, malformed data, or mutations of non-drafts. | domain; application; SQLite storage; CLI | todo |
-| `DOC-003` | `create_next_version` deep-copies a current published document's version-owned metadata, sections, and nested objects into exactly one next draft; source versions remain immutable. The service rejects unpublished parents and atomically enforces the one-mutable-version rule. | domain; application; SQLite storage; CLI | todo |
-| `DOC-004` | Draft saves create immutable working-revision checkpoints and enforce expected version/revision values; stale writes fail without overwriting data. The slice also supports listing and restoring a checkpoint into the active draft without editing published or archived content. | domain; application; SQLite storage; CLI | todo |
-| `DOC-005` | A draft carries validated version metadata, including its immutable logical document type, title, slug, description, subjects, optional series, and series position. Type-to-collection mapping is deployment configuration rather than editable metadata. | domain; application; SQLite storage; CLI | todo |
+- [ ] **DOC-001 — Create a bootstrap text draft**
+
+  A local operator can create a new, unlisted text document draft through a
+  narrow bootstrap command that calls the ordinary document application
+  service. The draft has a stable document ID, version 1, metadata, and a
+  text section; invalid types and duplicate mutable drafts are rejected. This
+  temporary bootstrap surface is removed from normal use once protected
+  editorial creation is delivered in `IAM-003`.
+
+  - [ ] **Domain:** Define the draft and version invariants, including stable
+    document identity, version 1, supported document types, and the one
+    mutable-draft rule.
+  - [ ] **Application:** Provide the create-draft use case with validation and
+    authorization boundaries that every interface can call.
+  - [ ] **SQLite storage:** Persist the document, initial version, metadata,
+    and text section atomically while enforcing uniqueness and foreign-key
+    constraints.
+  - [ ] **CLI:** Add the narrow local bootstrap command and verify its success,
+    invalid-input failures, and duplicate-draft behavior.
+
+- [ ] **DOC-002 — Edit typed draft sections**
+
+  The same draft supports inserting, editing, moving, duplicating, and
+  deleting text and image section records through application services.
+  Ordering is stable and validation rejects invalid positions, malformed data,
+  or mutations of non-drafts.
+
+  - [ ] **Domain:** Model text and image sections, ordering, duplication, and
+    the rules that prevent edits to published or archived versions.
+  - [ ] **Application:** Expose section mutation use cases with position,
+    payload, draft-state, and expected-revision validation.
+  - [ ] **SQLite storage:** Store ordered section records and implement
+    transaction-safe insert, move, duplicate, update, and delete operations.
+  - [ ] **CLI:** Provide a small verification surface for section mutations
+    and exercise valid operations alongside malformed and non-draft cases.
+
+- [ ] **DOC-003 — Create the next document version**
+
+  `create_next_version` deep-copies a current published document's
+  version-owned metadata, sections, and nested objects into exactly one next
+  draft; source versions remain immutable. The service rejects unpublished
+  parents and atomically enforces the one-mutable-version rule.
+
+  - [ ] **Domain:** Define lineage, current-publication, immutable-source,
+    and next-version invariants.
+  - [ ] **Application:** Implement the next-version use case and reject
+    unpublished parents or an existing mutable version before any partial
+    mutation is visible.
+  - [ ] **SQLite storage:** Deep-copy all version-owned records in one
+    transaction while preserving source immutability and enforcing lineage
+    uniqueness.
+  - [ ] **CLI:** Add a focused way to create and inspect a next draft, including
+    checks for copied nested content and rejected duplicate or invalid forks.
+
+- [ ] **DOC-004 — Save and restore working revisions**
+
+  Draft saves create immutable working-revision checkpoints and enforce
+  expected version/revision values; stale writes fail without overwriting
+  data. The slice also supports listing and restoring a checkpoint into the
+  active draft without editing published or archived content.
+
+  - [ ] **Domain:** Define immutable checkpoint identity, revision ordering,
+    active-draft restoration, and stale-write invariants.
+  - [ ] **Application:** Implement save, list, and restore use cases with
+    optimistic-concurrency checks and safe failure behavior.
+  - [ ] **SQLite storage:** Persist immutable revision snapshots and apply
+    restores atomically without changing published or archived versions.
+  - [ ] **CLI:** Exercise successful checkpoints, stale saves, listing, and
+    restoration through a verification command or integration fixture.
+
+- [ ] **DOC-005 — Validate draft metadata**
+
+  A draft carries validated version metadata, including its immutable logical
+  document type, title, slug, description, subjects, optional series, and
+  series position. Type-to-collection mapping is deployment configuration
+  rather than editable metadata.
+
+  - [ ] **Domain:** Define metadata formats, slug and title rules, subject and
+    series relationships, and immutable document-type behavior.
+  - [ ] **Application:** Provide metadata create/update validation and ensure
+    collection mapping is read from deployment configuration.
+  - [ ] **SQLite storage:** Persist normalized metadata and relationships with
+    the constraints needed for valid series positions and immutable types.
+  - [ ] **CLI:** Verify valid metadata changes, rejected malformed values, and
+    the inability to edit the logical type or bypass configured collections.
 
 ## 2. Web editor, local preview, and local recovery
 
 This section is intentionally browser-local. It has no endpoint that accepts
 unsaved document content and no server mutation path before `IAM-003`.
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `ED-001` | A browser can compose an unsaved structured document with text and image-section placeholders, including insertion, edit, reorder, duplication, and deletion. The HTMX-oriented shell and minimal JavaScript use the shared client document model. | web/editor; client document model; UI tests | todo |
-| `ED-002` | The editor renders unsaved text content in an explicitly provisional local preview pane. Its Markdown subset disables raw HTML, escapes output, validates URLs, and prevents stale asynchronous work from replacing a newer render. | web/editor; client renderer; security tests | todo |
-| `ED-003` | Browser-local recovery stores namespaced structured snapshots in IndexedDB (with a limited fallback), restores only after an explicit user choice, and reports storage failures without blocking editing. Snapshots are isolated by site and owner scope and are never transmitted as preview data. | web/editor; browser storage; UI/security tests | todo |
+- [ ] **ED-001 — Compose an unsaved structured document**
+
+  A browser can compose an unsaved structured document with text and
+  image-section placeholders, including insertion, edit, reorder, duplication,
+  and deletion. The HTMX-oriented shell and minimal JavaScript use the shared
+  client document model.
+
+  - [ ] **Web/editor:** Build the browser-local editor shell and controls for
+    manipulating sections without sending unsaved content to the server.
+  - [ ] **Client document model:** Define the shared in-memory representation
+    and deterministic operations used by the editor and preview.
+  - [ ] **UI tests:** Verify section lifecycle operations, ordering, placeholder
+    behavior, and the absence of an unauthenticated mutation endpoint.
+
+- [ ] **ED-002 — Render a safe local preview**
+
+  The editor renders unsaved text content in an explicitly provisional local
+  preview pane. Its Markdown subset disables raw HTML, escapes output,
+  validates URLs, and prevents stale asynchronous work from replacing a newer
+  render.
+
+  - [ ] **Web/editor:** Add a clearly provisional preview pane that is separate
+    from persisted and published rendering paths.
+  - [ ] **Client renderer:** Implement the restricted Markdown subset, escaping,
+    safe-link handling, and stale-render cancellation or sequencing.
+  - [ ] **Security tests:** Cover raw HTML, unsafe URLs, malformed input, and
+    out-of-order asynchronous preview results.
+
+- [ ] **ED-003 — Recover browser-local drafts**
+
+  Browser-local recovery stores namespaced structured snapshots in IndexedDB
+  (with a limited fallback), restores only after an explicit user choice, and
+  reports storage failures without blocking editing. Snapshots are isolated by
+  site and owner scope and are never transmitted as preview data.
+
+  - [ ] **Web/editor:** Add recovery prompts and explicit restore/discard
+    controls without conflating local snapshots with saved drafts.
+  - [ ] **Browser storage:** Implement namespaced IndexedDB persistence and a
+    bounded fallback with site and owner isolation.
+  - [ ] **UI/security tests:** Verify consent-gated restoration, storage-error
+    handling, isolation, and that snapshots never become preview requests.
 
 ## 3. Safe server rendering and public routes
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `RND-001` | A current published text document is rendered on the server using the specified restricted Markdown profile, fixed HTML construction, safe-link policy, and restrictive public CSP. The integration fixture is created through the application service, while XSS and unsafe URL cases are rejected or rendered inert. | render; application/query; web/public; security tests | todo |
-| `RND-002` | Public document lookup resolves the type-derived collection, stable document ID, and current slug. It serves the canonical route and redirects stale-slug and ID-only routes without exposing drafts or archives. | domain/query; application; web/public; integration tests | todo |
-| `RND-003` | Public document pages use disposable filesystem HTML cache entries written by atomic replacement. Verso resolves current visibility and canonical routing before using the internal cache; cache failure is a renderable miss, never a canonical-data failure. | render; cache/filesystem; web/public; integration tests | todo |
-| `RND-004` | Historical routes render accessible archived versions read-only, while hidden, draft, and unknown documents have indistinguishable public not-found behavior. All nonfinal document-derived responses require client revalidation. | application/query; render; web/public; security tests | todo |
-| `RND-005` | Public series, subject, and author indexes list only current published documents. Series pages use the configured `/series/:slug` route and ordered unique positions; index cache keys and response headers follow the same revalidation policy as other document-derived pages. | application/query; render; web/public; integration tests | todo |
+- [ ] **RND-001 — Render published text safely**
+
+  A current published text document is rendered on the server using the
+  specified restricted Markdown profile, fixed HTML construction, safe-link
+  policy, and restrictive public CSP. The integration fixture is created
+  through the application service, while XSS and unsafe URL cases are
+  rejected or rendered inert.
+
+  - [ ] **Render:** Implement the restricted Markdown-to-HTML pipeline with
+    fixed output construction and the safe-link policy.
+  - [ ] **Application/query:** Load only the current published version and
+    assemble the renderer input through the shared query/service boundary.
+  - [ ] **Web/public:** Serve the rendered document with the required public
+    CSP and response behavior.
+  - [ ] **Security tests:** Verify escaping, inert XSS payloads, unsafe URL
+    handling, and fixture creation through application services.
+
+- [ ] **RND-002 — Resolve canonical public document routes**
+
+  Public document lookup resolves the type-derived collection, stable document
+  ID, and current slug. It serves the canonical route and redirects stale-slug
+  and ID-only routes without exposing drafts or archives.
+
+  - [ ] **Domain/query:** Define canonical identity and slug-resolution rules
+    for current published documents.
+  - [ ] **Application:** Implement lookup and redirect decisions while keeping
+    drafts and archives outside the ordinary public route.
+  - [ ] **Web/public:** Add canonical, stale-slug, and ID-only route handling
+    with the specified redirect behavior.
+  - [ ] **Integration tests:** Verify route resolution, redirects, and the
+    absence of draft or archive leakage.
+
+- [ ] **RND-003 — Cache public pages atomically**
+
+  Public document pages use disposable filesystem HTML cache entries written
+  by atomic replacement. Verso resolves current visibility and canonical
+  routing before using the internal cache; cache failure is a renderable miss,
+  never a canonical-data failure.
+
+  - [ ] **Render:** Produce the complete cacheable public HTML response from
+    canonical query results.
+  - [ ] **Cache/filesystem:** Implement temporary-file writes and atomic
+    replacement, with safe behavior when cache reads or writes fail.
+  - [ ] **Web/public:** Resolve visibility and canonical routing before cache
+    access and render normally on a cache miss.
+  - [ ] **Integration tests:** Verify replacement atomicity, miss recovery, and
+    that cache failure leaves canonical state intact.
+
+- [ ] **RND-004 — Serve safe historical document routes**
+
+  Historical routes render accessible archived versions read-only, while
+  hidden, draft, and unknown documents have indistinguishable public not-found
+  behavior. All nonfinal document-derived responses require client
+  revalidation.
+
+  - [ ] **Application/query:** Enforce archived-version visibility and the
+    indistinguishable not-found policy for hidden, draft, and unknown data.
+  - [ ] **Render:** Render historical content read-only with the same safe
+    document rules as current content.
+  - [ ] **Web/public:** Add historical routes and revalidation headers without
+    exposing editorial controls or mutable state.
+  - [ ] **Security tests:** Verify access separation, not-found equivalence,
+    and cache headers for every nonfinal document-derived response.
+
+- [ ] **RND-005 — Render public indexes**
+
+  Public series, subject, and author indexes list only current published
+  documents. Series pages use the configured `/series/:slug` route and ordered
+  unique positions; index cache keys and response headers follow the same
+  revalidation policy as other document-derived pages.
+
+  - [ ] **Application/query:** Build index queries that select only current
+    published documents and enforce unique, ordered series positions.
+  - [ ] **Render:** Produce accessible series, subject, and author index pages
+    using the shared public rendering rules.
+  - [ ] **Web/public:** Expose the configured series route and index responses
+    with canonical routing and revalidation headers.
+  - [ ] **Integration tests:** Verify filtering, ordering, cache-key isolation,
+    and response-header behavior.
 
 ## 4. Identity, authorization, and protected editorial access
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `IAM-001` | The deployment can establish an initial owner and use secure web sessions. Login/logout, secure cookie attributes, CSRF protection for unsafe requests, origin handling, and proxy-header trust rules are verified end to end. | auth; application; web/admin; security tests | todo |
-| `IAM-002` | Managers can maintain attribution authors and make scoped editor-on-behalf-of-author or editor-on-document assignments. Capability checks are centralized in application services, and audit records capture both the actor and acted-for author. | domain; application; SQLite storage; web/admin | todo |
-| `IAM-003` | An authorized editor can create, open, and save an assigned draft in the web editor; unauthorized and stale requests fail safely. Local recovery can explicitly reconcile with the persisted draft, while published and archived versions remain read-only. | auth; application; web/admin; editor integration tests | todo |
-| `IAM-004` | An authorized editor can request a non-shareable server preview of a persisted draft. It follows the production renderer and asset-resolution path, has `private, no-store` caching, limits rendering work, and never changes the draft. | auth; application; render; web/admin | todo |
+- [ ] **IAM-001 — Establish secure web sessions**
+
+  The deployment can establish an initial owner and use secure web sessions.
+  Login/logout, secure cookie attributes, CSRF protection for unsafe requests,
+  origin handling, and proxy-header trust rules are verified end to end.
+
+  - [ ] **Auth:** Implement owner bootstrap, session lifecycle, secure cookie
+    attributes, CSRF tokens, origin checks, and explicit proxy trust rules.
+  - [ ] **Application:** Centralize session and identity use cases so web
+    handlers do not implement their own authentication decisions.
+  - [ ] **Web/admin:** Add login and logout flows with protected route
+    boundaries and safe failure responses.
+  - [ ] **Security tests:** Verify the complete session flow, CSRF failures,
+    origin handling, cookie flags, and proxy-header behavior.
+
+- [ ] **IAM-002 — Manage authors and scoped assignments**
+
+  Managers can maintain attribution authors and make scoped assignments for
+  editors acting on behalf of an author or working on a document. Capability
+  checks are centralized in application services, and audit records capture
+  both the actor and acted-for author.
+
+  - [ ] **Domain:** Model authors, grants, scopes, capabilities, and the actor
+    versus acted-for-author distinction.
+  - [ ] **Application:** Implement manager-only author and assignment use cases
+    with centralized capability checks.
+  - [ ] **SQLite storage:** Persist authors, scoped grants, and audit records
+    with constraints that prevent ambiguous assignments.
+  - [ ] **Web/admin:** Provide protected management screens and verify denied
+    operations do not reveal or mutate unauthorized data.
+
+- [ ] **IAM-003 — Edit assigned drafts in the web editor**
+
+  An authorized editor can create, open, and save an assigned draft in the web
+  editor; unauthorized and stale requests fail safely. Local recovery can
+  explicitly reconcile with the persisted draft, while published and archived
+  versions remain read-only.
+
+  - [ ] **Auth:** Enforce editor assignment scope and read-only boundaries for
+    published and archived versions.
+  - [ ] **Application:** Connect web editor operations to the shared draft and
+    revision services with authorization and optimistic-concurrency checks.
+  - [ ] **Web/admin:** Add create, open, save, and explicit local-recovery
+    reconciliation flows for assigned drafts.
+  - [ ] **Editor integration tests:** Verify authorized success, unauthorized
+    denial, stale-write safety, and read-only published/archive behavior.
+
+- [ ] **IAM-004 — Preview a persisted draft privately**
+
+  An authorized editor can request a non-shareable server preview of a
+  persisted draft. It follows the production renderer and asset-resolution
+  path, has `private, no-store` caching, limits rendering work, and never
+  changes the draft.
+
+  - [ ] **Auth:** Restrict preview requests to editors authorized for the
+    specific draft and prevent public access to preview routes.
+  - [ ] **Application:** Load a persisted draft without saving or publishing
+    it, enforce rendering limits, and return a preview-specific result.
+  - [ ] **Render:** Reuse the production rendering and asset-resolution rules
+    while keeping draft content out of public caches.
+  - [ ] **Web/admin:** Expose the protected preview endpoint with
+    `private, no-store` headers and verify it cannot mutate the draft.
 
 ## 5. Publishing, history, finalization, and cache invalidation
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `PUB-001` | Authorized publication validates a draft and atomically makes it the current published version (or publishes version 1). When replacing a publication it archives the previous version, checks the expected parent/revision, and leaves canonical state unchanged on failure. | domain; application; SQLite storage; web/admin | todo |
-| `PUB-002` | Drafts can move through review and return-for-changes; authorized users can inspect revisions and manage archive visibility. Publication validates unique current-published series positions and refreshes series, subject, and author indexes. Archive visibility changes are access-control mutations only and generate the same indistinguishable public not-found behavior as `RND-004`. | domain; application; web/admin; integration tests | todo |
-| `PUB-003` | Publication and archive-visibility transactions create durable, idempotent SQLite invalidation work. A post-commit worker invalidates only affected filesystem entries, retries across restart, and never rolls back a committed canonical mutation because cache cleanup fails. | application; SQLite storage; cache/filesystem; worker tests | todo |
-| `PUB-004` | A manager can irrevocably finalize an eligible document. Finalization locks all lineage mutations and visibility, invalidates previously validated routes, and allows only the document's fixed pages and version-scoped assets to use immutable browser caching; mutable indexes remain revalidated. | domain; application; cache/filesystem; web/admin | todo |
+- [ ] **PUB-001 — Publish a validated draft atomically**
+
+  Authorized publication validates a draft and atomically makes it the current
+  published version (or publishes version 1). When replacing a publication it
+  archives the previous version, checks the expected parent/revision, and
+  leaves canonical state unchanged on failure.
+
+  - [ ] **Domain:** Define publication eligibility, current-version, archive,
+    and parent/revision invariants.
+  - [ ] **Application:** Implement authorized publication as one validated
+    mutation with optimistic-concurrency checks.
+  - [ ] **SQLite storage:** Commit publication, archival transition, and
+    current-version updates atomically, including rollback-safe failure paths.
+  - [ ] **Web/admin:** Add the protected publication action and verify stale,
+    invalid, and unauthorized requests leave canonical state unchanged.
+
+- [ ] **PUB-002 — Manage review and archive visibility**
+
+  Drafts can move through review and return-for-changes; authorized users can
+  inspect revisions and manage archive visibility. Publication validates unique
+  current-published series positions and refreshes series, subject, and author
+  indexes. Archive visibility changes are access-control mutations only and
+  generate the same indistinguishable public not-found behavior as `RND-004`.
+
+  - [ ] **Domain:** Model review states, return-for-changes transitions,
+    archive visibility, and series-position uniqueness.
+  - [ ] **Application:** Centralize review, revision-inspection, and visibility
+    mutations with the relevant capabilities and publication validation.
+  - [ ] **Web/admin:** Provide protected review and archive-visibility controls
+    and show revision history without exposing mutable internals publicly.
+  - [ ] **Integration tests:** Verify authorized transitions, rejected invalid
+    transitions, index refreshes, and indistinguishable public not-found behavior.
+
+- [ ] **PUB-003 — Invalidate caches after canonical mutations**
+
+  Publication and archive-visibility transactions create durable, idempotent
+  SQLite invalidation work. A post-commit worker invalidates only affected
+  filesystem entries, retries across restart, and never rolls back a committed
+  canonical mutation because cache cleanup fails.
+
+  - [ ] **Application:** Enqueue invalidation work as part of publication and
+    visibility use cases only after affected entries are known.
+  - [ ] **SQLite storage:** Persist idempotent invalidation jobs durably with
+    retry state and restart-safe claiming.
+  - [ ] **Cache/filesystem:** Remove or replace only affected entries and
+    tolerate missing or failed cache files without touching canonical data.
+  - [ ] **Worker tests:** Verify post-commit processing, retries after restart,
+    idempotency, and canonical-state preservation on cleanup failure.
+
+- [ ] **PUB-004 — Finalize an eligible document**
+
+  A manager can irrevocably finalize an eligible document. Finalization locks
+  all lineage mutations and visibility, invalidates previously validated
+  routes, and allows only the document's fixed pages and version-scoped assets
+  to use immutable browser caching; mutable indexes remain revalidated.
+
+  - [ ] **Domain:** Define eligibility, irreversible finalization, lineage
+    locking, and immutable-cache invariants.
+  - [ ] **Application:** Implement manager-authorized finalization and the
+    route/version invalidation decisions it requires.
+  - [ ] **Cache/filesystem:** Invalidate old routes and distinguish finalized
+    document and asset entries from mutable index entries.
+  - [ ] **Web/admin:** Add the protected finalization action and verify that
+    later lineage or visibility mutations are rejected.
 
 ## 6. Asset storage, upload, and protected delivery
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `AST-001` | Authorized editors upload configured safe asset types through an application service. The server validates bytes and size, determines content type, computes a checksum, stores content-addressed files outside a static root, and records only durable metadata. | application; filesystem storage; web/admin; security tests | todo |
-| `AST-002` | Image sections in a persisted draft can reference authorized uploaded assets and render in the authenticated server preview. Draft-only assets cannot be obtained through public routes. | application; filesystem storage; render; web/admin | todo |
-| `AST-003` | A document-owned asset is delivered only through its version-scoped application route after version visibility is checked. It has safe content-disposition and `nosniff` behavior, correct ETags, and revalidation headers except for finalized lineage assets. | application; filesystem storage; web/public; security tests | todo |
-| `AST-004` | Asset reference lifecycle and startup/maintenance reconciliation reclaim only unreferenced files that are safe to remove, while retaining shared referenced content. Cache and asset-store failure paths preserve canonical references. | application; filesystem storage; maintenance; integration tests | todo |
+- [ ] **AST-001 — Upload and store safe assets**
+
+  Authorized editors upload configured safe asset types through an application
+  service. The server validates bytes and size, determines content type,
+  computes a checksum, stores content-addressed files outside a static root,
+  and records only durable metadata.
+
+  - [ ] **Application:** Implement authorized upload validation, content-type
+    detection, size limits, checksum calculation, and metadata creation.
+  - [ ] **Filesystem storage:** Store content-addressed bytes outside the
+    static root with safe temporary writes and durable replacement behavior.
+  - [ ] **Web/admin:** Add the protected upload interface and return stable
+    asset identities without exposing filesystem paths.
+  - [ ] **Security tests:** Verify safe-type allowlisting, byte and size
+    validation, path isolation, and failure handling.
+
+- [ ] **AST-002 — Reference assets from draft images**
+
+  Image sections in a persisted draft can reference authorized uploaded assets
+  and render in the authenticated server preview. Draft-only assets cannot be
+  obtained through public routes.
+
+  - [ ] **Application:** Authorize asset references against the draft and
+    maintain the document-to-asset relationship.
+  - [ ] **Filesystem storage:** Resolve referenced bytes without exposing the
+    storage layout or serving unreferenced draft files.
+  - [ ] **Render:** Resolve image assets in the authenticated preview using
+    the same safe rendering rules as publication.
+  - [ ] **Web/admin:** Add protected reference/edit flows and verify public
+    routes cannot retrieve draft-only assets.
+
+- [ ] **AST-003 — Deliver version-scoped public assets**
+
+  A document-owned asset is delivered only through its version-scoped
+  application route after version visibility is checked. It has safe
+  content-disposition and `nosniff` behavior, correct ETags, and revalidation
+  headers except for finalized lineage assets.
+
+  - [ ] **Application:** Authorize asset delivery from the requested document
+    version and apply current, archived, hidden, and finalized visibility.
+  - [ ] **Filesystem storage:** Read content-addressed bytes safely and return
+    checksum metadata needed for validators.
+  - [ ] **Web/public:** Implement version-scoped asset routes with safe
+    headers, content disposition, ETags, and cache policy.
+  - [ ] **Security tests:** Verify route isolation, hidden-version denial,
+    `nosniff`, header correctness, and finalized versus mutable caching.
+
+- [ ] **AST-004 — Reconcile asset references and files**
+
+  Asset reference lifecycle and startup/maintenance reconciliation reclaim only
+  unreferenced files that are safe to remove, while retaining shared
+  referenced content. Cache and asset-store failure paths preserve canonical
+  references.
+
+  - [ ] **Application:** Track asset reference lifecycle and define safe
+    reclamation eligibility without deleting content still used by a version.
+  - [ ] **Filesystem storage:** Reconcile metadata and content-addressed files
+    safely during startup and maintenance.
+  - [ ] **Maintenance:** Schedule bounded cleanup and recovery work with
+    restart-safe behavior.
+  - [ ] **Integration tests:** Verify shared-reference retention, unreferenced
+    cleanup, and preservation of canonical references on failure.
 
 ## 7. Remote MCP and OAuth
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `MCP-001` | A registered remote MCP client completes OAuth authorization-code flow with PKCE S256 and exact redirect URIs. Short-lived access tokens are validated and scope-limited; refresh/revocation behavior is safe when refresh is enabled. | auth/OAuth; application; MCP; security tests | todo |
-| `MCP-002` | An MCP client with read/write scope can list, search, fetch, create, and edit only documents within its application permissions. Tools call the same application services as the web editor and return actionable validation/conflict errors. | MCP; application; auth; integration tests | todo |
-| `MCP-003` | MCP exposes semantic section, revision, next-version, persisted-preview, review, publication, finalization, archive-visibility, and asset operations with expected revision/idempotency requirements. Unpublish, scheduling, and unsaved server previews are absent. | MCP; application; auth; integration tests | todo |
+- [ ] **MCP-001 — Authenticate remote MCP clients**
+
+  A registered remote MCP client completes OAuth authorization-code flow with
+  PKCE S256 and exact redirect URIs. Short-lived access tokens are validated
+  and scope-limited; refresh/revocation behavior is safe when refresh is
+  enabled.
+
+  - [ ] **Auth/OAuth:** Implement client registration data, authorization-code
+    flow, PKCE S256, exact redirect matching, token validation, and revocation.
+  - [ ] **Application:** Centralize scope and token lifecycle decisions for MCP
+    requests.
+  - [ ] **MCP:** Expose the authorization and token endpoints according to the
+    remote protocol boundary.
+  - [ ] **Security tests:** Verify redirect rejection, PKCE enforcement,
+    expiration, scope limits, and safe refresh/revocation behavior.
+
+- [ ] **MCP-002 — Expose permission-scoped document tools**
+
+  An MCP client with read/write scope can list, search, fetch, create, and edit
+  only documents within its application permissions. Tools call the same
+  application services as the web editor and return actionable
+  validation/conflict errors.
+
+  - [ ] **MCP:** Implement list, search, fetch, create, and edit tools with
+    stable input and error schemas.
+  - [ ] **Application:** Route every tool through shared document services and
+    enforce the caller's scopes and assignments.
+  - [ ] **Auth:** Apply token scopes and document capabilities consistently to
+    every operation.
+  - [ ] **Integration tests:** Verify permission boundaries, validation errors,
+    stale conflicts, and parity with web-editor mutations.
+
+- [ ] **MCP-003 — Expose semantic editorial operations**
+
+  MCP exposes semantic section, revision, next-version, persisted-preview,
+  review, publication, finalization, archive-visibility, and asset operations
+  with expected revision/idempotency requirements. Unpublish, scheduling, and
+  unsaved server previews are absent.
+
+  - [ ] **MCP:** Define and expose the semantic operation set with explicit
+    request, response, revision, and idempotency fields.
+  - [ ] **Application:** Reuse the corresponding web application services and
+    preserve their authorization, validation, and conflict behavior.
+  - [ ] **Auth:** Apply operation-specific scopes and assignments, including
+    manager-only actions.
+  - [ ] **Integration tests:** Verify supported operations, idempotent retries,
+    expected-revision failures, and the absence of deferred operations.
 
 ## 8. Document exchange archives
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `XCH-001` | An authorized user can export a current published version or selected persisted draft as a deterministic document-only ZIP containing manifest, portable metadata, ordered Markdown/front matter sections, and all required asset bytes. | application; archive codec; filesystem storage; MCP/web interface | todo |
-| `XCH-002` | An untrusted document-only archive can create a new local draft after complete validation. The importer enforces ZIP/path/size/checksum/YAML/safe-type limits, stages bytes safely, assigns local identities, and leaves no canonical references on failure. | application; archive codec; filesystem storage; security tests | todo |
-| `XCH-003` | An authorized user can replace an existing mutable draft from a validated archive or create a next draft only from the target's current publication. Expected revision checks prevent overwrite; imports never publish, fork unpublished drafts, install presentation bundles, or execute content. | application; archive codec; auth; integration tests | todo |
+- [ ] **XCH-001 — Export deterministic document archives**
+
+  An authorized user can export a current published version or selected
+  persisted draft as a deterministic document-only ZIP containing manifest,
+  portable metadata, ordered Markdown/front matter sections, and all required
+  asset bytes.
+
+  - [ ] **Application:** Authorize export selection and assemble a complete
+    immutable document snapshot.
+  - [ ] **Archive codec:** Define deterministic ZIP ordering, manifest,
+    portable metadata, and ordered Markdown/front matter encoding.
+  - [ ] **Filesystem storage:** Read every required asset safely and verify
+    that archive references match included bytes.
+  - [ ] **MCP/web interface:** Expose protected export through the available
+    interfaces with stable download behavior.
+
+- [ ] **XCH-002 — Import untrusted archives as new drafts**
+
+  An untrusted document-only archive can create a new local draft after
+  complete validation. The importer enforces ZIP/path/size/checksum/YAML and
+  safe-type limits, stages bytes safely, assigns local identities, and leaves no
+  canonical references on failure.
+
+  - [ ] **Application:** Validate the complete archive before committing a new
+    draft and make failure atomic.
+  - [ ] **Archive codec:** Parse and validate ZIP structure, paths, manifest,
+    YAML/front matter, checksums, and size limits.
+  - [ ] **Filesystem storage:** Stage asset bytes outside canonical storage,
+    then commit only validated content with local identities.
+  - [ ] **Security tests:** Cover traversal, decompression, malformed data,
+    unsafe types, checksum mismatch, and cleanup after failure.
+
+- [ ] **XCH-003 — Replace or fork drafts safely**
+
+  An authorized user can replace an existing mutable draft from a validated
+  archive or create a next draft only from the target's current publication.
+  Expected revision checks prevent overwrite; imports never publish, fork
+  unpublished drafts, install presentation bundles, or execute content.
+
+  - [ ] **Application:** Implement authorized replace and next-draft use cases
+    with expected-revision and publication-lineage checks.
+  - [ ] **Archive codec:** Reuse complete validation and reject presentation
+    bundles or executable content.
+  - [ ] **Auth:** Enforce target-draft permissions and manager/editor scope
+    boundaries for import mutations.
+  - [ ] **Integration tests:** Verify atomic replacement, stale conflicts,
+    allowed current-publication forks, and forbidden import behavior.
 
 ## 9. Operations and maintenance
 
-| Code | Vertical-slice outcome | Architectural divisions (up to four) | Status |
-| --- | --- | --- | --- |
-| `OPS-001` | Operators receive validated configuration, a production-safe data-directory permission check, feature gates that keep interactive modules disabled, health/readiness diagnostics, and clear startup recovery for cache and staging state. | configuration; application bootstrap; maintenance; integration tests | todo |
-| `OPS-002` | An operator can create and restore a coordinated canonical backup containing a consistent SQLite snapshot (including WAL state) and all referenced assets. Restore verification checks schema, checksums, and references in isolation before use. | SQLite storage; filesystem storage; maintenance; recovery tests | todo |
-| `OPS-003` | Documented operational procedures cover TLS-proxy configuration, secret handling, cache removal/regeneration, backup/restore testing, and incident-safe failure behavior. The documentation names only commands and behaviors implemented by completed tasks. | operations docs; deployment checks; recovery validation | todo |
+- [ ] **OPS-001 — Validate configuration and startup recovery**
+
+  Operators receive validated configuration, a production-safe data-directory
+  permission check, feature gates that keep interactive modules disabled,
+  health/readiness diagnostics, and clear startup recovery for cache and
+  staging state.
+
+  - [ ] **Configuration:** Validate required settings, paths, permissions,
+    collection mapping, and safe defaults.
+  - [ ] **Application bootstrap:** Integrate startup checks, disabled
+    interactive-module gates, and health/readiness reporting.
+  - [ ] **Maintenance:** Recover or quarantine stale cache and staging state
+    without modifying canonical content unexpectedly.
+  - [ ] **Integration tests:** Verify invalid configuration, permission
+    failures, diagnostics, feature gates, and recovery behavior.
+
+- [ ] **OPS-002 — Create and restore coordinated backups**
+
+  An operator can create and restore a coordinated canonical backup containing
+  a consistent SQLite snapshot (including WAL state) and all referenced assets.
+  Restore verification checks schema, checksums, and references in isolation
+  before use.
+
+  - [ ] **SQLite storage:** Produce and restore a consistent snapshot that
+    includes required WAL state and migration metadata.
+  - [ ] **Filesystem storage:** Capture referenced asset bytes and verify their
+    checksums during backup and restore.
+  - [ ] **Maintenance:** Coordinate backup/restore staging, isolation, and
+    promotion without exposing a partially restored canonical state.
+  - [ ] **Recovery tests:** Verify schema, checksum, reference, interruption,
+    and failed-restore behavior before activation.
+
+- [ ] **OPS-003 — Document implemented operational procedures**
+
+  Documented operational procedures cover TLS-proxy configuration, secret
+  handling, cache removal/regeneration, backup/restore testing, and
+  incident-safe failure behavior. The documentation names only commands and
+  behaviors implemented by completed tasks.
+
+  - [ ] **Operations docs:** Write procedures for deployment, TLS proxying,
+    secrets, cache maintenance, and backup/restore using verified behavior.
+  - [ ] **Deployment checks:** Validate documented configuration and commands
+    against the executable and its production-safe defaults.
+  - [ ] **Recovery validation:** Exercise the documented failure and recovery
+    procedures, including safe handling of incomplete maintenance work.
 
 ## Deferred work
 
@@ -120,5 +612,5 @@ These intentionally have no task code in the initial plan: S3-compatible
 storage, interactive-module review/execution, raw HTML capability, CDN or
 reverse-proxy response caching, schedule/unpublish workflows, cache inactivity
 eviction, multi-document archives, local stdio MCP, and abandoned-draft
-preservation or rebase/merge. They require a later architecture decision before
-entering this backlog.
+preservation or rebase/merge. They require a later architecture decision
+before entering this backlog.
