@@ -64,12 +64,20 @@ data/
 └── cache/
 ```
 
-A basic installation should require little more than:
+A basic installation should require little more than a configuration file and
+the server command:
 
 ```bash
-verso init
+verso config dump-default > verso.toml
 verso serve
 ```
+
+`config dump-default` writes a starter configuration to standard output and
+does not create or modify files. `serve` creates the configured SQLite parent,
+asset, and cache directories recursively when they are missing, then fails
+with a clear startup error if a configured path cannot be prepared. This keeps
+the first-run flow suitable for both local development and container images
+with mounted data volumes.
 
 No separate database server is required.
 

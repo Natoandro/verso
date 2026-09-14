@@ -26,10 +26,11 @@ starting `DOC-001`.
 
 - [ ] **BOOT-001 — Application bootstrap**
 
-  Build the initial executable around a validated `verso.toml`, the `data/`
-  directory layout, a single-process HTTP server, structured errors and logs,
-  and the planned `init` and `serve` commands. Verify that startup rejects
-  invalid configuration and that both commands expose the intended behavior.
+  Build the initial executable around a validated `verso.toml`, automatic
+  preparation of configured runtime directories, a single-process HTTP server,
+  structured errors and logs, and the planned `config dump-default` and
+  `serve` commands. Verify that startup rejects invalid configuration and that
+  both commands expose the intended behavior.
 
   - [x] **Configuration contract:** Define the initial `verso.toml` schema for
     runtime, site, server, database URL, filesystem storage, cache, UI,
@@ -44,15 +45,20 @@ starting `DOC-001`.
     database URL values in errors, and run before production URL and other
     configuration validation; `Config.loadWithEnv` provides the integration
     point for executable startup.
-  - [ ] **Initialization and data layout:** Implement `verso init` to create
-    the configured data root and the initial `assets/` and `cache/`
-    directories, while leaving database migration work to `SCHEMA-001`.
   - [ ] **Server runtime and `serve` command:** Build the Zig executable entry
     point that loads validated configuration, opens the configured runtime
     resources, starts a single-process HTTP server, and shuts down cleanly.
+  - [ ] **Runtime directories and default configuration:** After the `serve`
+    runtime exists, implement its startup preparation that recursively creates
+    missing parent directories for the configured SQLite database, filesystem
+    assets, and derived HTML cache, while failing clearly on unusable paths.
+    Add `verso config dump-default` to write the starter TOML configuration to
+    standard output without creating or modifying files; leave database
+    migration work to `SCHEMA-001`.
   - [ ] **Diagnostics and bootstrap verification:** Add structured startup,
-    shutdown, and failure output, then verify successful `init`/`serve` flows,
-    invalid configuration handling, and repeatable initialization behavior.
+    shutdown, and failure output, then verify successful default-config and
+    `serve` flows, invalid configuration handling, repeatable directory
+    preparation, and permission/path failures.
 
 - [ ] **SCHEMA-001 — Initial SQLite migration**
 

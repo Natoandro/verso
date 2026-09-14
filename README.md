@@ -71,12 +71,14 @@ data/
 The target first-run workflow is:
 
 ```bash
-verso init
+verso config dump-default > verso.toml
 verso serve
 ```
 
-These commands describe the intended interface; they are not yet implemented
-in this repository.
+`config dump-default` is intended to print a starter configuration without
+writing files. `serve` is intended to create missing configured data, asset,
+and cache directories during startup. These commands describe the intended
+interface; they are not yet implemented in this repository.
 
 ## Development
 
