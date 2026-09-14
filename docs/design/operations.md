@@ -197,28 +197,31 @@ verso.toml
 Example:
 
 ```toml
+[runtime]
+environment = "production"
+
 [site]
 name = "Example Publication"
 base_url = "https://example.org"
-language = "en"
 
 [server]
 host = "127.0.0.1"
 port = 8080
 
 [database]
-path = "./data/verso.db"
+url = "./data/verso.db"
 
-[storage]
-type = "filesystem"
+[storage.filesystem]
 path = "./data/assets"
 
 [cache]
 path = "./data/cache"
 
 [ui]
+language = "en"
 theme = "default"
 logo = "/assets/logo.svg"
+# icon and logo_wordmark are reserved until their renderers are implemented.
 
 [features]
 math = true
@@ -232,9 +235,32 @@ enabled = true
 allow_publish = false
 ```
 
-Secrets should not normally be stored directly inside publicly tracked configuration files.
+`runtime.environment` is `development` by default. In development, an omitted
+`site.base_url` is derived from the configured loopback server address. A
+production configuration must provide an explicit non-loopback `base_url`, so
+a missing value cannot silently leave the deployment pointing at a local
+address.
 
-Environment variables or dedicated secret mechanisms may override sensitive configuration.
+`database.url` accepts a bare path as a SQLite shorthand, such as
+`./data/verso.db`, or a database URL. Only the `sqlite` scheme is implemented
+initially; other schemes are rejected until their adapters exist. Storage is a
+tagged configuration: `[storage.filesystem]` is the only supported variant for
+now.
+
+The UI language is an allowlisted deployment setting. Only `en` is supported
+initially and is used for UI pages' HTML `lang` attribute. Document pages use
+their version-owned language; new documents default that language from the UI
+setting when created. Site identity and UI presentation remain separate:
+`site.name` identifies the publication, while `ui.logo` controls presentation.
+A lone `ui.logo` is used in every logo context;
+`ui.icon` and `ui.logo_wordmark` are accepted as reserved configuration fields
+but currently fail validation because their renderers are not implemented.
+
+Secrets should not normally be stored directly inside publicly tracked
+configuration files.
+
+Environment-variable overrides are planned as a separate BOOT-001 subtask and
+are not yet implemented.
 
 ---
 

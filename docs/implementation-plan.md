@@ -8,7 +8,7 @@ describes planned, not implemented, work.
 `BOOT-001` and `SCHEMA-001` are prerequisites. Every later item is a complete
 vertical slice with an observable interface, shared application services, and
 focused verification. Its listed architectural divisions are its only
-subtasks, with a maximum of four.
+subtasks; keep them focused and normally limit them to four.
 
 `[ ]` means not implemented; change it to `[x]` only when the stated outcome
 and every nested division are complete, with a short implementation note or
@@ -32,10 +32,16 @@ starting `DOC-001`.
   invalid configuration and that both commands expose the intended behavior.
 
   - [x] **Configuration contract:** Define the initial `verso.toml` schema for
-    site, server, database, asset, cache, and feature settings; validate paths,
-    addresses, ports, and safe defaults before the application starts. The
-    typed contract and semantic validator live in `src/config.zig`, while
-    TOML decoding uses the pinned `zig-toml` dependency.
+    runtime, site, server, database URL, filesystem storage, cache, UI,
+    feature, editor, and MCP settings. Development may derive a loopback
+    `base_url`; production requires an explicit public URL. TOML decoding uses
+    the pinned `zig-toml` dependency, storage is a tagged union, the UI
+    language is allowlisted to English for now, and paths receive
+    traversal-aware validation.
+  - [ ] **Environment overrides:** Define and implement an explicit,
+    allowlisted environment-variable mapping and precedence rules for values
+    that may be supplied outside `verso.toml`, including deployment-safe
+    handling of secrets and required production settings.
   - [ ] **Initialization and data layout:** Implement `verso init` to create
     the configured data root and the initial `assets/` and `cache/`
     directories, while leaving database migration work to `SCHEMA-001`.

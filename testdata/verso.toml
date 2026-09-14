@@ -1,23 +1,25 @@
+[runtime]
+environment = "production"
+
 [site]
 name = "Example Publication"
 base_url = "https://example.org"
-language = "en"
 
 [server]
 host = "127.0.0.1"
 port = 9090
 
 [database]
-path = "./data/verso.db"
+url = "./data/verso.db"
 
-[storage]
-type = "filesystem"
+[storage.filesystem]
 path = "./data/assets"
 
 [cache]
 path = "./data/cache"
 
 [ui]
+language = "en"
 theme = "default"
 logo = "/assets/logo.svg"
 

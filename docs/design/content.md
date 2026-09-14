@@ -67,6 +67,7 @@ state
 slug
 title
 description
+language
 updated_at
 updated_by
 published_at
@@ -84,6 +85,11 @@ archived
 
 `scheduled` is reserved for a future scheduling feature and is not a valid
 initial state or transition.
+
+Document language is version-owned metadata because documents may use different
+languages within one deployment. Document pages use this version language for
+their HTML `lang` attribute. New documents default their language from the
+configured UI language; an editor may then set the document language explicitly.
 
 There may be at most one published version for a logical document. The
 published version is the version resolved by the ordinary public document
