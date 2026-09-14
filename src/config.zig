@@ -1,5 +1,6 @@
 const std = @import("std");
 const toml = @import("toml");
+const defaults = @import("config/defaults.zig");
 const environment = @import("config/environment.zig");
 const validation = @import("config/validation.zig");
 
@@ -101,6 +102,10 @@ pub const Config = struct {
         errdefer parsed.deinit();
         try parsed.value.validate();
         return parsed;
+    }
+
+    pub fn writeDefault(writer: *std.Io.Writer) !void {
+        try defaults.write(writer);
     }
 
     pub fn load(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !toml.Parsed(Config) {
@@ -311,6 +316,17 @@ test "parses and validates a complete configuration" {
     switch (parsed.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/assets", filesystem.path),
     }
+}
+
+test "default configuration output is valid TOML" {
+    var buffer: [2048]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try Config.writeDefault(&writer);
+
+    var parsed = try Config.parse(std.testing.allocator, writer.buffered());
+    defer parsed.deinit();
+    try std.testing.expectEqual(Environment.development, parsed.value.runtime.environment);
+    try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
 }
 
 test "development derives a loopback base URL" {

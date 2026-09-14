@@ -75,17 +75,17 @@ verso config dump-default > verso.toml
 verso serve
 ```
 
-`config dump-default` is intended to print a starter configuration without
-writing files. `serve` is intended to create missing configured data, asset,
-and cache directories during startup. These commands describe the intended
-interface; they are not yet implemented in this repository.
+`config dump-default` prints a starter configuration without writing files.
+`serve` creates missing configured data, asset, and cache directories during
+startup and starts the current minimal HTTP server. The server runtime remains
+incomplete; its remaining work is tracked in the implementation plan.
 
 ## Development
 
 Implementation work and progress are tracked in
 [`docs/implementation-plan.md`](docs/implementation-plan.md). Commands shown
-above remain intended interfaces until their corresponding plan entries are
-complete and verified.
+above may still expose partial behavior until their corresponding plan entries
+are complete and verified.
 
 ## Scope
 

@@ -7,6 +7,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).module("toml");
+    const clap = b.dependency("clap", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("clap");
 
     const mod = b.addModule("verso", .{
         .root_source_file = b.path("src/root.zig"),
@@ -24,6 +28,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "verso", .module = mod },
+                .{ .name = "clap", .module = clap },
             },
         }),
     });
