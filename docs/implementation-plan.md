@@ -38,10 +38,12 @@ starting `DOC-001`.
     the pinned `zig-toml` dependency, storage is a tagged union, the UI
     language is allowlisted to English for now, and paths receive
     traversal-aware validation.
-  - [ ] **Environment overrides:** Define and implement an explicit,
-    allowlisted environment-variable mapping and precedence rules for values
-    that may be supplied outside `verso.toml`, including deployment-safe
-    handling of secrets and required production settings.
+  - [x] **Environment overrides:** Define and implement an explicit,
+    allowlisted `VERSO_*` environment-variable mapping. Overrides take
+    precedence over `verso.toml`, use strict typed parsing, never expose
+    database URL values in errors, and run before production URL and other
+    configuration validation; `Config.loadWithEnv` provides the integration
+    point for executable startup.
   - [ ] **Initialization and data layout:** Implement `verso init` to create
     the configured data root and the initial `assets/` and `cache/`
     directories, while leaving database migration work to `SCHEMA-001`.

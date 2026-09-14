@@ -1,5 +1,6 @@
 const std = @import("std");
 const toml = @import("toml");
+const environment = @import("config/environment.zig");
 const validation = @import("config/validation.zig");
 
 pub const ConfigError = error{
@@ -16,6 +17,7 @@ pub const ConfigError = error{
     InvalidFeatureConfiguration,
     InvalidEditorConfiguration,
     InvalidMcpConfiguration,
+    InvalidEnvironmentValue,
 };
 
 pub const Environment = enum {
@@ -102,13 +104,98 @@ pub const Config = struct {
     }
 
     pub fn load(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !toml.Parsed(Config) {
+        return loadWithEnv(io, allocator, path, null);
+    }
+
+    pub fn loadWithEnv(
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        path: []const u8,
+        environ_map: ?*const std.process.Environ.Map,
+    ) !toml.Parsed(Config) {
         var parser = toml.Parser(Config).init(allocator);
         defer parser.deinit();
 
         var parsed = try parser.parseFile(io, path);
         errdefer parsed.deinit();
+        try applyEnvironment(parsed.arena.allocator(), &parsed.value, environ_map);
         try parsed.value.validate();
         return parsed;
+    }
+
+    pub fn applyEnvironment(
+        allocator: std.mem.Allocator,
+        self: *Config,
+        environ_map: ?*const std.process.Environ.Map,
+    ) !void {
+        try overrideEnum(Environment, environ_map, "VERSO_RUNTIME_ENVIRONMENT", &self.runtime.environment);
+        try overrideString(allocator, environ_map, "VERSO_SITE_NAME", &self.site.name);
+        try overrideString(allocator, environ_map, "VERSO_SITE_BASE_URL", &self.site.base_url);
+        try overrideString(allocator, environ_map, "VERSO_SERVER_HOST", &self.server.host);
+        try overrideUnsigned(u16, environ_map, "VERSO_SERVER_PORT", &self.server.port);
+        try overrideString(allocator, environ_map, "VERSO_DATABASE_URL", &self.database.url);
+
+        if (environment.get(environ_map, "VERSO_STORAGE_FS_PATH")) |value| {
+            switch (self.storage) {
+                .filesystem => |*filesystem| filesystem.path = try allocator.dupe(u8, value),
+            }
+        }
+        try overrideString(allocator, environ_map, "VERSO_CACHE_PATH", &self.cache.path);
+
+        try overrideEnum(UiLanguage, environ_map, "VERSO_UI_LANGUAGE", &self.ui.language);
+        try overrideString(allocator, environ_map, "VERSO_UI_THEME", &self.ui.theme);
+        try overrideString(allocator, environ_map, "VERSO_UI_LOGO", &self.ui.logo);
+        try overrideString(allocator, environ_map, "VERSO_UI_ICON", &self.ui.icon);
+        try overrideString(allocator, environ_map, "VERSO_UI_LOGO_WORDMARK", &self.ui.logo_wordmark);
+
+        try overrideBool(environ_map, "VERSO_FEATURES_MATH", &self.features.math);
+        try overrideBool(environ_map, "VERSO_FEATURES_INTERACTIVE_SECTIONS", &self.features.interactive_sections);
+        try overrideUnsigned(u32, environ_map, "VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", &self.editor.local_preview_debounce_ms);
+        try overrideBool(environ_map, "VERSO_MCP_ENABLED", &self.mcp.enabled);
+        try overrideBool(environ_map, "VERSO_MCP_ALLOW_PUBLISH", &self.mcp.allow_publish);
+    }
+
+    fn overrideString(
+        allocator: std.mem.Allocator,
+        environ_map: ?*const std.process.Environ.Map,
+        name: []const u8,
+        target: anytype,
+    ) !void {
+        if (environment.get(environ_map, name)) |value| {
+            target.* = try allocator.dupe(u8, value);
+        }
+    }
+
+    fn overrideEnum(
+        comptime T: type,
+        environ_map: ?*const std.process.Environ.Map,
+        name: []const u8,
+        target: *T,
+    ) !void {
+        if (environment.get(environ_map, name)) |value| {
+            target.* = environment.parseEnum(T, value) catch return error.InvalidEnvironmentValue;
+        }
+    }
+
+    fn overrideUnsigned(
+        comptime T: type,
+        environ_map: ?*const std.process.Environ.Map,
+        name: []const u8,
+        target: *T,
+    ) !void {
+        if (environment.get(environ_map, name)) |value| {
+            target.* = environment.parseUnsigned(T, value) catch return error.InvalidEnvironmentValue;
+        }
+    }
+
+    fn overrideBool(
+        environ_map: ?*const std.process.Environ.Map,
+        name: []const u8,
+        target: *bool,
+    ) !void {
+        if (environment.get(environ_map, name)) |value| {
+            target.* = environment.parseBool(value) catch return error.InvalidEnvironmentValue;
+        }
     }
 
     pub fn validate(self: Config) ConfigError!void {
@@ -293,4 +380,70 @@ test "loads a configuration file" {
     switch (parsed.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/assets", filesystem.path),
     }
+}
+
+test "environment overrides take precedence over TOML" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_SITE_NAME", "Environment Publication");
+    try environ.put("VERSO_SITE_BASE_URL", "https://environment.example");
+    try environ.put("VERSO_SERVER_PORT", "9090");
+    try environ.put("VERSO_DATABASE_URL", "./data/environment.db");
+    try environ.put("VERSO_STORAGE_FS_PATH", "./data/environment-assets");
+    try environ.put("VERSO_FEATURES_MATH", "false");
+    try environ.put("VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", "750");
+
+    var parsed = try Config.loadWithEnv(
+        std.testing.io,
+        std.testing.allocator,
+        "testdata/verso.toml",
+        &environ,
+    );
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("Environment Publication", parsed.value.site.name);
+    try std.testing.expectEqualStrings("https://environment.example", parsed.value.site.base_url.?);
+    try std.testing.expectEqual(@as(u16, 9090), parsed.value.server.port);
+    try std.testing.expectEqualStrings("./data/environment.db", parsed.value.database.url);
+    try std.testing.expectEqual(false, parsed.value.features.math);
+    try std.testing.expectEqual(@as(u32, 750), parsed.value.editor.local_preview_debounce_ms);
+    switch (parsed.value.storage) {
+        .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/environment-assets", filesystem.path),
+    }
+}
+
+test "environment overrides reject invalid typed values" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_SERVER_PORT", "not-a-port");
+
+    var parsed = try Config.parse(std.testing.allocator, "");
+    defer parsed.deinit();
+    try std.testing.expectError(
+        error.InvalidEnvironmentValue,
+        Config.applyEnvironment(parsed.arena.allocator(), &parsed.value, &environ),
+    );
+}
+
+test "unknown environment variables do not change configuration" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_UNKNOWN_SETTING", "unexpected");
+
+    var parsed = try Config.parse(std.testing.allocator, "");
+    defer parsed.deinit();
+    try Config.applyEnvironment(parsed.arena.allocator(), &parsed.value, &environ);
+    try parsed.value.validate();
+    try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
+}
+
+test "environment overrides cannot bypass production base URL requirements" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_RUNTIME_ENVIRONMENT", "production");
+
+    var parsed = try Config.parse(std.testing.allocator, "");
+    defer parsed.deinit();
+    try Config.applyEnvironment(parsed.arena.allocator(), &parsed.value, &environ);
+    try std.testing.expectError(error.MissingBaseUrl, parsed.value.validate());
 }

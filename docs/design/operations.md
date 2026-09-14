@@ -259,8 +259,41 @@ but currently fail validation because their renderers are not implemented.
 Secrets should not normally be stored directly inside publicly tracked
 configuration files.
 
-Environment-variable overrides are planned as a separate BOOT-001 subtask and
-are not yet implemented.
+Environment overrides are optional. Configuration precedence, from lowest to
+highest, is built-in defaults, `verso.toml`, then environment variables. The
+application only reads the following explicit allowlist:
+
+| Environment variable | Configuration value |
+| --- | --- |
+| `VERSO_RUNTIME_ENVIRONMENT` | `runtime.environment` |
+| `VERSO_SITE_NAME` | `site.name` |
+| `VERSO_SITE_BASE_URL` | `site.base_url` |
+| `VERSO_SERVER_HOST` | `server.host` |
+| `VERSO_SERVER_PORT` | `server.port` |
+| `VERSO_DATABASE_URL` | `database.url` |
+| `VERSO_STORAGE_FS_PATH` | `storage.filesystem.path` |
+| `VERSO_CACHE_PATH` | `cache.path` |
+| `VERSO_UI_LANGUAGE` | `ui.language` |
+| `VERSO_UI_THEME` | `ui.theme` |
+| `VERSO_UI_LOGO` | `ui.logo` |
+| `VERSO_UI_ICON` | `ui.icon` |
+| `VERSO_UI_LOGO_WORDMARK` | `ui.logo_wordmark` |
+| `VERSO_FEATURES_MATH` | `features.math` |
+| `VERSO_FEATURES_INTERACTIVE_SECTIONS` | `features.interactive_sections` |
+| `VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS` | `editor.local_preview_debounce_ms` |
+| `VERSO_MCP_ENABLED` | `mcp.enabled` |
+| `VERSO_MCP_ALLOW_PUBLISH` | `mcp.allow_publish` |
+
+Boolean overrides must be exactly `true` or `false`; enum and integer values
+use the same lowercase names and decimal representation as the configuration
+file. Unknown variables, including unknown `VERSO_*` variables, are ignored.
+All overrides are applied before the normal validation pass, so a production
+deployment still requires a public non-loopback base URL even when that value
+is supplied through the environment. Environment-provided database URLs are
+never included in configuration errors or startup diagnostics and are the
+preferred place for deployment-specific credentials once non-SQLite adapters
+exist. The Zig integration is exposed through `Config.loadWithEnv`; the
+executable will use it when bootstrap command handling is implemented.
 
 ---
 
