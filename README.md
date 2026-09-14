@@ -78,12 +78,12 @@ verso serve
 These commands describe the intended interface; they are not yet implemented
 in this repository.
 
-## Project status
+## Development
 
-There is no implementation, dependency manifest, test suite, or build command
-checked into the repository yet. Avoid documenting speculative commands as
-available functionality. When implementation begins, update this README and
-the architecture specification together when behavior or design changes.
+Implementation work and progress are tracked in
+[`docs/implementation-plan.md`](docs/implementation-plan.md). Commands shown
+above remain intended interfaces until their corresponding plan entries are
+complete and verified.
 
 ## Scope
 

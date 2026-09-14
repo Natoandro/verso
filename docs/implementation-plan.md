@@ -31,6 +31,21 @@ starting `DOC-001`.
   and the planned `init` and `serve` commands. Verify that startup rejects
   invalid configuration and that both commands expose the intended behavior.
 
+  - [x] **Configuration contract:** Define the initial `verso.toml` schema for
+    site, server, database, asset, cache, and feature settings; validate paths,
+    addresses, ports, and safe defaults before the application starts. The
+    typed contract and semantic validator live in `src/config.zig`, while
+    TOML decoding uses the pinned `zig-toml` dependency.
+  - [ ] **Initialization and data layout:** Implement `verso init` to create
+    the configured data root and the initial `assets/` and `cache/`
+    directories, while leaving database migration work to `SCHEMA-001`.
+  - [ ] **Server runtime and `serve` command:** Build the Zig executable entry
+    point that loads validated configuration, opens the configured runtime
+    resources, starts a single-process HTTP server, and shuts down cleanly.
+  - [ ] **Diagnostics and bootstrap verification:** Add structured startup,
+    shutdown, and failure output, then verify successful `init`/`serve` flows,
+    invalid configuration handling, and repeatable initialization behavior.
+
 - [ ] **SCHEMA-001 — Initial SQLite migration**
 
   Create one versioned initial migration with the canonical schema,

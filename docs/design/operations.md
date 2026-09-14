@@ -225,7 +225,7 @@ math = true
 interactive_sections = false # enabled only after its security design is specified
 
 [editor]
-local_preview_debounce_ms = 250
+local_preview_debounce_ms = 500
 
 [mcp]
 enabled = true

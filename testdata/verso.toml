@@ -1,0 +1,33 @@
+[site]
+name = "Example Publication"
+base_url = "https://example.org"
+language = "en"
+
+[server]
+host = "127.0.0.1"
+port = 9090
+
+[database]
+path = "./data/verso.db"
+
+[storage]
+type = "filesystem"
+path = "./data/assets"
+
+[cache]
+path = "./data/cache"
+
+[ui]
+theme = "default"
+logo = "/assets/logo.svg"
+
+[features]
+math = true
+interactive_sections = false
+
+[editor]
+local_preview_debounce_ms = 500
+
+[mcp]
+enabled = true
+allow_publish = false
