@@ -17,7 +17,7 @@ flowchart TB
     browser --> verso["Verso application"]
     ai --> verso
     verso --> sqlite[("SQLite<br/>canonical versioned state")]
-    verso --> assets["Asset store<br/>filesystem or S3-compatible"]
+    verso --> assets["Asset store<br/>filesystem initially"]
 ```
 
 All interfaces operate through the same application/domain layer.
@@ -39,10 +39,10 @@ Public rendering:      server-side HTML
 Editorial frontend:    HTMX 4 + minimal JavaScript
 Text content:          Markdown
 Asset storage:         filesystem initially
-Optional asset store:  S3-compatible storage / RustFS
-Interactive content:   JavaScript and/or WASM
+Later asset store:     S3-compatible storage / RustFS
+Interactive content:   planned; disabled pending security design
 Page cache:            filesystem
-Outer cache:           CDN / reverse proxy
+Reverse proxy:         optional TLS forwarding, no response cache
 AI integration:        remote MCP
 MCP authentication:    OAuth-compatible authorization
 ```
@@ -73,11 +73,13 @@ verso serve
 
 No separate database server is required.
 
-A production environment may place a reverse proxy or CDN in front of Verso:
+A production environment may place a TLS-terminating reverse proxy in front of
+Verso. The initial design does not support a CDN or reverse-proxy response
+cache; all application response caching remains inside Verso.
 
 ```mermaid
 flowchart TB
-    internet["Internet"] --> edge["Reverse proxy or CDN<br/>Cloudflare / nginx / Caddy / Traefik"]
+    internet["Internet"] --> edge["Reverse proxy<br/>nginx / Caddy / Traefik"]
     edge --> verso["Verso"]
     verso --> sqlite[("SQLite")]
     verso --> assets["Asset storage"]
@@ -199,8 +201,7 @@ Infrastructure provides implementations needed by the application layer.
 
 ```mermaid
 flowchart TB
-    request["HTTP request"] --> cdn["CDN / outer cache"]
-    cdn -->|miss| verso["Verso"]
+    request["HTTP request"] --> verso["Verso"]
     verso --> cache["Filesystem page cache"]
     cache -->|miss| sqlite[("SQLite")]
     sqlite --> renderer["Renderer"]
@@ -225,16 +226,18 @@ flowchart TB
 
 ---
 
-### Live preview request
+### Live client preview
 
 ```mermaid
 flowchart TB
-    state["Browser unsaved state"] --> endpoint["Preview endpoint"]
-    endpoint --> renderer["Production renderer"]
-    renderer --> fragment["HTML fragment"]
-    fragment --> swap["HTMX swap"]
-    endpoint -. no mutation .-> sqlite[("SQLite")]
+    state["Browser unsaved state"] --> renderer["Client-side renderer"]
+    renderer --> pane["Local preview pane"]
+    renderer -. no mutation .-> sqlite[("SQLite")]
 ```
+
+An explicit server preview is available only for a persisted draft. It follows
+the same server rendering path as publication after editorial authorization,
+but returns a private, noncached response and never changes the draft.
 
 ---
 

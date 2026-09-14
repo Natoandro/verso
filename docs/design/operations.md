@@ -14,14 +14,32 @@ A basic workflow is:
 stateDiagram-v2
     [*] --> Draft
     Draft --> Review
-    Review --> Published: initial publication
-    Draft --> Published: publish version
+    Review --> Draft: return for changes
+    Draft --> Published: initial or next publication
+    Review --> Published: approved publication
     Published --> Archived: replaced by next version
 ```
 
 Creating a next-version draft does not transition the current published
 version; it creates a separate draft version alongside it. The published
 version transitions to `archived` only when that next version is published.
+Each logical document has at most one mutable unpublished version, in either
+`draft` or `review`. An initial document publishes its version 1 draft, whose
+`based_on_version_id` is null. A next-version draft may be created only when no
+mutable version already exists.
+
+Scheduling and unpublishing are deliberately outside the initial workflow.
+`scheduled` is reserved as a future state; no initial operation may create it.
+There is no `unpublish` command or state transition. These constraints must not
+be bypassed by directly changing a stored version state.
+
+Finalization is an irreversible publication command. A manager may finalize a
+published document only when it has no mutable draft or review version. The
+command records the finalization, closes every later document-lineage mutation,
+and emits invalidation for any previously validated document pages and assets.
+After the transaction commits, the final document's fixed public routes and
+version-scoped assets may use immutable client-side cache headers. Series,
+subject, author, feed, sitemap, and other derived indexes remain revalidated.
 
 The create-next-version operation accepts only the current published version
 as its source. It must reject drafts and all other unpublished versions as
@@ -65,17 +83,19 @@ must leave the previous publication in place if validation, authorization,
 concurrency checks, or persistence fails.
 
 The database publication swap is atomic: the new version is published and the
-old version is archived together, or neither change is committed. Cache
-invalidation is post-commit derived-state work and must be retryable; a cache
-failure must not roll back the canonical publication swap.
+old version is archived together, or neither change is committed. The same
+transaction records a pending, idempotent cache-invalidation event. A
+post-commit worker processes and retries the event for the filesystem cache
+after failure or restart; a cache failure must not roll back the canonical
+publication swap.
 
 The archive operation retains the replaced version as a read-only historical
 record. Its `archive_accessible` field defaults to true and may be changed by
-the author or an authorized manager. Changing archive visibility must not
-modify the version's content. Ordinary public routes resolve only the current
-published version; a historical route may resolve an archived version only
-when it is accessible. Editorial management may inspect inaccessible archives
-read-only.
+an actor with the `document:archive:manage` capability. Changing archive
+visibility must not modify the version's content. Ordinary public routes
+resolve only the current published version; a historical route may resolve an
+archived version only when it is accessible. Editorial management may inspect
+inaccessible archives read-only.
 
 The same publishing service is called from:
 
@@ -126,17 +146,19 @@ a draft until the normal publication service validates and publishes it.
 Public and private functionality should remain logically distinct.
 
 Public document URLs use the document's stable numerical ID and the current
-version's canonical slug:
+version's canonical slug. The collection is derived from the logical document
+type, not chosen independently by an editor:
 
 ```text
 /<collection>/<document-id>/<current-slug>
 ```
 
-The document ID is authoritative for lookup. The collection and slug are
-routing and presentation fields; the slug is not part of document identity and
-may change when a later version becomes current. If a request supplies a slug
-that differs from the current canonical slug, Verso redirects to the
-canonical ID-and-slug URL. An ID-only request (for example,
+The document ID is authoritative for lookup. The collection is stable because
+the document type is stable, while the slug is a routing and presentation
+field; the slug is not part of document identity and may change when a later
+version becomes current. If a request supplies a slug that differs from the
+current canonical slug, Verso redirects to the canonical ID-and-slug URL. An
+ID-only request (for example,
 `/<collection>/<document-id>`) may likewise redirect to that canonical URL.
 
 Example:
@@ -147,7 +169,10 @@ Example:
                           public current article
 /articles/:document-id/versions/:version
                           public read-only historical version, when accessible
+/articles/:document-id/versions/:version/assets/:sha256.:extension
+                          version-scoped public asset, when its version is visible
 /series/:slug             public series
+                          ordered current articles; not a document URL prefix
 /subjects/:slug           public subject
 
 /admin/...                 editorial application
@@ -197,10 +222,10 @@ logo = "/assets/logo.svg"
 
 [features]
 math = true
-interactive_sections = true
+interactive_sections = false # enabled only after its security design is specified
 
 [editor]
-preview_debounce_ms = 250
+local_preview_debounce_ms = 250
 
 [mcp]
 enabled = true
@@ -213,7 +238,28 @@ Environment variables or dedicated secret mechanisms may override sensitive conf
 
 ---
 
-## 4. UI Customization
+## 4. Backup and Restore
+
+A canonical backup contains a consistent SQLite snapshot and every asset
+referenced by that snapshot. The implementation must coordinate this with a
+maintenance write barrier or a storage snapshot; copying a live database file
+alone, or copying an uncoordinated data directory, is not a valid backup
+procedure. In particular, a backup must account for SQLite WAL state.
+
+Filesystem page caches and browser-local recovery snapshots are not part of a
+canonical backup. Asset checksums, database schema compatibility, and
+asset-reference integrity must be verified in an isolated restore location
+before a restored deployment is made live. Operators should test restoration
+periodically rather than relying on backup creation alone.
+
+The database, asset store, staging area, backups, and secrets must be writable
+only by the service account and must not be web-served. The cache directory is
+also outside the public static root; Verso serves cache entries only after its
+route and visibility checks.
+
+---
+
+## 5. UI Customization
 
 Verso should separate publication data from presentation.
 
@@ -235,7 +281,7 @@ The first implementation should define a small, coherent theme contract rather t
 
 ---
 
-## 5. Failure Principles
+## 6. Failure Principles
 
 Verso should prefer failure modes that preserve canonical content.
 
@@ -285,7 +331,7 @@ rather than overwriting the newer version.
 
 ---
 
-## 6. Non-Goals for Initial Versions
+## 7. Non-Goals for Initial Versions
 
 The first versions do not need to provide:
 
@@ -296,6 +342,7 @@ The first versions do not need to provide:
 * real-time character-by-character collaborative editing;
 * CRDTs;
 * arbitrary script execution in the main page;
+* enabling interactive module execution before its dedicated security design;
 * visual no-code page building;
 * generic relational-data construction;
 * third-party plugin marketplaces;
@@ -311,7 +358,7 @@ These may be evaluated if actual requirements appear.
 
 ---
 
-## 7. Design Philosophy
+## 8. Design Philosophy
 
 Verso should distinguish clearly between four categories of state.
 
@@ -331,7 +378,7 @@ This represents the publication.
 
 ```mermaid
 flowchart LR
-    html["Rendered HTML"] --> filesystem["Filesystem cache"] --> cdn["CDN cache"]
+    html["Rendered HTML"] --> filesystem["Filesystem cache"]
     derived["Derived state"] -. regenerable from canonical state .-> html
 ```
 
@@ -377,7 +424,7 @@ The architecture should preserve these boundaries consistently.
 
 ---
 
-## 8. Summary
+## 9. Summary
 
 Verso is a self-hosted publishing server built around:
 
@@ -410,7 +457,8 @@ The central architectural decisions are:
 * **filesystem caching for published pages**;
 * **no public caching of mutable drafts**;
 * **HTMX 4 for the web editor**;
-* **server-rendered, production-equivalent side previews**;
+* **client-side live previews and server-rendered, production-equivalent
+  previews of persisted drafts**;
 * **preview, save, and publish as distinct operations**;
 * **remote MCP as a first-class AI editing interface**;
 * **OAuth and permission-scoped MCP access**;

@@ -20,6 +20,7 @@ Possible roles include:
 
 ```text
 owner
+manager
 editor
 author
 contributor
@@ -38,15 +39,19 @@ Possible permissions include:
 ```text
 document:create
 
-document:read:self
+document:read:assigned
 document:read:any
 
-document:update:self
+document:update:assigned
 document:update:any
+document:assign_editor
 
 document:review
 document:publish
+document:finalize
 document:archive:manage
+
+author:manage
 
 asset:read
 asset:upload
@@ -60,6 +65,25 @@ user:manage
 Application services perform authorization.
 
 Interfaces do not implement their own independent security logic.
+
+An author is an attribution record, not an authorization principal. The initial
+role mapping grants `author:manage` and `document:assign_editor` only to
+managers. The initial role mapping also grants `document:finalize` only to
+managers. A manager creates and maintains authors, chooses a document's listed
+authors, and may assign an editor to act for a particular author or document.
+An assignment grants `document:read:assigned` and
+`document:update:assigned` only within its recorded scope. It does not make an
+editor the author, and every mutation records both the actual authenticated
+actor and, where applicable, the author for whom the editor acted. Authorship
+metadata never grants edit access by itself. Creating or changing a document's
+author list requires `author:manage`; an editor may create or update content
+for an author only through a manager-created assignment.
+
+OAuth scopes and application permissions are cumulative restrictions: a tool
+operation succeeds only when its required scope and required application
+capability both allow the specific resource. For example, `content:write` does
+not bypass a missing assigned-editor permission, and an assigned editor cannot
+use a token lacking `content:write`.
 
 ---
 
@@ -88,7 +112,11 @@ MCP must never bypass the application service layer.
 
 ## 4. MCP Authentication
 
-Remote MCP access should use OAuth-compatible authorization.
+Remote MCP access uses the OAuth authorization-code flow with PKCE using the
+S256 challenge method. The initial MCP endpoint does not accept the implicit,
+resource-owner-password, or client-credentials grants. A client must use a
+pre-registered exact redirect URI; redirect URI prefixes, wildcards, and
+unvalidated dynamic redirects are rejected.
 
 Typical flow:
 
@@ -108,6 +136,22 @@ sequenceDiagram
 The resulting identity maps to an ordinary Verso user.
 
 An AI acts with the authority granted to that user and token.
+
+Access tokens are short-lived bearer credentials issued for the Verso MCP
+resource. Validation checks their issuer, audience, expiry, subject, client,
+and granted scopes. Refresh tokens, when enabled, are stored and compared only
+in revocable protected form, rotated on use, and revoked on logout, explicit
+revocation, or a security-relevant account change. OAuth consent displays the
+client identity and requested scopes; it must not silently expand an existing
+grant.
+
+Web-editor sessions use `Secure`, `HttpOnly`, and `SameSite` cookies. Every
+unsafe cookie-authenticated web request, including HTMX requests, requires
+CSRF protection. CORS is disabled by default and may permit only explicitly
+configured origins. A deployment behind a reverse proxy must trust forwarded
+host and scheme headers only from configured proxy addresses; public origin
+and OAuth redirect construction must not be derived from an arbitrary request
+`Host` header.
 
 ---
 
@@ -173,12 +217,11 @@ list_revisions
 restore_revision
 
 preview_document
-preview_section
 
 submit_for_review
 publish_document
+finalize_document
 set_archive_visibility
-unpublish_document
 
 list_assets
 get_asset
@@ -189,10 +232,20 @@ The tool set should remain small, composable, and domain-oriented.
 
 Document and section update tools operate on a draft version identified by its
 version identity. `create_next_version` accepts only the current published
-version as its source; attempting to use an unpublished draft or other
-unpublished version as the parent fails. `set_archive_visibility` changes only
-the read-only archive's accessibility and requires the archive-management
-capability.
+version as its source and fails when the document already has a mutable draft
+or review version. Attempting to use an unpublished version as the parent
+fails. `set_archive_visibility` changes only the read-only archive's
+accessibility and requires the archive-management capability.
+
+`preview_document` renders an explicitly selected persisted draft or published
+version. It does not accept caller-supplied unsaved content, create a preview
+link, or mutate canonical state. `unpublish_document`, scheduling tools, and
+server-side previews of unsaved state are outside the initial MCP surface.
+
+`finalize_document` is an explicit manager operation, not a metadata update.
+It requires `document:finalize`, expected current state, a published current
+version, and no mutable version. It irreversibly closes the document lineage as
+defined in the content model.
 
 `export_document` produces the portable document exchange archive described in
 the [content model](content.md#9-document-exchange-archives), from the current
@@ -205,10 +258,9 @@ must not publish content, reuse source host identities as authoritative local
 IDs, create a new draft from an unpublished source draft, or silently
 overwrite a concurrent draft update.
 
-Draft snapshotting, archiving an abandoned draft to preserve it before
-starting another draft from the same published parent, and rebasing onto a
-newer published version are possible future extensions, not current MCP
-operations.
+Scheduling, unpublishing, preserving an abandoned draft as a version lineage,
+and rebasing onto a newer published version are documented future extensions,
+not current MCP operations.
 
 ---
 
@@ -243,9 +295,15 @@ Benefits include:
 
 ## 8. Optimistic Concurrency
 
-Verso should use optimistic concurrency for editorial mutations. The expected
-version and working-revision identity must be checked when saving or publishing
-a draft. Publishing must also verify atomically that the draft's
+Verso should use optimistic concurrency for every mutation of an existing
+draft, document assignment, archive-visibility setting, or publication state.
+The caller supplies the expected version and working-revision identity, and the
+application checks them in the mutation transaction. `create_next_version`
+also supplies the expected current published version and atomically checks the
+one-mutable-version rule. Creation commands with no existing state use a
+caller-provided idempotency key; the service records the result per
+authenticated client so a retry cannot create another document, upload, or
+assignment. Publishing must also verify atomically that the draft's
 `based_on_version_id` is still the logical document's current published
 version. A mutation against a published or archived version fails with an
 immutable-version error; the caller must create or select the appropriate
@@ -266,10 +324,8 @@ publication version creates or updates a draft; it never edits the historical
 source. Publishing a next version atomically archives the old published
 version and promotes the draft.
 
-The same mechanism applies to human editors.
-
-If `unpublish_document` is supported, it is a publication-resolution command:
-it may remove a version from ordinary public resolution but must not modify the
-version's content, turn it back into an editable draft, or rewrite its history.
+The same mechanism applies to human editors. Initial Verso does not implement
+unpublish or scheduling; they must not be emulated by directly changing a
+version state.
 
 ---

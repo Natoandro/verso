@@ -29,11 +29,13 @@ The initial implementation focuses on:
 * AI-assisted editing through a remote MCP server;
 * SQLite as the sole database backend;
 * HTMX 4 for the editorial interface;
-* client-side live previews with local draft recovery;
-* server-rendered, publication-equivalent previews;
+* client-side live previews with local draft recovery, plus explicit
+  server-rendered previews of persisted drafts;
 * filesystem caching of published pages;
-* filesystem or S3-compatible storage for large assets;
-* support for interactive JavaScript and WASM modules;
+* filesystem storage for large assets, with S3-compatible storage deferred to a
+  later version;
+* planned support for interactive JavaScript and WASM modules, disabled until
+  their security design is specified;
 * configurable publication appearance and behavior.
 
 Verso is not tied to any particular publication.
@@ -70,9 +72,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
   archives.
 - [Rendering and cache](design/rendering.md) — server rendering, published
   page caching, invalidation, and draft-cache boundaries.
-- [Web editor and preview](design/editor.md) — HTMX editing, client/server
-  previews, local draft recovery, partial rendering, and stale-response
-  protection.
+- [Web editor and preview](design/editor.md) — HTMX editing, client-side live
+  previews, persisted-draft server previews, and local draft recovery.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,
   MCP tools, and optimistic concurrency.
 - [Operations and boundaries](design/operations.md) — publication workflow,
@@ -84,7 +85,7 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 These boundaries apply throughout the architecture:
 
 - SQLite and the asset store are canonical publication state.
-- Rendered HTML, filesystem caches, and CDN output are derived state.
+- Rendered HTML and filesystem caches are derived state.
 - Local autosaved drafts are recoverable but noncanonical browser state; current
   unsaved changes and preview requests remain ephemeral runtime state.
 - All interfaces use shared application/domain services.
@@ -98,6 +99,9 @@ These boundaries apply throughout the architecture:
 - Publishing a next version atomically archives the previous published version
   and makes the new version current; archived versions remain read-only and
   are publicly accessible by default unless archive visibility is disabled.
+- A manager may irrevocably finalize a published document with no mutable
+  version. Finalization closes the lineage and permits immutable client caching
+  of that document's fixed public routes and version-scoped assets.
 - Document exchange archives contain a complete version snapshot, its ordered
   sections, and required asset bytes; optional presentation bundles may carry
   the selected theme for authorized local previews; imports assign local

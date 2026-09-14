@@ -37,6 +37,9 @@ type
 
 status (derived from the current version)
 
+finalized_at (null until irrevocable finalization)
+finalized_by (null until irrevocable finalization)
+
 created_at
 created_by
 ```
@@ -46,6 +49,13 @@ authoritative key for public document lookup. It must not change when a new
 version is published or when the current version's slug changes. The `slug`
 stored in version-owned metadata is a presentation field for the current
 public URL, not part of document identity.
+
+`type` is a stable logical-document field. Each configured document type maps
+to exactly one public route collection; for example, type `article` maps to
+the `articles` collection. Editors do not choose the collection independently,
+and changing a document's type after creation is not supported. Changing a
+deployment's type-to-collection mapping is a route migration, not an editorial
+metadata edit.
 
 Version-owned metadata may include:
 
@@ -68,22 +78,34 @@ Possible version states include:
 ```text
 draft
 review
-scheduled
 published
 archived
 ```
 
+`scheduled` is reserved for a future scheduling feature and is not a valid
+initial state or transition.
+
 There may be at most one published version for a logical document. The
 published version is the version resolved by the ordinary public document
-route. A document with no published version may still have draft or review
-versions, but those versions remain private.
+route. A document with no published version may have one mutable version in
+`draft` or `review`, but that version remains private. A logical document has
+at most one mutable unpublished version at a time.
+
+A manager may irrevocably finalize a logical document only when it has a
+published current version and no mutable version. Finalization closes the
+entire document lineage: no next-version draft, publication, import into its
+draft, author or metadata change, series reassignment, archive-visibility
+change, or other canonical mutation may follow. Existing inaccessible archives
+remain inaccessible; existing accessible archives remain accessible. A final
+document therefore has a permanently fixed set of public routes and assets.
 
 `archive_accessible` controls whether an archived version is available through
 ordinary public historical-version routes. It defaults to true when a version
-is archived, so historical publications remain readable unless the author
-explicitly hides that version. Hiding an archive is a visibility change, not a
-content edit. Authorized editorial users may still inspect hidden versions for
-management and recovery, in read-only mode.
+is archived, so historical publications remain readable unless an actor with
+the `document:archive:manage` capability explicitly hides that version. Hiding
+an archive is a visibility change, not a content edit. Authorized editorial
+users may still inspect hidden versions for management and recovery, in
+read-only mode.
 
 Document-type-specific fields may be stored separately or as structured metadata.
 
@@ -95,6 +117,15 @@ subjects
 series
 series_position
 ```
+
+A `Series` is a separate canonical entity that groups an ordered sequence of
+articles. It has its own stable identity, title, and slug. An article version
+may reference zero or one series and provide its `series_position`; publication
+validates that current published members do not share a position in the same
+series. The public series page at `/series/:slug` lists the current published
+articles in order. Individual articles remain under their type-derived
+collection route rather than being nested beneath a series, so an article keeps
+one stable canonical URL even if its series assignment later changes.
 
 ---
 
@@ -242,6 +273,11 @@ flowchart TB
 
 If arbitrary HTML/CSS/JavaScript documents are supported later, they should execute inside a sandboxed iframe with an intentionally restrictive capability model.
 
+Interactive modules are disabled in the initial deployment. The content model
+reserves their versioned representation, but no module upload, serving, or
+execution path is enabled until a dedicated security design defines module
+review, integrity, isolation, and browser capabilities.
+
 ---
 
 ## 8. Asset Storage
@@ -284,6 +320,42 @@ checksum
 created_at
 uploaded_by
 ```
+
+The asset store itself must never be mounted as a public static directory. An
+asset delivery handler authorizes every request. An ordinary public request is
+allowed only when the asset is referenced by the current published document,
+an accessible archived version, or an explicitly public theme or interactive
+module. Assets referenced only by drafts, reviews, hidden archives, or private
+editorial material return the same not-found response as an unknown asset.
+Editorial reads require both `asset:read` and authorization to read the
+referencing content.
+
+The handler determines content type from validated bytes rather than trusting
+an upload declaration, sends `X-Content-Type-Options: nosniff`, and uses
+attachment download behavior for types that are not explicitly safe to render
+inline. Upload processing records a server-computed checksum and writes bytes
+under server-controlled, content-addressed object names; client filenames and
+paths are display metadata only. Assets whose public visibility depends on an
+archived version must be revalidated with Verso before browser reuse.
+
+Document-owned public assets use a version-scoped route:
+
+```text
+/<collection>/<document-id>/versions/<version-number>/assets/<sha256>.<extension>
+```
+
+The route contains stable document and version identities, never the mutable
+current-version slug. It is an application route, not a filesystem path. The
+handler resolves the document version first, performs the visibility check,
+then resolves the content-addressed asset. It sends an ETag derived from the
+asset checksum and `Cache-Control: private, no-cache`; a browser may reuse a
+validated immutable object with a `304` response, while a now-hidden archive
+receives a not-found response instead. The main server may cache the bytes by
+document version and checksum after that access check. Like any public content,
+an archive visibility change cannot retract an asset a visitor already saved.
+For an asset in a finalized document lineage, the handler instead sends
+`Cache-Control: public, max-age=31536000, immutable`; finalization has already
+locked that asset's public visibility and document association.
 
 ## 9. Document Exchange Archives
 
@@ -413,9 +485,9 @@ payload bytes stored at the listed archive paths, including `document.yaml`,
 each section file, each document asset, and each presentation-bundle file.
 ZIP compression metadata is not included in the digest. Asset filenames may
 include the asset content digest for deduplication and inspection, but the
-manifest checksum remains authoritative. An archive signature may be added
-later; the initial format does not treat ZIP's container checksum as a
-security boundary.
+manifest checksum remains authoritative for integrity. An archive signature may
+be added later as provenance, but it never changes the untrusted treatment of
+imported input or bypasses import validation.
 
 The optional `presentation/` bundle is exported explicitly for an authorized
 administrator or manager who needs a local preview to match the publication's
@@ -427,9 +499,19 @@ content: credentials, authentication data, deployment secrets, host-wide
 unrelated content, and external service configuration must not be exported.
 Required presentation assets should be embedded or the preview export must
 identify that it cannot be fully reproduced offline. A document-only archive
-remains valid without this optional bundle. On import, the bundle may be
-installed as or loaded by an authorized local preview profile; it must not
-silently replace the target host's live theme or site configuration.
+remains valid without this optional bundle.
+
+Imports are always untrusted, including imports initiated by a manager and
+archives carrying a valid signature. The initial importer accepts document-only
+archives and rejects an archive containing `presentation/`, executable
+templates, interactive-module payloads, or unsupported section types. It
+parses YAML front matter as a restricted data format: no custom tags, anchors,
+aliases, duplicate keys, or unknown fields are accepted, and configured depth,
+string-size, and collection-size limits apply. Imported assets must be among
+the configured safe types; all other assets are rejected or handled solely as
+attachments under the asset delivery policy. No imported archive can install a
+theme, run a template, execute JavaScript or WASM, alter host configuration, or
+obtain network, filesystem, process, or credential access.
 
 Export operates on the currently published version or on an explicitly
 selected persisted draft version, subject to authorization. It exports the
@@ -442,7 +524,8 @@ checksums, asset references, and supported section/module types before
 changing canonical state. It must reject path traversal, duplicate or
 ambiguous entries, ZIP symlinks and other special entries, invalid checksums,
 incomplete required assets, and archives exceeding configured file-count or
-uncompressed-size limits. A
+uncompressed-size limits. It applies the restricted parser and safe-type rules
+above before staging any canonical content. A
 failure must leave the target document unchanged and must not create canonical
 asset references. New asset bytes must first be written to an isolated staging
 area, then promoted using content-addressed, idempotent names only after
@@ -465,13 +548,14 @@ An import has two target modes:
   metadata with the archive snapshot, retaining that draft's local version
   identity, `version_number`, and `based_on_version_id`.
 
-If an existing logical document has no draft, importing into it creates a new
-next-version draft only from that document's current published version. The
-archive's source draft or source version is never used as the local parent.
-Importing into an existing draft updates that draft; it does not create a new
-version based on an unpublished draft. The update requires the expected draft
-revision and therefore fails on a concurrent edit rather than overwriting it.
-The initial design does not merge two drafts or rebase imported changes.
+If an existing logical document has no mutable draft or review version,
+importing into it creates a new next-version draft only from that document's
+current published version. The archive's source draft or source version is
+never used as the local parent. Importing into the existing mutable version
+updates it; it does not create a new version based on unpublished content. The
+update requires the expected draft revision and therefore fails on a concurrent
+edit rather than overwriting it. The initial design does not merge drafts or
+rebase imported changes.
 
 Imported source IDs are retained only as provenance where useful. Local
 document, version, section, nested-object, and asset identities are assigned
@@ -515,24 +599,18 @@ being an unrelated new document. Only that draft lineage may replace the
 currently published version.
 
 In the initial design, the source for `create_next_version` must be the
-logical document's current published version. An unpublished `draft`,
-`review`, or `scheduled` version may not be used as the parent of another
-version. Working revisions and browser recovery snapshots do not create a
-new version lineage and cannot be used as parents either.
+logical document's current published version. An unpublished `draft` or
+`review` version may not be used as the parent of another version. Working
+revisions and browser recovery snapshots do not create a new version lineage
+and cannot be used as parents either. `create_next_version` fails if the
+logical document already has a mutable draft or review version; the uniqueness
+check and draft creation occur in one transaction.
 
-If another next-version draft is published first, any competing draft based on
-the older published version becomes stale and cannot replace the new current
-version. It may be retained for review or discarded, but publishing its
-content requires creating a new next-version draft from the current published
-version.
-
-Future versions may support preserving unpublished work as an explicit draft
-snapshot, archiving an abandoned draft before starting another draft from the
-same published parent, or rebasing draft changes onto a newer published
-version. These are deliberately outside the current model. Until such
-operations exist, an unpublished draft must be continued, discarded, or
-manually recreated from the current published version; it cannot be forked by
-Verso.
+To start another next-version draft, an authorized editor must first discard
+the existing mutable version. The initial design does not preserve abandoned
+drafts as version lineage, merge drafts, or rebase changes onto a newer
+published version. Working revisions may still provide recovery checkpoints for
+the active draft, but no unpublished version can be forked.
 
 Creating the next version is a deep copy at the domain level. Every section
 and every nested structured object owned by the source version is copied into
@@ -556,10 +634,10 @@ versions and the current publication pointer unchanged.
 
 Archived versions are historical publication records, not editable drafts.
 They may be rendered and accessed read-only when `archive_accessible` is true.
-An author or authorized manager may set that field to false to make a specific
-archive inaccessible through ordinary public access. Archive visibility must
-not be implemented by deleting the version, overwriting it, or changing its
-content.
+An actor with the `document:archive:manage` capability may set that field to
+false to make a specific archive inaccessible through ordinary public access.
+Archive visibility must not be implemented by deleting the version,
+overwriting it, or changing its content.
 
 ## 11. Revisions
 

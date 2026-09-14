@@ -2,7 +2,11 @@
 
 ## Scope
 
-This document defines the browser-based editorial interface and unsaved preview lifecycle. It owns section-oriented editing, HTMX interactions, server-rendered previews, partial rendering, and stale-response protection; it does not define public caching, document persistence, or authorization policy.
+This document defines the browser-based editorial interface and preview
+lifecycle. It owns section-oriented editing, client-side unsaved previews,
+explicit server previews of persisted drafts, and stale local-render
+protection; it does not define public caching, document persistence, or
+authorization policy.
 
 Related: [content model](content.md), [rendering and cache](rendering.md), [identity and MCP](identity-and-mcp.md), and [operations and boundaries](operations.md).
 
@@ -81,9 +85,9 @@ changing the source version.
 
 ## 3. Live Side Preview
 
-The editor should support an optional live preview pane. The pane may be
-updated immediately by a client-side renderer and refined by a server-rendered
-response.
+The editor should support an optional live preview pane. Unsaved state is
+rendered only in the browser by the client-side renderer; the browser does not
+send unsaved document content to a Verso preview endpoint.
 
 Example:
 
@@ -91,63 +95,61 @@ Example:
 ┌────────────────────────────┬────────────────────────────┐
 │ Editor                     │ Preview                    │
 │                            │                            │
-│ Text / sections            │ Production-equivalent     │
-│                            │ rendered document          │
+│ Text / sections            │ Local provisional render  │
 │                            │                            │
 └────────────────────────────┴────────────────────────────┘
 ```
 
 The Verso server remains authoritative for publication-equivalent output. A
-client-side preview is a provisional rendering of the current draft and is
+client-side preview is a provisional rendering of current local state and is
 used for responsiveness, offline editing, and recovery from interrupted work.
 
 This guarantees:
 
 ```mermaid
 flowchart LR
-    draft["Current draft"] --> client["Client-side preview renderer"]
-    draft --> endpoint["Server preview endpoint"]
-    published["Published document"] --> server["Verso production renderer"]
-    endpoint --> server
+    local["Current local editor state"] --> client["Client-side preview renderer"]
+    persisted["Published or persisted draft"] --> server["Verso production renderer"]
     client --> immediate["Immediate provisional preview"]
     server --> authoritative["Authoritative preview / published HTML"]
 ```
 
 The client-side renderer should use the same document model and compatible
-Markdown and section semantics as the server. Features that require document
-context or are not supported locally should fall back to a server preview.
+Markdown and section semantics as the server. Features requiring document
+context are unavailable in an unsaved live preview; after an explicit save,
+the editor may request a server preview of that persisted draft.
+
+Before inserting local preview output into the editor DOM, the client renderer
+must apply the same no-raw-HTML profile and safe URL rules as the server
+renderer. This protects the editor experience, but the server independently
+validates and safely renders every persisted draft; it never trusts client-side
+sanitization as a publication security boundary.
 
 ---
 
 ## 4. Preview Is Not Save
 
-Preview operations should not automatically mutate SQLite.
-
-The editor may send the proposed unsaved state directly to the rendering service.
+Client-side preview never mutates SQLite and never sends the current unsaved
+document state to Verso. The browser may persist a recovery snapshot without
+turning the preview into a Verso draft. Browser persistence and server
+persistence are separate operations.
 
 Conceptually:
 
 ```mermaid
 flowchart TB
-    state["Browser unsaved state"] --> request["Preview request"]
-    request --> renderer["Verso renderer"]
-    renderer --> fragment["HTML fragment"]
-    fragment -. no persistence .-> sqlite[("SQLite")]
+    state["Browser unsaved state"] --> renderer["Client-side renderer"]
+    renderer --> fragment["Local preview"]
+    renderer -. no persistence .-> sqlite[("SQLite")]
 ```
-
-No database write is required.
-
-The browser may persist a recovery snapshot without turning the preview into a
-Verso draft. Browser persistence and server persistence are separate
-operations.
 
 The following operations remain distinct:
 
 ```text
-render preview
 render local preview
 autosave local draft
 save draft / server-side autosave checkpoint
+render explicit server preview of persisted draft
 publish
 ```
 
@@ -157,6 +159,24 @@ does not create a Verso revision or mutate SQLite.
 
 For a published document, `save draft` means saving the explicitly created
 next-version draft. It never means modifying the published version.
+
+---
+
+### 4.1 Explicit server preview
+
+An editor may explicitly request a preview link for a persisted draft. This
+link is an authenticated editorial route, not a shareable bearer link. Verso
+loads the persisted draft after authorization and runs the exact same server
+validation, safe rendering, template, asset-resolution, and response-header
+path as publication. It differs only in that it is private, uses
+`Cache-Control: private, no-store`, does not enter the public filesystem cache,
+and does not change canonical draft state.
+
+The server preview renderer must not fetch arbitrary network URLs. Previewable
+assets resolve only through the authorized asset store, and any future embed
+provider requires a separate, allowlisted server-side integration. Rendering
+uses configured request-concurrency and execution-time limits; a limit or
+rendering failure returns an error without changing the draft.
 
 ---
 
@@ -228,63 +248,7 @@ state.
 
 ---
 
-## 6. Partial Preview Rendering
-
-For ordinary text editing, Verso should avoid re-rendering the entire document unnecessarily.
-
-Example:
-
-```mermaid
-flowchart TB
-    edit["Edit one text section"] --> request["POST preview-section"]
-    request --> render["Render affected section"]
-    render --> swap["HTMX swaps matching preview fragment"]
-```
-
-Possible behavior:
-
-```text
-text edit
-    → render affected section
-
-image caption change
-    → render image section
-
-section reorder
-    → render document body
-
-global metadata change
-    → render affected page/header region
-
-citation-numbering change
-    → full document render if needed
-```
-
-This keeps preview operations lightweight.
-
----
-
-## 7. HTMX Preview Requests
-
-A text section may conceptually use:
-
-```html
-<textarea
-  hx-post="/admin/preview/section"
-  hx-trigger="input changed delay:250ms"
-  hx-target="#preview-section-id">
-</textarea>
-```
-
-The server returns production-equivalent HTML.
-
-A debounce around approximately 150–300 ms is appropriate for text editing.
-
-Exact behavior may be configurable.
-
----
-
-## 8. Optimistic Preview Behavior
+## 6. Client-side Preview Behavior
 
 The editor may provide lightweight client-side optimistic updates and
 client-side document previews.
@@ -300,66 +264,17 @@ layout selection
 editor UI state
 ```
 
-The authoritative rendered preview remains server-generated. The client-side
-preview may lead while the server request is pending, but a server response
-must be able to replace it when the local renderer lacks context or produces a
-different result.
+The client-side preview is the only live preview of unsaved content. It may
+render a changed section rather than the entire document where local semantics
+permit, but must rerender document-wide context when numbering, citations,
+footnotes, cross-references, or the table of contents can change. The editor
+must clearly label this output as provisional. A server-rendered explicit
+preview becomes available after saving the draft.
 
 Verso should avoid unrelated, competing Markdown rendering rules in the
 browser and server. A shared grammar, generated compatibility layer, or
-explicitly documented supported subset should be used instead.
-
----
-
-## 9. Avoiding Stale Preview Responses
-
-Rapid typing may result in multiple overlapping preview requests.
-
-Verso must prevent older responses from overwriting newer preview state. A
-preview response must only be applied if both its request sequence and its
-draft generation or content hash still match the current editor state. An edit
-made after a request was sent therefore makes that response stale, even if it
-has the newest response sequence so far.
-
-Possible strategies include:
-
-* aborting obsolete requests;
-* assigning monotonically increasing preview sequence numbers;
-* including a draft generation or content hash in each request and response;
-* rejecting or ignoring responses whose sequence or draft fingerprint is stale.
-
-Conceptually:
-
-```mermaid
-sequenceDiagram
-    participant E as Editor
-    participant S as Server
-    E->>S: request 41 (generation 7)
-    E->>S: request 42 (generation 8)
-    E->>E: edit changes current generation to 9
-    S-->>E: response 41 (ignored: stale generation)
-    S-->>E: response 42 (ignored: stale generation)
-    E->>S: request 43 (generation 9)
-    S-->>E: response 43 (apply if generation still matches)
-```
-
----
-
-## 10. Full-Document Preview
-
-Some features require document context:
-
-* citations;
-* footnotes;
-* cross-references;
-* numbering;
-* table of contents;
-* section references.
-
-For these cases, the browser may send the full current unsaved document state to a preview endpoint.
-
-Verso constructs an in-memory `Document`, renders it, and returns the result.
-
-This operation still does not imply persistence.
+explicitly documented supported subset should be used instead. The browser
+must apply its own stale-work protection when rendering asynchronously, so an
+older local render cannot replace a newer editor generation.
 
 ---
