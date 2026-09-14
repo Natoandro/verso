@@ -45,8 +45,8 @@ starting `DOC-001`.
     precedence over the optional `verso.toml` but remain below command-line
     arguments, use strict typed parsing, never expose database URL values in
     errors, and run before production URL and other configuration validation;
-    `Config.loadWithEnv` provides the integration point for executable
-    startup.
+    `config.loadFile` provides the file-backed integration point for executable
+    startup, while `config.load` accepts assembled `ConfigSources`.
   - [ ] **Server runtime and `serve` command:** Build the Zig executable entry
     point that loads validated configuration, opens the configured runtime
     resources, starts a single-process HTTP server, and shuts down cleanly.

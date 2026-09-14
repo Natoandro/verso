@@ -243,10 +243,10 @@ address.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
-and validation process. An explicitly selected configuration path is always
-loaded and produces a clear error when it cannot be read or parsed. The file
-remains useful for persistent deployment settings, but it is not a startup
-prerequisite.
+and validation process. The current file-backed loader treats a missing path as
+an empty TOML source; the command-line configuration work will define any
+different behavior for an explicitly selected path. The file remains useful
+for persistent deployment settings, but it is not a startup prerequisite.
 
 `database.url` accepts a bare path as a SQLite shorthand, such as
 `./data/verso.db`, or a database URL. Only the `sqlite` scheme is implemented
@@ -268,8 +268,9 @@ configuration files.
 
 Environment overrides are optional. Configuration precedence, from lowest to
 highest, is built-in defaults, the optional `verso.toml`, environment variables,
-then command-line arguments. The command-line interface uses an explicit
-allowlist of configuration options and its values win over all other sources.
+then command-line arguments. The command-line interface is intended to use an
+explicit allowlist of configuration options, and its values win over all other
+sources.
 The application only reads the following explicit allowlist:
 
 | Environment variable | Configuration value |
@@ -301,8 +302,9 @@ deployment still requires a public non-loopback base URL even when that value
 is supplied through the environment. Environment-provided database URLs are
 never included in configuration errors or startup diagnostics and are the
 preferred place for deployment-specific credentials once non-SQLite adapters
-exist. The Zig integration is exposed through `Config.loadWithEnv`; the
-executable will use it when bootstrap command handling is implemented.
+exist. The Zig integration assembles a `ConfigSources` value, parses its TOML
+source, applies environment values, reserves the argument stage for future CLI
+support, and validates only after all available sources have been applied.
 
 ---
 
