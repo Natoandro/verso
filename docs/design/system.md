@@ -57,15 +57,22 @@ The default deployment should be approximately:
 
 ```text
 verso
-verso.toml
+verso.toml (optional)
 data/
 ├── verso.db
 ├── assets/
 └── cache/
 ```
 
-A basic installation should require little more than a configuration file and
-the server command:
+A basic installation should require little more than the server command; the
+optional configuration file is useful when built-in defaults need to be
+customized:
+
+```bash
+verso serve
+```
+
+An operator may generate a starter file and use it for persistent settings:
 
 ```bash
 verso config dump-default > verso.toml

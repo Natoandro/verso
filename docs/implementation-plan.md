@@ -5,10 +5,10 @@
 This is the ordered backlog derived from the [architecture](design.md); it
 describes planned, not implemented, work.
 
-`BOOT-001` and `SCHEMA-001` are prerequisites. Every later item is a complete
-vertical slice with an observable interface, shared application services, and
-focused verification. Its listed architectural divisions are its only
-subtasks; keep them focused and normally limit them to four.
+`BOOT-001`, `BOOT-002`, and `SCHEMA-001` are prerequisites. Every later item is
+a complete vertical slice with an observable interface, shared application
+services, and focused verification. Its listed architectural divisions are
+its only subtasks; keep them focused and normally limit them to four.
 
 `[ ]` means not implemented; change it to `[x]` only when the stated outcome
 and every nested division are complete, with a short implementation note or
@@ -26,11 +26,12 @@ starting `DOC-001`.
 
 - [ ] **BOOT-001 — Application bootstrap**
 
-  Build the initial executable around a validated `verso.toml`, automatic
-  preparation of configured runtime directories, a single-process HTTP server,
-  structured errors and logs, and the planned `config dump-default` and
-  `serve` commands. Verify that startup rejects invalid configuration and that
-  both commands expose the intended behavior.
+  Build the initial executable around validated built-in defaults and an
+  optional `verso.toml`, automatic preparation of configured runtime
+  directories, a single-process HTTP server, structured errors and logs, and
+  the planned `config dump-default` and `serve` commands. Verify that startup
+  works without a configuration file and rejects invalid configuration when a
+  file is present, and that both commands expose the intended behavior.
 
   - [x] **Configuration contract:** Define the initial `verso.toml` schema for
     runtime, site, server, database URL, filesystem storage, cache, UI,
@@ -41,10 +42,11 @@ starting `DOC-001`.
     traversal-aware validation.
   - [x] **Environment overrides:** Define and implement an explicit,
     allowlisted `VERSO_*` environment-variable mapping. Overrides take
-    precedence over `verso.toml`, use strict typed parsing, never expose
-    database URL values in errors, and run before production URL and other
-    configuration validation; `Config.loadWithEnv` provides the integration
-    point for executable startup.
+    precedence over the optional `verso.toml` but remain below command-line
+    arguments, use strict typed parsing, never expose database URL values in
+    errors, and run before production URL and other configuration validation;
+    `Config.loadWithEnv` provides the integration point for executable
+    startup.
   - [ ] **Server runtime and `serve` command:** Build the Zig executable entry
     point that loads validated configuration, opens the configured runtime
     resources, starts a single-process HTTP server, and shuts down cleanly.
@@ -56,9 +58,30 @@ starting `DOC-001`.
     standard output without creating or modifying files; leave database
     migration work to `SCHEMA-001`.
   - [ ] **Diagnostics and bootstrap verification:** Add structured startup,
-    shutdown, and failure output, then verify successful default-config and
-    `serve` flows, invalid configuration handling, repeatable directory
-    preparation, and permission/path failures.
+    shutdown, and failure output, then verify successful built-in-default and
+    file-backed `serve` flows, invalid configuration handling, repeatable
+    directory preparation, and permission/path failures.
+
+- [ ] **BOOT-002 — Command-line configuration overrides**
+
+  Add an explicit, allowlisted set of command-line options for configuration
+  values, including selection of an alternate configuration-file path. CLI
+  values are applied after built-in defaults, the optional configuration file,
+  and environment overrides, making them the highest-precedence source for
+  one-off or container-injected settings. Verify strict typed parsing,
+  documented help output, precedence, and safe handling of sensitive values.
+
+  - [ ] **CLI contract:** Define stable option names and value syntax for the
+    initial configuration fields, the optional config-file selector, and the
+    `serve` and `config` command forms.
+  - [ ] **Configuration loading:** Parse and apply CLI overrides after file and
+    environment loading, reject unknown or malformed options, and preserve the
+    existing validation and secret-redaction rules.
+  - [ ] **Diagnostics:** Show effective non-secret configuration sources and
+    explain precedence without printing database URLs or other sensitive
+    values.
+  - [ ] **Verification:** Test no-file startup, file-versus-environment-versus
+    CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
 - [ ] **SCHEMA-001 — Initial SQLite migration**
 

@@ -188,7 +188,7 @@ Draft content must never be exposed by ordinary public routes.
 
 ## 3. Configuration
 
-Verso should use a deployment configuration file such as:
+Verso may use a deployment configuration file such as:
 
 ```text
 verso.toml
@@ -241,6 +241,13 @@ production configuration must provide an explicit non-loopback `base_url`, so
 a missing value cannot silently leave the deployment pointing at a local
 address.
 
+The configuration file is optional. When the default `verso.toml` is absent,
+Verso starts from built-in defaults and continues through the normal override
+and validation process. An explicitly selected configuration path is always
+loaded and produces a clear error when it cannot be read or parsed. The file
+remains useful for persistent deployment settings, but it is not a startup
+prerequisite.
+
 `database.url` accepts a bare path as a SQLite shorthand, such as
 `./data/verso.db`, or a database URL. Only the `sqlite` scheme is implemented
 initially; other schemes are rejected until their adapters exist. Storage is a
@@ -260,8 +267,10 @@ Secrets should not normally be stored directly inside publicly tracked
 configuration files.
 
 Environment overrides are optional. Configuration precedence, from lowest to
-highest, is built-in defaults, `verso.toml`, then environment variables. The
-application only reads the following explicit allowlist:
+highest, is built-in defaults, the optional `verso.toml`, environment variables,
+then command-line arguments. The command-line interface uses an explicit
+allowlist of configuration options and its values win over all other sources.
+The application only reads the following explicit allowlist:
 
 | Environment variable | Configuration value |
 | --- | --- |

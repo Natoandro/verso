@@ -112,16 +112,42 @@ pub const Config = struct {
         return loadWithEnv(io, allocator, path, null);
     }
 
+    pub fn loadOptional(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !toml.Parsed(Config) {
+        return loadWithEnvOptional(io, allocator, path, null);
+    }
+
     pub fn loadWithEnv(
         io: std.Io,
         allocator: std.mem.Allocator,
         path: []const u8,
         environ_map: ?*const std.process.Environ.Map,
     ) !toml.Parsed(Config) {
+        return loadWithEnvInternal(io, allocator, path, environ_map, false);
+    }
+
+    pub fn loadWithEnvOptional(
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        path: []const u8,
+        environ_map: ?*const std.process.Environ.Map,
+    ) !toml.Parsed(Config) {
+        return loadWithEnvInternal(io, allocator, path, environ_map, true);
+    }
+
+    fn loadWithEnvInternal(
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        path: []const u8,
+        environ_map: ?*const std.process.Environ.Map,
+        allow_missing: bool,
+    ) !toml.Parsed(Config) {
         var parser = toml.Parser(Config).init(allocator);
         defer parser.deinit();
 
-        var parsed = try parser.parseFile(io, path);
+        var parsed = parser.parseFile(io, path) catch |err| switch (err) {
+            error.FileNotFound => if (allow_missing) try parser.parseString("") else return err,
+            else => return err,
+        };
         errdefer parsed.deinit();
         try applyEnvironment(parsed.arena.allocator(), &parsed.value, environ_map);
         try parsed.value.validate();
@@ -396,6 +422,15 @@ test "loads a configuration file" {
     switch (parsed.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/assets", filesystem.path),
     }
+}
+
+test "optional configuration falls back to built-in defaults" {
+    var parsed = try Config.loadOptional(std.testing.io, std.testing.allocator, "testdata/missing-verso.toml");
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
+    try std.testing.expectEqual(@as(u16, 8080), parsed.value.server.port);
+    try std.testing.expectEqualStrings("./data/verso.db", parsed.value.database.url);
 }
 
 test "environment overrides take precedence over TOML" {

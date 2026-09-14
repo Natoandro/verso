@@ -61,14 +61,20 @@ A basic deployment should eventually look approximately like this:
 
 ```text
 verso
-verso.toml
+verso.toml (optional)
 data/
 ├── verso.db
 ├── assets/
 └── cache/
 ```
 
-The target first-run workflow is:
+The simplest first-run workflow is:
+
+```bash
+verso serve
+```
+
+For persistent customization, an operator can generate a starter file:
 
 ```bash
 verso config dump-default > verso.toml
@@ -76,6 +82,9 @@ verso serve
 ```
 
 `config dump-default` prints a starter configuration without writing files.
+The server uses built-in defaults when `verso.toml` is absent. Command-line
+configuration options are planned to take precedence over environment
+variables, the optional configuration file, and built-in defaults.
 `serve` creates missing configured data, asset, and cache directories during
 startup and starts the current minimal HTTP server. The server runtime remains
 incomplete; its remaining work is tracked in the implementation plan.

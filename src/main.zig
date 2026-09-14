@@ -66,7 +66,7 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
-    var loaded_config = try verso.config.Config.loadWithEnv(
+    var loaded_config = try verso.config.Config.loadWithEnvOptional(
         init.io,
         init.gpa,
         "verso.toml",
