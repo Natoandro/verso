@@ -96,6 +96,8 @@ Before handing off changes:
   edit files or commit.
 - Use the review to produce a concise commit message that describes the full
   staged change.
+- Always write commit messages in Conventional Commits format, such as
+  `feat: add ...` or `fix(config): handle ...`.
 - A direct user request such as “commit”, “let's commit”, or “go” after the
   change is sufficient authorization to commit. Do not ask for separate
   confirmation of the commit message; choose it from the reviewed diff and
