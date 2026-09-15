@@ -76,7 +76,7 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
         },
     );
     defer loaded_config.deinit();
-    return verso.runtime.serve(init.io, loaded_config.value);
+    return verso.runtime.serve(init.io, init.gpa, loaded_config.value);
 }
 
 fn configCommand(io: std.Io, allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !void {

@@ -11,12 +11,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).module("clap");
+    const sqlite = b.dependency("sqlite", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("sqlite");
 
     const mod = b.addModule("verso", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "toml", .module = toml },
+            .{ .name = "sqlite", .module = sqlite },
         },
     });
 

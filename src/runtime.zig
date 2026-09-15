@@ -1,5 +1,14 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const config = @import("config.zig");
+const database = @import("storage/sqlite.zig");
+
+var shutdown_requested = std.atomic.Value(bool).init(false);
+
+const SignalState = if (builtin.os.tag == .linux) struct {
+    previous_int: std.c.Sigaction,
+    previous_term: std.c.Sigaction,
+} else struct {};
 
 pub fn prepareDirectories(io: std.Io, root: std.Io.Dir, value: config.Config) !void {
     var database_path_buffer: [1024]u8 = undefined;
@@ -12,15 +21,29 @@ pub fn prepareDirectories(io: std.Io, root: std.Io.Dir, value: config.Config) !v
     try root.createDirPath(io, value.cache.path);
 }
 
-pub fn serve(io: std.Io, value: config.Config) !void {
+pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !void {
+    shutdown_requested.store(false, .seq_cst);
+    var signal_state = try installSignalHandlers();
+    defer restoreSignalHandlers(&signal_state);
+
     try prepareDirectories(io, std.Io.Dir.cwd(), value);
+
+    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try databasePath(value, &database_path_buffer);
+    var db = try database.Database.open(allocator, database_path);
+    defer db.close();
 
     var address = try resolveAddress(io, value.server.host, value.server.port);
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
 
-    while (true) {
-        var stream = try server.accept(io);
+    while (!shutdown_requested.load(.seq_cst)) {
+        if (!try waitForConnection(server.socket.handle)) continue;
+
+        var stream = server.accept(io) catch |err| switch (err) {
+            error.ConnectionAborted => continue,
+            else => return err,
+        };
         defer stream.close(io);
 
         var read_buffer: [8192]u8 = undefined;
@@ -37,6 +60,57 @@ pub fn serve(io: std.Io, value: config.Config) !void {
             }},
         });
     }
+}
+
+fn requestShutdown(_: std.c.SIG) callconv(.c) void {
+    shutdown_requested.store(true, .seq_cst);
+}
+
+fn installSignalHandlers() !SignalState {
+    if (builtin.os.tag != .linux) return .{};
+
+    var action: std.c.Sigaction = std.mem.zeroes(std.c.Sigaction);
+    action.handler.handler = requestShutdown;
+    if (std.c.sigemptyset(&action.mask) != 0) return error.SignalSetupFailed;
+
+    var previous_int: std.c.Sigaction = undefined;
+    if (std.c.sigaction(.INT, &action, &previous_int) != 0) return error.SignalSetupFailed;
+
+    var previous_term: std.c.Sigaction = undefined;
+    if (std.c.sigaction(.TERM, &action, &previous_term) != 0) {
+        _ = std.c.sigaction(.INT, &previous_int, null);
+        return error.SignalSetupFailed;
+    }
+
+    return .{
+        .previous_int = previous_int,
+        .previous_term = previous_term,
+    };
+}
+
+fn restoreSignalHandlers(state: *SignalState) void {
+    if (builtin.os.tag != .linux) return;
+    _ = std.c.sigaction(.INT, &state.previous_int, null);
+    _ = std.c.sigaction(.TERM, &state.previous_term, null);
+}
+
+fn waitForConnection(handle: std.Io.net.Socket.Handle) !bool {
+    if (builtin.os.tag != .linux) return true;
+
+    var poll_fds = [_]std.posix.pollfd{.{
+        .fd = handle,
+        .events = std.posix.POLL.IN,
+        .revents = 0,
+    }};
+    var timeout = std.posix.timespec{ .sec = 0, .nsec = 50 * std.time.ns_per_ms };
+
+    const result = std.posix.ppoll(&poll_fds, &timeout, null) catch |err| switch (err) {
+        error.SignalInterrupt => return false,
+        else => return err,
+    };
+    if (result == 0) return false;
+
+    return poll_fds[0].revents & (std.posix.POLL.IN | std.posix.POLL.ERR | std.posix.POLL.HUP) != 0;
 }
 
 fn resolveAddress(io: std.Io, host: []const u8, port: u16) !std.Io.net.IpAddress {
@@ -63,7 +137,11 @@ fn databasePath(value: config.Config, buffer: []u8) ![]const u8 {
     }
 
     const uri = try std.Uri.parse(value.database.url);
-    if (!uri.path.isEmpty()) return uri.path.toRaw(buffer);
+    if (!uri.path.isEmpty()) {
+        const path = try uri.path.toRaw(buffer);
+        if (std.mem.startsWith(u8, path, "/./")) return path[1..];
+        return path;
+    }
     if (uri.host) |host| return host.toRaw(buffer);
     return error.InvalidDatabaseUrl;
 }
@@ -100,4 +178,20 @@ test "prepareDirectories is repeatable" {
     const value = config.Config{};
     try prepareDirectories(std.testing.io, tmp.dir, value);
     try prepareDirectories(std.testing.io, tmp.dir, value);
+}
+
+test "databasePath keeps relative SQLite URLs relative" {
+    var value = config.Config{};
+    value.database.url = "sqlite:///./data/verso.db";
+
+    var buffer: [1024]u8 = undefined;
+    try std.testing.expectEqualStrings("./data/verso.db", try databasePath(value, &buffer));
+}
+
+test "databasePath keeps absolute SQLite URLs absolute" {
+    var value = config.Config{};
+    value.database.url = "sqlite:///var/lib/verso.db";
+
+    var buffer: [1024]u8 = undefined;
+    try std.testing.expectEqualStrings("/var/lib/verso.db", try databasePath(value, &buffer));
 }

@@ -32,6 +32,10 @@ assuming those exist.
   arbitrary editor-provided JavaScript in the main publication context.
 - Keep public routes and authenticated editorial routes logically separate;
   drafts must never leak through ordinary public routes.
+- Before binding a C library directly, search for a mature, maintained Zig
+  wrapper and evaluate it for compatibility; prefer the wrapper when it meets
+  the project requirements. Use direct C translation only when no suitable
+  wrapper exists, and document that decision.
 
 ## Expected layout
 

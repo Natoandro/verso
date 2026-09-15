@@ -12,6 +12,10 @@
             .url = "https://github.com/Hejsil/zig-clap/archive/refs/tags/0.12.0.tar.gz",
             .hash = "clap-0.12.0-oBajB7foAQDqlSwaSG5g0yq7xGbQARUsBk5T64gAOqP5",
         },
+        .sqlite = .{
+            .url = "git+https://github.com/vrischmann/zig-sqlite#961c14efb2c9cc4bc6c065926ac3bdb74520c995",
+            .hash = "sqlite-3.48.0-F2R_a-akDgC9Nl0WrJKKmmsRppgaacuXNU5758BOFt-6",
+        },
     },
     .paths = .{
         "build.zig",

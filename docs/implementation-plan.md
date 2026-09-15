@@ -47,9 +47,12 @@ starting `DOC-001`.
     errors, and run before production URL and other configuration validation;
     `config.loadFile` provides the file-backed integration point for executable
     startup, while `config.load` accepts assembled `ConfigSources`.
-  - [ ] **Server runtime and `serve` command:** Build the Zig executable entry
+  - [x] **Server runtime and `serve` command:** Build the Zig executable entry
     point that loads validated configuration, opens the configured runtime
     resources, starts a single-process HTTP server, and shuts down cleanly.
+    The runtime uses the pinned `vrischmann/zig-sqlite` wrapper for SQLite
+    opening, handles SIGINT/SIGTERM shutdown on Linux, and keeps the HTTP
+    listener single-process.
   - [ ] **Runtime directories and default configuration:** After the `serve`
     runtime exists, implement its startup preparation that recursively creates
     missing parent directories for the configured SQLite database, filesystem
