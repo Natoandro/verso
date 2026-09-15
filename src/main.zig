@@ -93,6 +93,7 @@ fn logConfigurationFailure(init: std.process.Init, err: anyerror) void {
     logger.log(init.io, .{
         .level = "error",
         .event = "configuration.failed",
+        .message = "configuration failed",
         .command = "serve",
         .error_name = @errorName(err),
     }) catch {};

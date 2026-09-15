@@ -93,6 +93,9 @@ timestamp at write time. Logging defaults to JSON in production and to pretty
 output with terminal colors for development TTYs (or plain text when stderr is
 redirected). Null-valued fields are omitted by default; set
 `logging.omit_null_fields = false` when consumers require explicit nulls. The
+conventional `event` field identifies a record for machines, while `message`
+provides its human-readable description; pretty output uses `message` as its
+headline when present. The
 server runtime remains incomplete; its remaining work is tracked in the
 implementation plan.
 

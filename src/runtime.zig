@@ -38,6 +38,7 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     logBestEffort(&logger, io, .{
         .level = "info",
         .event = "server.starting",
+        .message = "starting server",
         .environment = @tagName(value.runtime.environment),
         .host = value.server.host,
         .port = value.server.port,
@@ -78,6 +79,7 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     logBestEffort(&logger, io, .{
         .level = "info",
         .event = "server.listening",
+        .message = "server listening",
         .host = value.server.host,
         .port = server.socket.address.getPort(),
     });
@@ -86,6 +88,7 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     defer if (server_started) logBestEffort(&logger, io, .{
         .level = "info",
         .event = "server.shutdown",
+        .message = "server shutting down",
         .reason = shutdown_reason,
     });
 
@@ -132,6 +135,7 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     logBestEffort(&logger, io, .{
         .level = "info",
         .event = "server.shutdown",
+        .message = "server shut down",
         .reason = shutdown_reason,
     });
 }
@@ -190,6 +194,7 @@ fn logConnectionFailure(
     server_context.logger.log(io, .{
         .level = "warn",
         .event = "http.request",
+        .message = "HTTP request failed",
         .method = null,
         .target = null,
         .status = null,
@@ -206,6 +211,7 @@ fn logStartupFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, err
     logBestEffort(logger, io, .{
         .level = "error",
         .event = "server.startup_failed",
+        .message = "server startup failed",
         .stage = stage,
         .error_name = @errorName(err),
     });
@@ -215,6 +221,7 @@ fn logRuntimeFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, err
     logBestEffort(logger, io, .{
         .level = "error",
         .event = "server.runtime_failed",
+        .message = "server runtime failed",
         .stage = stage,
         .error_name = @errorName(err),
     });

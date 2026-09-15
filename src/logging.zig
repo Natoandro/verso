@@ -64,9 +64,10 @@ pub const Logger = struct {
     /// logger adds the wall-clock timestamp to the serialized output.
     ///
     /// `timestamp` and `timestamp_ms` are reserved for the logger and must
-    /// not be fields in the supplied record. `level` and `event` are
-    /// conventional fields used by the pretty formatter when present, but are
-    /// not otherwise required.
+    /// not be fields in the supplied record. `level`, `event`, and `message`
+    /// are conventional fields used by the pretty formatter when present, but
+    /// are not otherwise required. `event` is the stable machine-oriented
+    /// identifier; `message` is the human-readable description.
     pub fn log(self: *Logger, io: std.Io, record: anytype) !void {
         const timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds();
 
@@ -200,14 +201,20 @@ fn writePrettyRecordBody(
         try writePrettyLevel(writer, @field(record, "level"), use_color);
     }
 
-    if (@hasField(@TypeOf(record), "event") and
-        !(omit_null_fields and isNull(@field(record, "event"))))
+    var wrote_header = false;
+    if (@hasField(@TypeOf(record), "message") and
+        !isNull(@field(record, "message")))
     {
         try writer.writeByte(' ');
-        try writeAnsi(writer, use_color, ansi.cyan);
-        try writeAnsi(writer, use_color, ansi.bold);
-        try writePrettyHeaderValue(writer, @field(record, "event"));
-        try writeAnsi(writer, use_color, ansi.reset);
+        try writePrettyHeadline(writer, @field(record, "message"), use_color);
+        wrote_header = true;
+    }
+
+    if (!wrote_header and @hasField(@TypeOf(record), "event") and
+        !isNull(@field(record, "event")))
+    {
+        try writer.writeByte(' ');
+        try writePrettyHeadline(writer, @field(record, "event"), use_color);
     }
 
     const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
@@ -215,7 +222,8 @@ fn writePrettyRecordBody(
         const value = @field(record, field.name);
         if (!(omit_null_fields and isNull(value))) {
             if (comptime std.mem.eql(u8, field.name, "level") or
-                std.mem.eql(u8, field.name, "event"))
+                std.mem.eql(u8, field.name, "event") or
+                std.mem.eql(u8, field.name, "message"))
             {} else {
                 try writer.writeByte(' ');
                 try writeAnsi(writer, use_color, ansi.dim);
@@ -226,6 +234,13 @@ fn writePrettyRecordBody(
             }
         }
     }
+}
+
+fn writePrettyHeadline(writer: *std.Io.Writer, value: anytype, use_color: bool) !void {
+    try writeAnsi(writer, use_color, ansi.cyan);
+    try writeAnsi(writer, use_color, ansi.bold);
+    try writePrettyHeaderValue(writer, value);
+    try writeAnsi(writer, use_color, ansi.reset);
 }
 
 fn isNull(value: anytype) bool {
@@ -247,6 +262,10 @@ fn writePrettyLevel(writer: *std.Io.Writer, value: anytype, use_color: bool) !vo
 }
 
 fn writePrettyHeaderValue(writer: *std.Io.Writer, value: anytype) !void {
+    if (comptime @typeInfo(@TypeOf(value)) == .optional) {
+        if (value) |unwrapped| return writePrettyHeaderValue(writer, unwrapped);
+        return;
+    }
     if (stringValue(value)) |string| {
         try writePrettyText(writer, string);
     } else {
@@ -259,6 +278,10 @@ fn stringValue(value: anytype) ?[]const u8 {
     if (Value == []const u8) return value;
 
     switch (@typeInfo(Value)) {
+        .optional => {
+            if (value) |unwrapped| return stringValue(unwrapped);
+            return null;
+        },
         .pointer => |pointer| {
             if (pointer.size == .slice and pointer.child == u8) return value;
             switch (@typeInfo(pointer.child)) {
@@ -366,12 +389,13 @@ test "generic records are JSON lines with logger-owned timestamps" {
     );
 }
 
-test "generic records support text and pretty formats" {
+test "generic records preserve message in text and use it as the pretty headline" {
     var text_buffer: [1024]u8 = undefined;
     var text_writer = std.Io.Writer.fixed(&text_buffer);
     const record = .{
         .level = @as([]const u8, "info"),
         .event = @as([]const u8, "http.request"),
+        .message = @as([]const u8, "request completed"),
         .method = @as([]const u8, "GET"),
         .target = @as([]const u8, "/notes/hello"),
         .status = @as(?u16, 200),
@@ -381,7 +405,7 @@ test "generic records support text and pretty formats" {
 
     try writeRecord(&text_writer, .text, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
-        "timestamp=\"2025-01-01T00:00:00.000Z\" level=\"info\" event=\"http.request\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
+        "timestamp=\"2025-01-01T00:00:00.000Z\" level=\"info\" event=\"http.request\" message=\"request completed\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         text_writer.buffered(),
     );
 
@@ -389,7 +413,7 @@ test "generic records support text and pretty formats" {
     var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
     try writeRecord(&pretty_writer, .pretty, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
-        "[2025-01-01T00:00:00.000Z] INFO http.request method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
+        "[2025-01-01T00:00:00.000Z] INFO request completed method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         pretty_writer.buffered(),
     );
 }
@@ -406,12 +430,12 @@ test "pretty formatting accepts a non-request record" {
     });
 
     try std.testing.expectEqualStrings(
-        "[1970-01-01T00:00:00.042Z] INFO startup component=\"runtime\" message=\"ready\"\n",
+        "[1970-01-01T00:00:00.042Z] INFO ready component=\"runtime\"\n",
         writer.buffered(),
     );
 }
 
-test "pretty formatting colors the timestamp, level, event, and fields" {
+test "pretty formatting colors the timestamp, level, message, and fields" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
@@ -422,7 +446,7 @@ test "pretty formatting colors the timestamp, level, event, and fields" {
     });
 
     try std.testing.expectEqualStrings(
-        "\x1b[2m[1970-01-01T00:00:00.042Z]\x1b[0m \x1b[31m\x1b[1mERROR\x1b[0m \x1b[36m\x1b[1mstartup.failed\x1b[0m \x1b[2mmessage\x1b[0m=\"unavailable\"\n",
+        "\x1b[2m[1970-01-01T00:00:00.042Z]\x1b[0m \x1b[31m\x1b[1mERROR\x1b[0m \x1b[36m\x1b[1munavailable\x1b[0m\n",
         writer.buffered(),
     );
 }

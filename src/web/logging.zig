@@ -24,6 +24,7 @@ fn logRequest(
     request.server.logger.log(io, .{
         .level = level,
         .event = "http.request",
+        .message = if (error_name == null) "HTTP request completed" else "HTTP request failed",
         .method = @tagName(request.request.head.method),
         .target = request.request.head.target,
         .status = request.response_status,

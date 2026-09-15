@@ -250,7 +250,10 @@ is a TTY, and plain text when development stderr is redirected to a file or
 another non-TTY destination. An explicit format applies in every environment.
 `logging.omit_null_fields` defaults to `true` and removes optional fields whose
 value is null from all log formats; set it to `false` when explicit nulls are
-needed.
+needed. Log records conventionally use `event` for a stable machine-readable
+identifier and `message` for a human-readable description. Pretty output uses
+`message` as its headline when present and falls back to `event`; JSON and text
+output retain both fields.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
