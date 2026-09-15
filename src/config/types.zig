@@ -1,6 +1,7 @@
 const std = @import("std");
 const toml = @import("toml");
 const defaults = @import("defaults.zig");
+const logging = @import("../logging.zig");
 const validation = @import("validation.zig");
 
 pub const ConfigError = error{
@@ -29,8 +30,12 @@ pub const UiLanguage = enum {
     en,
 };
 
+pub const LoggingFormat = logging.Format;
+pub const ResolvedLoggingFormat = logging.ResolvedFormat;
+
 pub const Config = struct {
     runtime: Runtime = .{},
+    logging: Logging = .{},
     site: Site = .{},
     server: Server = .{},
     database: Database = .{},
@@ -43,6 +48,10 @@ pub const Config = struct {
 
     pub const Runtime = struct {
         environment: Environment = .development,
+    };
+
+    pub const Logging = struct {
+        format: logging.Format = .auto,
     };
 
     pub const Site = struct {
@@ -153,6 +162,20 @@ pub const Config = struct {
         if (self.features.interactive_sections) {
             return error.InvalidFeatureConfiguration;
         }
+    }
+
+    pub fn effectiveLoggingFormat(self: Config, stderr_is_tty: bool) logging.ResolvedFormat {
+        return switch (self.logging.format) {
+            .auto => if (self.runtime.environment == .production)
+                .json
+            else if (stderr_is_tty)
+                .pretty
+            else
+                .text,
+            .json => .json,
+            .text => .text,
+            .pretty => .pretty,
+        };
     }
 
     pub fn effectiveBaseUrl(self: Config, buffer: []u8) ![]const u8 {

@@ -52,6 +52,7 @@ fn applyEnvironment(
     environ_map: ?*const std.process.Environ.Map,
 ) !void {
     try overrideEnum(config.Environment, environ_map, "VERSO_RUNTIME_ENVIRONMENT", &self.runtime.environment);
+    try overrideEnum(config.LoggingFormat, environ_map, "VERSO_LOGGING_FORMAT", &self.logging.format);
     try overrideString(allocator, environ_map, "VERSO_SITE_NAME", &self.site.name);
     try overrideString(allocator, environ_map, "VERSO_SITE_BASE_URL", &self.site.base_url);
     try overrideString(allocator, environ_map, "VERSO_SERVER_HOST", &self.server.host);

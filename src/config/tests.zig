@@ -47,6 +47,7 @@ test "parses and validates a complete configuration" {
 
     try std.testing.expectEqualStrings("Example Publication", parsed.value.site.name);
     try std.testing.expectEqual(types.Environment.production, parsed.value.runtime.environment);
+    try std.testing.expectEqual(types.LoggingFormat.auto, parsed.value.logging.format);
     try std.testing.expectEqual(types.UiLanguage.en, parsed.value.ui.language);
     try std.testing.expectEqualStrings("en", parsed.value.uiLanguageTag());
     try std.testing.expectEqual(@as(u16, 9090), parsed.value.server.port);
@@ -66,6 +67,41 @@ test "default configuration output is valid TOML" {
     try parsed.value.validate();
     try std.testing.expectEqual(types.Environment.development, parsed.value.runtime.environment);
     try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
+    try std.testing.expectEqual(types.LoggingFormat.auto, parsed.value.logging.format);
+}
+
+test "logging format defaults follow environment and stderr" {
+    var development = try types.Config.parse(std.testing.allocator, "");
+    defer development.deinit();
+    try std.testing.expectEqual(
+        types.ResolvedLoggingFormat.pretty,
+        development.value.effectiveLoggingFormat(true),
+    );
+    try std.testing.expectEqual(
+        types.ResolvedLoggingFormat.text,
+        development.value.effectiveLoggingFormat(false),
+    );
+
+    var production = try types.Config.parse(std.testing.allocator, "[runtime]\nenvironment = 'production'\n");
+    defer production.deinit();
+    try std.testing.expectEqual(
+        types.ResolvedLoggingFormat.json,
+        production.value.effectiveLoggingFormat(true),
+    );
+    try std.testing.expectEqual(
+        types.ResolvedLoggingFormat.json,
+        production.value.effectiveLoggingFormat(false),
+    );
+}
+
+test "explicit logging format overrides automatic defaults" {
+    var parsed = try types.Config.parse(std.testing.allocator, "[logging]\nformat = 'pretty'\n");
+    defer parsed.deinit();
+    try parsed.value.validate();
+    try std.testing.expectEqual(
+        types.ResolvedLoggingFormat.pretty,
+        parsed.value.effectiveLoggingFormat(false),
+    );
 }
 
 test "development derives a loopback base URL" {
@@ -177,15 +213,17 @@ test "environment overrides are applied before validation" {
     var environ = std.process.Environ.Map.init(std.testing.allocator);
     defer environ.deinit();
     try environ.put("VERSO_RUNTIME_ENVIRONMENT", "production");
+    try environ.put("VERSO_LOGGING_FORMAT", "text");
     try environ.put("VERSO_SITE_BASE_URL", "https://environment.example");
 
     var parsed = try loading.load(std.testing.allocator, .{
-        .toml = "[runtime]\nenvironment = 'production'\n",
+        .toml = "[runtime]\nenvironment = 'production'\n[logging]\nformat = 'pretty'\n",
         .envs = &environ,
     });
     defer parsed.deinit();
 
     try std.testing.expectEqual(types.Environment.production, parsed.value.runtime.environment);
+    try std.testing.expectEqual(types.LoggingFormat.text, parsed.value.logging.format);
     try std.testing.expectEqualStrings("https://environment.example", parsed.value.site.base_url.?);
 }
 

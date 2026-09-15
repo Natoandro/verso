@@ -200,6 +200,9 @@ Example:
 [runtime]
 environment = "production"
 
+[logging]
+format = "auto"
+
 [site]
 name = "Example Publication"
 base_url = "https://example.org"
@@ -241,6 +244,11 @@ production configuration must provide an explicit non-loopback `base_url`, so
 a missing value cannot silently leave the deployment pointing at a local
 address.
 
+`logging.format` accepts `auto`, `json`, `text`, or `pretty`. The default
+`auto` format uses JSON in production, pretty output when development stderr
+is a TTY, and plain text when development stderr is redirected to a file or
+another non-TTY destination. An explicit format applies in every environment.
+
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
 and validation process. The current file-backed loader treats a missing path as
@@ -276,6 +284,7 @@ The application only reads the following explicit allowlist:
 | Environment variable | Configuration value |
 | --- | --- |
 | `VERSO_RUNTIME_ENVIRONMENT` | `runtime.environment` |
+| `VERSO_LOGGING_FORMAT` | `logging.format` |
 | `VERSO_SITE_NAME` | `site.name` |
 | `VERSO_SITE_BASE_URL` | `site.base_url` |
 | `VERSO_SERVER_HOST` | `server.host` |

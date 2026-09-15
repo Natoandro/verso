@@ -34,12 +34,14 @@ starting `DOC-001`.
   file is present, and that both commands expose the intended behavior.
 
   - [x] **Configuration contract:** Define the initial `verso.toml` schema for
-    runtime, site, server, database URL, filesystem storage, cache, UI,
-    feature, editor, and MCP settings. Development may derive a loopback
-    `base_url`; production requires an explicit public URL. TOML decoding uses
-    the pinned `zig-toml` dependency, storage is a tagged union, the UI
-    language is allowlisted to English for now, and paths receive
-    traversal-aware validation.
+    runtime, logging format, site, server, database URL, filesystem storage,
+    cache, UI, feature, editor, and MCP settings. Development may derive a
+    loopback `base_url`; production requires an explicit public URL. Logging
+    defaults to pretty output for a development TTY, text for other
+    development destinations, and JSON in production, while explicit formats
+    remain available. TOML decoding uses the pinned `zig-toml` dependency,
+    storage is a tagged union, the UI language is allowlisted to English for
+    now, and paths receive traversal-aware validation.
   - [x] **Environment overrides:** Define and implement an explicit,
     allowlisted `VERSO_*` environment-variable mapping. Overrides take
     precedence over the optional `verso.toml` but remain below command-line

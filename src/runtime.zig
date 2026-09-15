@@ -39,7 +39,8 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
 
-    var logger = logging.Logger.init(allocator);
+    const stderr_is_tty = try std.Io.File.stderr().isTty(io);
+    var logger = logging.Logger.init(allocator, value.effectiveLoggingFormat(stderr_is_tty));
     var server_context = web.ServerContext{
         .io = io,
         .allocator = allocator,

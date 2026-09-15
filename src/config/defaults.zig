@@ -7,6 +7,9 @@ pub const text =
     \\[runtime]
     \\environment = "development"
     \\
+    \\[logging]
+    \\format = "auto"
+    \\
     \\[site]
     \\name = "Verso"
     \\# base_url = "https://example.org"

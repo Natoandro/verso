@@ -6,6 +6,8 @@ pub const Config = types.Config;
 pub const ConfigError = types.ConfigError;
 pub const Environment = types.Environment;
 pub const UiLanguage = types.UiLanguage;
+pub const LoggingFormat = types.LoggingFormat;
+pub const ResolvedLoggingFormat = types.ResolvedLoggingFormat;
 pub const ConfigSources = loading.ConfigSources;
 
 pub const load = loading.load;
