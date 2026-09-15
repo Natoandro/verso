@@ -53,7 +53,9 @@ starting `DOC-001`.
     The runtime uses the pinned `vrischmann/zig-sqlite` wrapper for SQLite
     opening, handles SIGINT/SIGTERM shutdown on Linux, keeps the HTTP listener
     single-process, runs connection handlers through `std.Io.Group.concurrent`,
-    and emits JSON-lines request records to standard error.
+    and emits JSON-lines request records to standard error. It also provides
+    the initial `ServerContext`/`RequestContext` boundary and a composable
+    `Layer`/`Pipeline` API whose handlers can delegate or terminate requests.
   - [ ] **Runtime directories and default configuration:** After the `serve`
     runtime exists, implement its startup preparation that recursively creates
     missing parent directories for the configured SQLite database, filesystem

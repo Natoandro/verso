@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const config = @import("config.zig");
 const logging = @import("logging.zig");
 const database = @import("storage/sqlite.zig");
+const web = @import("web.zig");
 
 var shutdown_requested = std.atomic.Value(bool).init(false);
 
@@ -39,6 +40,15 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     defer server.deinit(io);
 
     var logger = logging.Logger.init(allocator);
+    var server_context = web.ServerContext{
+        .io = io,
+        .allocator = allocator,
+        .config = &value,
+        .logger = &logger,
+    };
+    var bootstrap_handler = BootstrapHandler{};
+    const layers = [_]web.Layer{.init(&bootstrap_handler)};
+    const pipeline = web.Pipeline.init(&layers);
     var handlers: std.Io.Group = .init;
     errdefer handlers.cancel(io);
 
@@ -50,7 +60,7 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
             else => return err,
         };
 
-        handlers.concurrent(io, handleConnection, .{ io, stream, &logger }) catch |err| {
+        handlers.concurrent(io, handleConnection, .{ stream, &server_context, &pipeline }) catch |err| {
             stream.close(io);
             return err;
         };
@@ -60,10 +70,11 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
 }
 
 fn handleConnection(
-    io: std.Io,
     stream: std.Io.net.Stream,
-    logger: *logging.Logger,
+    server_context: *web.ServerContext,
+    pipeline: *const web.Pipeline,
 ) std.Io.Cancelable!void {
+    const io = server_context.io;
     defer stream.close(io);
 
     const started_at = std.Io.Clock.now(.awake, io);
@@ -74,67 +85,85 @@ fn handleConnection(
     var http_server = std.http.Server.init(&reader.interface, &writer.interface);
     var request = http_server.receiveHead() catch |err| {
         if (err == error.Canceled) return error.Canceled;
-        try logRequest(io, logger, started_at, .{
-            .level = "warn",
-            .method = null,
-            .target = null,
-            .status = null,
-            .error_name = @errorName(err),
-        });
+        try logConnectionFailure(server_context, started_at, err);
         return;
     };
 
-    request.respond("Verso is running\n", .{
-        .keep_alive = false,
-        .extra_headers = &.{.{
-            .name = "content-type",
-            .value = "text/plain; charset=utf-8",
-        }},
-    }) catch |err| {
+    var context = web.RequestContext.init(server_context, &stream, &request, started_at);
+    pipeline.handle(&context) catch |err| {
         if (err == error.Canceled) return error.Canceled;
-        try logRequest(io, logger, started_at, .{
+        try logRequest(&context, .{
             .level = "warn",
-            .method = @tagName(request.head.method),
-            .target = request.head.target,
-            .status = null,
+            .status = context.response_status,
             .error_name = @errorName(err),
         });
-        return;
     };
-
-    try logRequest(io, logger, started_at, .{
-        .level = "info",
-        .method = @tagName(request.head.method),
-        .target = request.head.target,
-        .status = 200,
-        .error_name = null,
-    });
 }
+
+const BootstrapHandler = struct {
+    pub fn handle(_: *@This(), request: *web.RequestContext, _: web.Next) std.Io.Cancelable!void {
+        request.request.respond("Verso is running\n", .{
+            .keep_alive = false,
+            .extra_headers = &.{.{
+                .name = "content-type",
+                .value = "text/plain; charset=utf-8",
+            }},
+        }) catch |err| {
+            if (err == error.Canceled) return error.Canceled;
+            try logRequest(request, .{
+                .level = "warn",
+                .status = null,
+                .error_name = @errorName(err),
+            });
+            return;
+        };
+
+        request.response_status = 200;
+        try logRequest(request, .{
+            .level = "info",
+            .status = request.response_status,
+            .error_name = null,
+        });
+    }
+};
 
 const RequestLogFields = struct {
     level: []const u8,
-    method: ?[]const u8,
-    target: ?[]const u8,
     status: ?u16,
     error_name: ?[]const u8,
 };
 
-fn logRequest(
-    io: std.Io,
-    logger: *logging.Logger,
-    started_at: std.Io.Timestamp,
-    fields: RequestLogFields,
-) std.Io.Cancelable!void {
+fn logRequest(request: *web.RequestContext, fields: RequestLogFields) std.Io.Cancelable!void {
+    const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    try logger.request(io, .{
+    try request.server.logger.request(io, .{
         .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
         .level = fields.level,
         .event = "http.request",
-        .method = fields.method,
-        .target = fields.target,
+        .method = @tagName(request.request.head.method),
+        .target = request.request.head.target,
         .status = fields.status,
-        .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
+        .duration_ms = request.started_at.durationTo(finished_at).toMilliseconds(),
         .error_name = fields.error_name,
+    });
+}
+
+fn logConnectionFailure(
+    server_context: *web.ServerContext,
+    started_at: std.Io.Timestamp,
+    err: anyerror,
+) std.Io.Cancelable!void {
+    const io = server_context.io;
+    const finished_at = std.Io.Clock.now(.awake, io);
+    try server_context.logger.request(io, .{
+        .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
+        .level = "warn",
+        .event = "http.request",
+        .method = null,
+        .target = null,
+        .status = null,
+        .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
+        .error_name = @errorName(err),
     });
 }
 

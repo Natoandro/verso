@@ -208,6 +208,14 @@ flowchart TB
 
 Infrastructure provides implementations needed by the application layer.
 
+Request handling should carry long-lived dependencies through a
+`ServerContext` and per-request state through a `RequestContext`. Composable
+layers share one `handle(context, next)` shape: middleware delegates to
+`next`, final handlers terminate the pipeline, and services may perform work
+before or after delegation. This is a small request-pipeline boundary, not a
+general dependency-injection container; concrete dependencies should be added
+when the corresponding application service is implemented.
+
 ---
 
 ## 6. Request Paths
