@@ -15,6 +15,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).module("sqlite");
+    const migrations = b.addModule("migrations", .{
+        .root_source_file = b.path("migrations/embedded.zig"),
+        .target = target,
+    });
 
     const mod = b.addModule("verso", .{
         .root_source_file = b.path("src/root.zig"),
@@ -22,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "toml", .module = toml },
             .{ .name = "sqlite", .module = sqlite },
+            .{ .name = "migrations", .module = migrations },
         },
     });
 

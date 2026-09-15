@@ -13,14 +13,18 @@ const SignalState = if (builtin.os.tag == .linux) struct {
 } else struct {};
 
 pub fn prepareDirectories(io: std.Io, root: std.Io.Dir, value: config.Config) !void {
-    var database_path_buffer: [1024]u8 = undefined;
-    const database_path = try databasePath(value, &database_path_buffer);
-    try createParentPath(io, root, database_path);
+    try prepareDatabaseDirectory(io, root, value);
 
     switch (value.storage) {
         .filesystem => |filesystem| try root.createDirPath(io, filesystem.path),
     }
     try root.createDirPath(io, value.cache.path);
+}
+
+pub fn prepareDatabaseDirectory(io: std.Io, root: std.Io.Dir, value: config.Config) !void {
+    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try databasePath(value, &database_path_buffer);
+    try createParentPath(io, root, database_path);
 }
 
 pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !void {
@@ -298,7 +302,7 @@ fn resolveAddress(io: std.Io, host: []const u8, port: u16) !std.Io.net.IpAddress
     }
 }
 
-fn databasePath(value: config.Config, buffer: []u8) ![]const u8 {
+pub fn databasePath(value: config.Config, buffer: []u8) ![]const u8 {
     if (std.mem.indexOfScalar(u8, value.database.url, ':') == null) {
         return value.database.url;
     }

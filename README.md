@@ -71,6 +71,7 @@ data/
 The simplest first-run workflow is:
 
 ```bash
+verso migrate up
 verso serve
 ```
 
@@ -82,6 +83,10 @@ verso serve
 ```
 
 `config dump-default` prints a starter configuration without writing files.
+`migrate up` creates the configured database parent when needed, applies
+pending forward-only SQLite migrations, and records their checksums. Re-running
+it is safe; migration rollback uses a verified database backup rather than a
+`migrate down` command.
 The server uses built-in defaults when `verso.toml` is absent. Command-line
 configuration options are planned to take precedence over environment
 variables, the optional configuration file, and built-in defaults.

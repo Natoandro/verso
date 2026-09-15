@@ -6,16 +6,21 @@ const logging = verso.logging;
 const Command = enum {
     serve,
     config,
+    migrate,
 };
 
 const ConfigCommand = enum {
     dump_default,
 };
 
+const MigrateCommand = enum {
+    up,
+};
+
 pub fn main(init: std.process.Init) !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help  Display this help and exit.
-        \\<command>    Command to run: serve or config.
+        \\<command>    Command to run: serve, config, or migrate.
         \\
     );
     const parsers = .{
@@ -43,6 +48,7 @@ pub fn main(init: std.process.Init) !void {
 
     switch (parsed.positionals[0] orelse return error.InvalidArguments) {
         .config => return configCommand(init.io, init.gpa, &args),
+        .migrate => return migrateCommand(init, &args),
         .serve => return serveCommand(init, &args),
     }
 }
@@ -76,14 +82,14 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
             .args = args,
         },
     ) catch |err| {
-        logConfigurationFailure(init, err);
+        logConfigurationFailure(init, "serve", err);
         return err;
     };
     defer loaded_config.deinit();
     return verso.runtime.serve(init.io, init.gpa, loaded_config.value);
 }
 
-fn logConfigurationFailure(init: std.process.Init, err: anyerror) void {
+fn logConfigurationFailure(init: std.process.Init, command: []const u8, err: anyerror) void {
     const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
     var logger = logging.Logger.initWithOptions(
         init.gpa,
@@ -94,9 +100,61 @@ fn logConfigurationFailure(init: std.process.Init, err: anyerror) void {
         .level = "error",
         .event = "configuration.failed",
         .message = "configuration failed",
-        .command = "serve",
+        .command = command,
         .error_name = @errorName(err),
     }) catch {};
+}
+
+fn migrateCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void {
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help  Display this help and exit.
+        \\<command>    Migration command: up.
+        \\
+    );
+    const parsers = .{ .command = clap.parsers.enumeration(MigrateCommand) };
+
+    var diag = clap.Diagnostic{};
+    var parsed = clap.parseEx(clap.Help, &params, parsers, args, .{
+        .diagnostic = &diag,
+        .allocator = init.gpa,
+    }) catch |err| {
+        try diag.reportToFile(init.io, .stderr(), err);
+        return err;
+    };
+    defer parsed.deinit();
+
+    if (parsed.args.help != 0) {
+        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
+    }
+
+    switch (parsed.positionals[0] orelse return error.InvalidArguments) {
+        .up => try migrateUp(init),
+    }
+}
+
+fn migrateUp(init: std.process.Init) !void {
+    var loaded_config = verso.config.loadFile(
+        init.io,
+        init.gpa,
+        "verso.toml",
+        .{ .envs = init.environ_map },
+    ) catch |err| {
+        logConfigurationFailure(init, "migrate up", err);
+        return err;
+    };
+    defer loaded_config.deinit();
+
+    try verso.runtime.prepareDatabaseDirectory(init.io, std.Io.Dir.cwd(), loaded_config.value);
+    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try verso.runtime.databasePath(loaded_config.value, &database_path_buffer);
+    var database = try verso.storage.sqlite.Database.open(init.gpa, database_path);
+    defer database.close();
+
+    const applied = try database.migrateUp(init.gpa);
+    var buffer: [128]u8 = undefined;
+    var writer = std.Io.File.stdout().writer(init.io, &buffer);
+    try writer.interface.writeAll(if (applied) "Applied migration 0001_initial.\n" else "Database is up to date.\n");
+    try writer.flush();
 }
 
 fn configCommand(io: std.Io, allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !void {

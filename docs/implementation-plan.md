@@ -92,7 +92,7 @@ starting `DOC-001`.
   - [ ] **Verification:** Test no-file startup, file-versus-environment-versus
     CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
-- [ ] **SCHEMA-001 — Initial SQLite migration**
+- [x] **SCHEMA-001 — Initial SQLite migration**
 
   Create one versioned initial migration with the canonical schema,
   constraints, indexes, migration ledger, and WAL-safe connection setup

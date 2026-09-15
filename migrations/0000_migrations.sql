@@ -1,14 +1,9 @@
--- Bootstrap metadata for Verso's future migration runner.
+-- Bootstrap metadata for Verso's migration runner.
 --
--- journal_mode is deliberately outside a transaction because SQLite changes it
--- at the database-file level. Every connection must also enable foreign_keys.
+-- WAL mode and per-connection safety PRAGMAs are configured by Database.open.
+-- This idempotent ledger setup runs before migrations are inspected.
 
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
-
-CREATE TABLE schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY CHECK (version > 0),
     name TEXT NOT NULL UNIQUE,
     checksum_sha256 TEXT NOT NULL UNIQUE
