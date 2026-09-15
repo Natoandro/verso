@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const config = @import("config.zig");
+const logging = @import("logging.zig");
 const database = @import("storage/sqlite.zig");
 
 var shutdown_requested = std.atomic.Value(bool).init(false);
@@ -37,6 +38,10 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
 
+    var logger = logging.Logger.init(allocator);
+    var handlers: std.Io.Group = .init;
+    errdefer handlers.cancel(io);
+
     while (!shutdown_requested.load(.seq_cst)) {
         if (!try waitForConnection(server.socket.handle)) continue;
 
@@ -44,22 +49,93 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
             error.ConnectionAborted => continue,
             else => return err,
         };
-        defer stream.close(io);
 
-        var read_buffer: [8192]u8 = undefined;
-        var write_buffer: [8192]u8 = undefined;
-        var reader = stream.reader(io, &read_buffer);
-        var writer = stream.writer(io, &write_buffer);
-        var http_server = std.http.Server.init(&reader.interface, &writer.interface);
-        var request = http_server.receiveHead() catch continue;
-        try request.respond("Verso is running\n", .{
-            .keep_alive = false,
-            .extra_headers = &.{.{
-                .name = "content-type",
-                .value = "text/plain; charset=utf-8",
-            }},
-        });
+        handlers.concurrent(io, handleConnection, .{ io, stream, &logger }) catch |err| {
+            stream.close(io);
+            return err;
+        };
     }
+
+    handlers.cancel(io);
+}
+
+fn handleConnection(
+    io: std.Io,
+    stream: std.Io.net.Stream,
+    logger: *logging.Logger,
+) std.Io.Cancelable!void {
+    defer stream.close(io);
+
+    const started_at = std.Io.Clock.now(.awake, io);
+    var read_buffer: [8192]u8 = undefined;
+    var write_buffer: [8192]u8 = undefined;
+    var reader = stream.reader(io, &read_buffer);
+    var writer = stream.writer(io, &write_buffer);
+    var http_server = std.http.Server.init(&reader.interface, &writer.interface);
+    var request = http_server.receiveHead() catch |err| {
+        if (err == error.Canceled) return error.Canceled;
+        try logRequest(io, logger, started_at, .{
+            .level = "warn",
+            .method = null,
+            .target = null,
+            .status = null,
+            .error_name = @errorName(err),
+        });
+        return;
+    };
+
+    request.respond("Verso is running\n", .{
+        .keep_alive = false,
+        .extra_headers = &.{.{
+            .name = "content-type",
+            .value = "text/plain; charset=utf-8",
+        }},
+    }) catch |err| {
+        if (err == error.Canceled) return error.Canceled;
+        try logRequest(io, logger, started_at, .{
+            .level = "warn",
+            .method = @tagName(request.head.method),
+            .target = request.head.target,
+            .status = null,
+            .error_name = @errorName(err),
+        });
+        return;
+    };
+
+    try logRequest(io, logger, started_at, .{
+        .level = "info",
+        .method = @tagName(request.head.method),
+        .target = request.head.target,
+        .status = 200,
+        .error_name = null,
+    });
+}
+
+const RequestLogFields = struct {
+    level: []const u8,
+    method: ?[]const u8,
+    target: ?[]const u8,
+    status: ?u16,
+    error_name: ?[]const u8,
+};
+
+fn logRequest(
+    io: std.Io,
+    logger: *logging.Logger,
+    started_at: std.Io.Timestamp,
+    fields: RequestLogFields,
+) std.Io.Cancelable!void {
+    const finished_at = std.Io.Clock.now(.awake, io);
+    try logger.request(io, .{
+        .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
+        .level = fields.level,
+        .event = "http.request",
+        .method = fields.method,
+        .target = fields.target,
+        .status = fields.status,
+        .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
+        .error_name = fields.error_name,
+    });
 }
 
 fn requestShutdown(_: std.c.SIG) callconv(.c) void {

@@ -86,8 +86,10 @@ The server uses built-in defaults when `verso.toml` is absent. Command-line
 configuration options are planned to take precedence over environment
 variables, the optional configuration file, and built-in defaults.
 `serve` creates missing configured data, asset, and cache directories during
-startup and starts the current minimal HTTP server. The server runtime remains
-incomplete; its remaining work is tracked in the implementation plan.
+startup, runs each accepted request through the threaded Zig I/O runtime, and
+writes one structured JSON request record per request to standard error. The
+server runtime remains incomplete; its remaining work is tracked in the
+implementation plan.
 
 ## Development
 
