@@ -298,11 +298,11 @@ control field is always omitted. The logger-owned timestamp remains present in
 every format.
 
 HTTP request records use one `duration_ms` field, measured with the monotonic
-clock and serialized as a fractional `f32` number of milliseconds. The
-in-memory representation has a relative rounding error below `10^-6` for
-normal positive values. Emitted representations are presentation-formatted
-with at most six significant digits. The same field is used for completed
-requests, downstream failures, and connection failures.
+clock and serialized as a fractional `f32` number of milliseconds.
+Human-readable request lines display milliseconds below one second and seconds
+at or above one second; machine-readable records retain the stable millisecond
+unit. The same field is used for completed requests, downstream failures, and
+connection failures.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override

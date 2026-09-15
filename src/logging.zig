@@ -440,6 +440,9 @@ fn writeFormatValue(writer: *std.Io.Writer, value: anytype, escape_controls: boo
         return writer.writeAll("null");
     }
     if (stringValue(value)) |string| return writeFormatLiteral(writer, string, escape_controls);
+    if (comptime std.meta.hasFn(@TypeOf(value), "logFormat")) {
+        return value.logFormat(writer);
+    }
     try std.json.Stringify.value(value, .{}, writer);
 }
 

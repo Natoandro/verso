@@ -22,35 +22,28 @@ pub const DurationMilliseconds = struct {
     value: f32,
 
     pub fn jsonStringify(self: @This(), json: anytype) !void {
-        var buffer: [64]u8 = undefined;
-        const rendered = render(self.value, &buffer);
-        try json.print("{s}", .{rendered});
+        try json.write(self.value);
+    }
+
+    pub fn logFormat(self: @This(), writer: *std.Io.Writer) !void {
+        const seconds = self.value >= 1_000.0;
+        const value = if (seconds) self.value / 1_000.0 else self.value;
+        const unit: []const u8 = if (seconds) "s" else "ms";
+
+        if (value < 9.999995) {
+            try writer.print("{d:.5}{s}", .{ value, unit });
+        } else if (value < 99.99995) {
+            try writer.print("{d:.4}{s}", .{ value, unit });
+        } else if (value < 999.995) {
+            try writer.print("{d:.3}{s}", .{ value, unit });
+        } else {
+            try writer.print("{e:.5}{s}", .{ value, unit });
+        }
     }
 };
 
-fn render(value: f32, buffer: []u8) []const u8 {
-    if (value == 0.0) return "0";
-
-    const exponent: i32 = @intFromFloat(@floor(std.math.log10(@abs(value))));
-    const scientific = exponent >= 6;
-    const precision: usize = if (scientific) 5 else if (exponent >= 5) 0 else @intCast(5 - exponent);
-    var rendered = std.fmt.float.render(buffer, value, .{
-        .mode = if (scientific) .scientific else .decimal,
-        .precision = precision,
-    }) catch unreachable;
-
-    if (std.mem.indexOfScalar(u8, rendered, '.')) |dot| {
-        var end = rendered.len;
-        while (end > dot + 1 and rendered[end - 1] == '0') end -= 1;
-        if (end == dot + 1) end = dot;
-        rendered = rendered[0..end];
-    }
-
-    return rendered;
-}
-
 const CompletedRequestLogRecord = struct {
-    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms}ms",
+    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms}",
     level: []const u8,
     event: []const u8,
     message: []const u8,
@@ -62,7 +55,7 @@ const CompletedRequestLogRecord = struct {
 };
 
 const FailedRequestLogRecord = struct {
-    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms}ms failed: {error_name}",
+    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms} failed: {error_name}",
     level: []const u8,
     event: []const u8,
     message: []const u8,
