@@ -1,9 +1,9 @@
-const std = @import("std");
 const context = @import("context.zig");
+const std = @import("std");
 
 pub const RequestContext = context.RequestContext;
 pub const Context = context.Context;
-pub const Error = std.Io.Cancelable;
+pub const Error = anyerror;
 
 pub const Next = struct {
     layers: []const Layer,
@@ -97,4 +97,19 @@ test "pipeline composes middleware and final handlers" {
     try pipeline.handle(&request);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 4, 0 }, &events);
     try std.testing.expectEqual(@as(usize, 3), index);
+}
+
+test "pipeline propagates handler errors" {
+    const Failing = struct {
+        pub fn handle(_: *@This(), _: *RequestContext, _: Next) Error!void {
+            return error.HandlerFailed;
+        }
+    };
+
+    var failing = Failing{};
+    const layers = [_]Layer{.init(&failing)};
+    const pipeline = Pipeline.init(&layers);
+    var request: RequestContext = undefined;
+
+    try std.testing.expectError(error.HandlerFailed, pipeline.handle(&request));
 }

@@ -214,7 +214,9 @@ layers share one `handle(context, next)` shape: middleware delegates to
 `next`, final handlers terminate the pipeline, and services may perform work
 before or after delegation. This is a small request-pipeline boundary, not a
 general dependency-injection container; concrete dependencies should be added
-when the corresponding application service is implemented.
+when the corresponding application service is implemented. Request logging is
+one such layer and surrounds the request pipeline so it can record both
+successful responses and downstream failures.
 
 ---
 

@@ -55,7 +55,8 @@ starting `DOC-001`.
     single-process, runs connection handlers through `std.Io.Group.concurrent`,
     and emits JSON-lines request records to standard error. It also provides
     the initial `ServerContext`/`RequestContext` boundary and a composable
-    `Layer`/`Pipeline` API whose handlers can delegate or terminate requests.
+    `Layer`/`Pipeline` API whose handlers can delegate or terminate requests;
+    request logging is implemented as the first pipeline layer.
   - [ ] **Runtime directories and default configuration:** After the `serve`
     runtime exists, implement its startup preparation that recursively creates
     missing parent directories for the configured SQLite database, filesystem

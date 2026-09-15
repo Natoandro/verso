@@ -47,7 +47,8 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
         .logger = &logger,
     };
     var bootstrap_handler = BootstrapHandler{};
-    const layers = [_]web.Layer{.init(&bootstrap_handler)};
+    var request_logging = web.RequestLoggingLayer{};
+    const layers = [_]web.Layer{ .init(&request_logging), .init(&bootstrap_handler) };
     const pipeline = web.Pipeline.init(&layers);
     var handlers: std.Io.Group = .init;
     errdefer handlers.cancel(io);
@@ -92,16 +93,12 @@ fn handleConnection(
     var context = web.RequestContext.init(server_context, &stream, &request, started_at);
     pipeline.handle(&context) catch |err| {
         if (err == error.Canceled) return error.Canceled;
-        try logRequest(&context, .{
-            .level = "warn",
-            .status = context.response_status,
-            .error_name = @errorName(err),
-        });
+        return;
     };
 }
 
 const BootstrapHandler = struct {
-    pub fn handle(_: *@This(), request: *web.RequestContext, _: web.Next) std.Io.Cancelable!void {
+    pub fn handle(_: *@This(), request: *web.RequestContext, _: web.Next) anyerror!void {
         request.request.respond("Verso is running\n", .{
             .keep_alive = false,
             .extra_headers = &.{.{
@@ -110,43 +107,12 @@ const BootstrapHandler = struct {
             }},
         }) catch |err| {
             if (err == error.Canceled) return error.Canceled;
-            try logRequest(request, .{
-                .level = "warn",
-                .status = null,
-                .error_name = @errorName(err),
-            });
-            return;
+            return err;
         };
 
         request.response_status = 200;
-        try logRequest(request, .{
-            .level = "info",
-            .status = request.response_status,
-            .error_name = null,
-        });
     }
 };
-
-const RequestLogFields = struct {
-    level: []const u8,
-    status: ?u16,
-    error_name: ?[]const u8,
-};
-
-fn logRequest(request: *web.RequestContext, fields: RequestLogFields) std.Io.Cancelable!void {
-    const io = request.server.io;
-    const finished_at = std.Io.Clock.now(.awake, io);
-    try request.server.logger.request(io, .{
-        .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
-        .level = fields.level,
-        .event = "http.request",
-        .method = @tagName(request.request.head.method),
-        .target = request.request.head.target,
-        .status = fields.status,
-        .duration_ms = request.started_at.durationTo(finished_at).toMilliseconds(),
-        .error_name = fields.error_name,
-    });
-}
 
 fn logConnectionFailure(
     server_context: *web.ServerContext,
