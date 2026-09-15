@@ -21,7 +21,7 @@ fn logRequest(
 ) std.Io.Cancelable!void {
     const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    try request.server.logger.log(io, .{
+    request.server.logger.log(io, .{
         .level = level,
         .event = "http.request",
         .method = @tagName(request.request.head.method),
@@ -29,5 +29,5 @@ fn logRequest(
         .status = request.response_status,
         .duration_ms = request.started_at.durationTo(finished_at).toMilliseconds(),
         .error_name = error_name,
-    });
+    }) catch {};
 }

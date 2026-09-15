@@ -85,10 +85,10 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
 
 fn logConfigurationFailure(init: std.process.Init, err: anyerror) void {
     const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
-    var logger = logging.Logger.initWithColor(
+    var logger = logging.Logger.initWithOptions(
         init.gpa,
         if (stderr_is_tty) .pretty else .text,
-        stderr_is_tty,
+        .{ .use_color = stderr_is_tty, .omit_null_fields = true },
     );
     logger.log(init.io, .{
         .level = "error",

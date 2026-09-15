@@ -27,10 +27,13 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     shutdown_requested.store(false, .seq_cst);
 
     const stderr_is_tty = std.Io.File.stderr().isTty(io) catch false;
-    var logger = logging.Logger.initWithColor(
+    var logger = logging.Logger.initWithOptions(
         allocator,
         value.effectiveLoggingFormat(stderr_is_tty),
-        stderr_is_tty,
+        .{
+            .use_color = stderr_is_tty,
+            .omit_null_fields = value.logging.omit_null_fields,
+        },
     );
     logBestEffort(&logger, io, .{
         .level = "info",
@@ -184,7 +187,7 @@ fn logConnectionFailure(
 ) std.Io.Cancelable!void {
     const io = server_context.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    try server_context.logger.log(io, .{
+    server_context.logger.log(io, .{
         .level = "warn",
         .event = "http.request",
         .method = null,
@@ -192,7 +195,7 @@ fn logConnectionFailure(
         .status = null,
         .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
         .error_name = @errorName(err),
-    });
+    }) catch {};
 }
 
 fn logBestEffort(logger: *logging.Logger, io: std.Io, record: anytype) void {

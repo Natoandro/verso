@@ -91,7 +91,8 @@ writes one structured log record per request to standard error. The logging
 framework accepts arbitrary structured records and adds an ISO-8601 UTC
 timestamp at write time. Logging defaults to JSON in production and to pretty
 output with terminal colors for development TTYs (or plain text when stderr is
-redirected). The
+redirected). Null-valued fields are omitted by default; set
+`logging.omit_null_fields = false` when consumers require explicit nulls. The
 server runtime remains incomplete; its remaining work is tracked in the
 implementation plan.
 

@@ -13,6 +13,11 @@ pub const ResolvedFormat = enum {
     pretty,
 };
 
+pub const Options = struct {
+    use_color: bool = false,
+    omit_null_fields: bool = false,
+};
+
 const ansi = struct {
     const reset = "\x1b[0m";
     const dim = "\x1b[2m";
@@ -27,10 +32,11 @@ pub const Logger = struct {
     allocator: std.mem.Allocator,
     format: ResolvedFormat,
     use_color: bool,
+    omit_null_fields: bool,
     mutex: std.Io.Mutex = .init,
 
     pub fn init(allocator: std.mem.Allocator, format: ResolvedFormat) Logger {
-        return initWithColor(allocator, format, format == .pretty);
+        return initWithOptions(allocator, format, .{ .use_color = format == .pretty });
     }
 
     pub fn initWithColor(
@@ -38,10 +44,19 @@ pub const Logger = struct {
         format: ResolvedFormat,
         use_color: bool,
     ) Logger {
+        return initWithOptions(allocator, format, .{ .use_color = use_color });
+    }
+
+    pub fn initWithOptions(
+        allocator: std.mem.Allocator,
+        format: ResolvedFormat,
+        options: Options,
+    ) Logger {
         return .{
             .allocator = allocator,
             .format = format,
-            .use_color = use_color and format == .pretty,
+            .use_color = options.use_color and format == .pretty,
+            .omit_null_fields = options.omit_null_fields,
         };
     }
 
@@ -52,7 +67,7 @@ pub const Logger = struct {
     /// not be fields in the supplied record. `level` and `event` are
     /// conventional fields used by the pretty formatter when present, but are
     /// not otherwise required.
-    pub fn log(self: *Logger, io: std.Io, record: anytype) std.Io.Cancelable!void {
+    pub fn log(self: *Logger, io: std.Io, record: anytype) !void {
         const timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds();
 
         try self.mutex.lock(io);
@@ -60,7 +75,14 @@ pub const Logger = struct {
 
         var output = std.Io.Writer.Allocating.init(self.allocator);
         defer output.deinit();
-        try writeRecord(&output.writer, self.format, timestamp_ms, self.use_color, record);
+        try writeRecord(
+            &output.writer,
+            self.format,
+            timestamp_ms,
+            self.use_color,
+            self.omit_null_fields,
+            record,
+        );
 
         var buffer: [4096]u8 = undefined;
         var writer = std.Io.File.stderr().writer(io, &buffer);
@@ -74,14 +96,15 @@ fn writeRecord(
     format: ResolvedFormat,
     timestamp_ms: i64,
     use_color: bool,
+    omit_null_fields: bool,
     record: anytype,
 ) !void {
     ensureRecordType(@TypeOf(record));
 
     switch (format) {
-        .json => try writeJsonRecordBody(writer, timestamp_ms, record),
-        .text => try writeTextRecordBody(writer, timestamp_ms, record),
-        .pretty => try writePrettyRecordBody(writer, timestamp_ms, use_color, record),
+        .json => try writeJsonRecordBody(writer, timestamp_ms, omit_null_fields, record),
+        .text => try writeTextRecordBody(writer, timestamp_ms, omit_null_fields, record),
+        .pretty => try writePrettyRecordBody(writer, timestamp_ms, use_color, omit_null_fields, record),
     }
     try writer.writeByte('\n');
 }
@@ -99,6 +122,7 @@ fn ensureRecordType(comptime Record: type) void {
 fn writeJsonRecordBody(
     writer: *std.Io.Writer,
     timestamp_ms: i64,
+    omit_null_fields: bool,
     record: anytype,
 ) !void {
     var timestamp_buffer: [32]u8 = undefined;
@@ -108,8 +132,13 @@ fn writeJsonRecordBody(
     try writeJsonField(writer, "timestamp", timestamp, false);
 
     const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
+    var comma = true;
     inline for (fields) |field| {
-        try writeJsonField(writer, field.name, @field(record, field.name), true);
+        const value = @field(record, field.name);
+        if (!(omit_null_fields and isNull(value))) {
+            try writeJsonField(writer, field.name, value, comma);
+            comma = true;
+        }
     }
 
     try writer.writeByte('}');
@@ -122,15 +151,25 @@ fn writeJsonField(writer: *std.Io.Writer, name: []const u8, value: anytype, comm
     try std.json.Stringify.value(value, .{}, writer);
 }
 
-fn writeTextRecordBody(writer: *std.Io.Writer, timestamp_ms: i64, record: anytype) !void {
+fn writeTextRecordBody(
+    writer: *std.Io.Writer,
+    timestamp_ms: i64,
+    omit_null_fields: bool,
+    record: anytype,
+) !void {
     var timestamp_buffer: [32]u8 = undefined;
     const timestamp = try formatTimestamp(&timestamp_buffer, timestamp_ms);
 
     try writeTextField(writer, "timestamp", timestamp, false);
 
     const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
+    var space = true;
     inline for (fields) |field| {
-        try writeTextField(writer, field.name, @field(record, field.name), true);
+        const value = @field(record, field.name);
+        if (!(omit_null_fields and isNull(value))) {
+            try writeTextField(writer, field.name, value, space);
+            space = true;
+        }
     }
 }
 
@@ -145,6 +184,7 @@ fn writePrettyRecordBody(
     writer: *std.Io.Writer,
     timestamp_ms: i64,
     use_color: bool,
+    omit_null_fields: bool,
     record: anytype,
 ) !void {
     try writeAnsi(writer, use_color, ansi.dim);
@@ -153,12 +193,16 @@ fn writePrettyRecordBody(
     try writer.writeByte(']');
     try writeAnsi(writer, use_color, ansi.reset);
 
-    if (@hasField(@TypeOf(record), "level")) {
+    if (@hasField(@TypeOf(record), "level") and
+        !(omit_null_fields and isNull(@field(record, "level"))))
+    {
         try writer.writeByte(' ');
         try writePrettyLevel(writer, @field(record, "level"), use_color);
     }
 
-    if (@hasField(@TypeOf(record), "event")) {
+    if (@hasField(@TypeOf(record), "event") and
+        !(omit_null_fields and isNull(@field(record, "event"))))
+    {
         try writer.writeByte(' ');
         try writeAnsi(writer, use_color, ansi.cyan);
         try writeAnsi(writer, use_color, ansi.bold);
@@ -168,23 +212,34 @@ fn writePrettyRecordBody(
 
     const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
     inline for (fields) |field| {
-        if (comptime std.mem.eql(u8, field.name, "level") or
-            std.mem.eql(u8, field.name, "event")) continue;
-        try writer.writeByte(' ');
-        try writeAnsi(writer, use_color, ansi.dim);
-        try writer.writeAll(field.name);
-        try writeAnsi(writer, use_color, ansi.reset);
-        try writer.writeByte('=');
-        try std.json.Stringify.value(@field(record, field.name), .{}, writer);
+        const value = @field(record, field.name);
+        if (!(omit_null_fields and isNull(value))) {
+            if (comptime std.mem.eql(u8, field.name, "level") or
+                std.mem.eql(u8, field.name, "event"))
+            {} else {
+                try writer.writeByte(' ');
+                try writeAnsi(writer, use_color, ansi.dim);
+                try writer.writeAll(field.name);
+                try writeAnsi(writer, use_color, ansi.reset);
+                try writer.writeByte('=');
+                try std.json.Stringify.value(value, .{}, writer);
+            }
+        }
     }
 }
 
+fn isNull(value: anytype) bool {
+    return switch (@typeInfo(@TypeOf(value))) {
+        .optional => value == null,
+        else => false,
+    };
+}
+
 fn writePrettyLevel(writer: *std.Io.Writer, value: anytype, use_color: bool) !void {
-    if (@TypeOf(value) == []const u8) {
-        const level: []const u8 = value;
+    if (stringValue(value)) |level| {
         try writeAnsi(writer, use_color, levelColor(level));
         try writeAnsi(writer, use_color, ansi.bold);
-        try writer.writeAll(prettyLevel(level));
+        try writePrettyText(writer, prettyLevel(level));
         try writeAnsi(writer, use_color, ansi.reset);
     } else {
         try writePrettyHeaderValue(writer, value);
@@ -192,11 +247,30 @@ fn writePrettyLevel(writer: *std.Io.Writer, value: anytype, use_color: bool) !vo
 }
 
 fn writePrettyHeaderValue(writer: *std.Io.Writer, value: anytype) !void {
-    if (@TypeOf(value) == []const u8) {
-        try writePrettyText(writer, value);
+    if (stringValue(value)) |string| {
+        try writePrettyText(writer, string);
     } else {
         try std.json.Stringify.value(value, .{}, writer);
     }
+}
+
+fn stringValue(value: anytype) ?[]const u8 {
+    const Value = @TypeOf(value);
+    if (Value == []const u8) return value;
+
+    switch (@typeInfo(Value)) {
+        .pointer => |pointer| {
+            if (pointer.size == .slice and pointer.child == u8) return value;
+            switch (@typeInfo(pointer.child)) {
+                .array => |array| {
+                    if (array.child == u8) return value.*[0..array.len];
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return null;
 }
 
 fn writePrettyText(writer: *std.Io.Writer, value: []const u8) !void {
@@ -276,7 +350,7 @@ test "generic records are JSON lines with logger-owned timestamps" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
-    try writeRecord(&writer, .json, 1_735_689_600_000, false, .{
+    try writeRecord(&writer, .json, 1_735_689_600_000, false, false, .{
         .level = "info",
         .event = "http.request",
         .method = "GET",
@@ -305,7 +379,7 @@ test "generic records support text and pretty formats" {
         .error_name = @as(?[]const u8, null),
     };
 
-    try writeRecord(&text_writer, .text, 1_735_689_600_000, false, record);
+    try writeRecord(&text_writer, .text, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
         "timestamp=\"2025-01-01T00:00:00.000Z\" level=\"info\" event=\"http.request\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         text_writer.buffered(),
@@ -313,7 +387,7 @@ test "generic records support text and pretty formats" {
 
     var pretty_buffer: [1024]u8 = undefined;
     var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
-    try writeRecord(&pretty_writer, .pretty, 1_735_689_600_000, false, record);
+    try writeRecord(&pretty_writer, .pretty, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
         "[2025-01-01T00:00:00.000Z] INFO http.request method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         pretty_writer.buffered(),
@@ -324,9 +398,9 @@ test "pretty formatting accepts a non-request record" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
-    try writeRecord(&writer, .pretty, 42, false, .{
-        .level = @as([]const u8, "info"),
-        .event = @as([]const u8, "startup"),
+    try writeRecord(&writer, .pretty, 42, false, false, .{
+        .level = "info",
+        .event = "startup",
         .component = @as([]const u8, "runtime"),
         .message = @as([]const u8, "ready"),
     });
@@ -341,9 +415,9 @@ test "pretty formatting colors the timestamp, level, event, and fields" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
-    try writeRecord(&writer, .pretty, 42, true, .{
-        .level = @as([]const u8, "error"),
-        .event = @as([]const u8, "startup.failed"),
+    try writeRecord(&writer, .pretty, 42, true, false, .{
+        .level = "error",
+        .event = "startup.failed",
         .message = @as([]const u8, "unavailable"),
     });
 
@@ -357,7 +431,7 @@ test "pretty formatting escapes control characters in headers" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
-    try writeRecord(&writer, .pretty, 42, false, .{
+    try writeRecord(&writer, .pretty, 42, false, false, .{
         .level = @as([]const u8, "notice\n"),
         .event = @as([]const u8, "startup\x1b[31m"),
     });
@@ -365,5 +439,39 @@ test "pretty formatting escapes control characters in headers" {
     try std.testing.expectEqualStrings(
         "[1970-01-01T00:00:00.042Z] notice\\x0a startup\\x1b[31m\n",
         writer.buffered(),
+    );
+}
+
+test "null fields can be omitted from every format" {
+    const record = .{
+        .level = @as([]const u8, "info"),
+        .event = @as([]const u8, "http.request"),
+        .status = @as(?u16, null),
+        .error_name = @as(?[]const u8, null),
+        .duration_ms = @as(i64, 3),
+    };
+
+    var json_buffer: [1024]u8 = undefined;
+    var json_writer = std.Io.Writer.fixed(&json_buffer);
+    try writeRecord(&json_writer, .json, 42, false, true, record);
+    try std.testing.expectEqualStrings(
+        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"info\",\"event\":\"http.request\",\"duration_ms\":3}\n",
+        json_writer.buffered(),
+    );
+
+    var text_buffer: [1024]u8 = undefined;
+    var text_writer = std.Io.Writer.fixed(&text_buffer);
+    try writeRecord(&text_writer, .text, 42, false, true, record);
+    try std.testing.expectEqualStrings(
+        "timestamp=\"1970-01-01T00:00:00.042Z\" level=\"info\" event=\"http.request\" duration_ms=3\n",
+        text_writer.buffered(),
+    );
+
+    var pretty_buffer: [1024]u8 = undefined;
+    var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
+    try writeRecord(&pretty_writer, .pretty, 42, false, true, record);
+    try std.testing.expectEqualStrings(
+        "[1970-01-01T00:00:00.042Z] INFO http.request duration_ms=3\n",
+        pretty_writer.buffered(),
     );
 }

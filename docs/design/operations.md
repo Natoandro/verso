@@ -248,6 +248,9 @@ address.
 `auto` format uses JSON in production, pretty output when development stderr
 is a TTY, and plain text when development stderr is redirected to a file or
 another non-TTY destination. An explicit format applies in every environment.
+`logging.omit_null_fields` defaults to `true` and removes optional fields whose
+value is null from all log formats; set it to `false` when explicit nulls are
+needed.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
@@ -285,6 +288,7 @@ The application only reads the following explicit allowlist:
 | --- | --- |
 | `VERSO_RUNTIME_ENVIRONMENT` | `runtime.environment` |
 | `VERSO_LOGGING_FORMAT` | `logging.format` |
+| `VERSO_LOGGING_OMIT_NULL_FIELDS` | `logging.omit_null_fields` |
 | `VERSO_SITE_NAME` | `site.name` |
 | `VERSO_SITE_BASE_URL` | `site.base_url` |
 | `VERSO_SERVER_HOST` | `server.host` |

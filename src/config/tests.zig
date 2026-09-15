@@ -68,6 +68,7 @@ test "default configuration output is valid TOML" {
     try std.testing.expectEqual(types.Environment.development, parsed.value.runtime.environment);
     try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
     try std.testing.expectEqual(types.LoggingFormat.auto, parsed.value.logging.format);
+    try std.testing.expectEqual(true, parsed.value.logging.omit_null_fields);
 }
 
 test "logging format defaults follow environment and stderr" {
@@ -192,6 +193,7 @@ test "environment overrides take precedence over TOML" {
     try environ.put("VERSO_SERVER_PORT", "9090");
     try environ.put("VERSO_DATABASE_URL", "./data/environment.db");
     try environ.put("VERSO_STORAGE_FS_PATH", "./data/environment-assets");
+    try environ.put("VERSO_LOGGING_OMIT_NULL_FIELDS", "false");
     try environ.put("VERSO_FEATURES_MATH", "false");
     try environ.put("VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", "750");
 
@@ -201,6 +203,7 @@ test "environment overrides take precedence over TOML" {
     try std.testing.expectEqualStrings("Environment Publication", parsed.value.site.name);
     try std.testing.expectEqualStrings("https://environment.example", parsed.value.site.base_url.?);
     try std.testing.expectEqual(@as(u16, 9090), parsed.value.server.port);
+    try std.testing.expectEqual(false, parsed.value.logging.omit_null_fields);
     try std.testing.expectEqualStrings("./data/environment.db", parsed.value.database.url);
     try std.testing.expectEqual(false, parsed.value.features.math);
     try std.testing.expectEqual(@as(u32, 750), parsed.value.editor.local_preview_debounce_ms);

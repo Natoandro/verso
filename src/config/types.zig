@@ -52,6 +52,7 @@ pub const Config = struct {
 
     pub const Logging = struct {
         format: logging.Format = .auto,
+        omit_null_fields: bool = true,
     };
 
     pub const Site = struct {

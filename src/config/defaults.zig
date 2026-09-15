@@ -9,6 +9,7 @@ pub const text =
     \\
     \\[logging]
     \\format = "auto"
+    \\omit_null_fields = true
     \\
     \\[site]
     \\name = "Verso"
