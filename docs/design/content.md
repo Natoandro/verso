@@ -204,14 +204,16 @@ Example:
 
 ```json
 {
-  "asset_id": "01K...",
+  "asset": "prime-decomposition",
   "alt": "Prime decomposition diagram",
   "caption": "Decomposition of a rational prime",
   "display": "wide"
 }
 ```
 
-The corresponding binary object lives in the configured asset store.
+`asset` is a name in the version-owned asset collection, not an asset-store
+path or an asset's global identifier. The corresponding binary object lives in
+the configured asset store.
 
 ---
 
@@ -326,6 +328,22 @@ checksum
 created_at
 uploaded_by
 ```
+
+Each document version owns a collection of named asset references. An asset
+name is unique within its version, maps to one stored asset, and may be used by
+any section in that version. Markdown may refer to such an asset with a local
+reference such as:
+
+```markdown
+![Prime decomposition](assets://prime-decomposition)
+```
+
+`assets://` is a renderer-only reference form. It resolves only against the
+loaded document version's named asset collection; it is never a filesystem
+path, a public URL, or a way to address an arbitrary stored asset. The renderer
+resolves it to the authorized version-scoped public asset route before emitting
+HTML. Names and associations are copied when a next-version draft is created,
+so editing a draft cannot change an earlier version's asset references.
 
 The asset store itself must never be mounted as a public static directory. An
 asset delivery handler authorizes every request. An ordinary public request is

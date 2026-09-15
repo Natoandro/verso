@@ -92,10 +92,13 @@ sanitized capability model.
 Renderers must escape text and attribute values, construct element names and
 attributes from fixed server-controlled sets, and validate URLs before placing
 them in an `href` or `src` attribute. Document links may use relative URLs,
-fragments, and the `https`, `http`, and `mailto` schemes. They must reject
-scriptable or ambiguous schemes such as `javascript:` and `data:`. Inline
-event handlers, executable inline scripts, and editor-provided stylesheets are
-not part of the initial content profile.
+fragments, and the `https`, `http`, and `mailto` schemes. An authored
+`assets://name` reference is resolved only against the loaded version's named
+asset collection and replaced with an authorized version-scoped URL before
+normal URL validation; it must never be emitted as an HTML URL. Renderers must
+reject scriptable or ambiguous schemes such as `javascript:` and `data:`.
+Inline event handlers, executable inline scripts, and editor-provided
+stylesheets are not part of the initial content profile.
 
 The same safe rendering path applies before output is placed in the published
 cache or returned from an explicit server preview. The public and editorial

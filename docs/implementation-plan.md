@@ -472,14 +472,14 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Security tests:** Verify safe-type allowlisting, byte and size
     validation, path isolation, and failure handling.
 
-- [ ] **AST-002 — Reference assets from draft images**
+- [ ] **AST-002 — Reference named version assets from draft content**
 
-  Image sections in a persisted draft can reference authorized uploaded assets
-  and render in the authenticated server preview. Draft-only assets cannot be
-  obtained through public routes.
+  Persisted draft content can reference authorized uploaded assets by a name
+  unique within the draft version and render them in the authenticated server
+  preview. Draft-only assets cannot be obtained through public routes.
 
-  - [ ] **Application:** Authorize asset references against the draft and
-    maintain the document-to-asset relationship.
+  - [ ] **Application:** Authorize named asset references against the draft and
+    maintain the version-to-asset relationship.
   - [ ] **Filesystem storage:** Resolve referenced bytes without exposing the
     storage layout or serving unreferenced draft files.
   - [ ] **Render:** Resolve image assets in the authenticated preview using
