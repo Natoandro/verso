@@ -25,22 +25,67 @@ pub fn prepareDirectories(io: std.Io, root: std.Io.Dir, value: config.Config) !v
 
 pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !void {
     shutdown_requested.store(false, .seq_cst);
-    var signal_state = try installSignalHandlers();
+
+    const stderr_is_tty = std.Io.File.stderr().isTty(io) catch false;
+    var logger = logging.Logger.initWithColor(
+        allocator,
+        value.effectiveLoggingFormat(stderr_is_tty),
+        stderr_is_tty,
+    );
+    logBestEffort(&logger, io, .{
+        .level = "info",
+        .event = "server.starting",
+        .environment = @tagName(value.runtime.environment),
+        .host = value.server.host,
+        .port = value.server.port,
+    });
+
+    var signal_state = installSignalHandlers() catch |err| {
+        logStartupFailure(&logger, io, "signals", err);
+        return err;
+    };
     defer restoreSignalHandlers(&signal_state);
 
-    try prepareDirectories(io, std.Io.Dir.cwd(), value);
+    prepareDirectories(io, std.Io.Dir.cwd(), value) catch |err| {
+        logStartupFailure(&logger, io, "directories", err);
+        return err;
+    };
 
     var database_path_buffer: [1024]u8 = undefined;
-    const database_path = try databasePath(value, &database_path_buffer);
-    var db = try database.Database.open(allocator, database_path);
+    const database_path = databasePath(value, &database_path_buffer) catch |err| {
+        logStartupFailure(&logger, io, "database", err);
+        return err;
+    };
+    var db = database.Database.open(allocator, database_path) catch |err| {
+        logStartupFailure(&logger, io, "database", err);
+        return err;
+    };
     defer db.close();
 
-    var address = try resolveAddress(io, value.server.host, value.server.port);
-    var server = try address.listen(io, .{ .reuse_address = true });
+    var address = resolveAddress(io, value.server.host, value.server.port) catch |err| {
+        logStartupFailure(&logger, io, "address", err);
+        return err;
+    };
+    var server = address.listen(io, .{ .reuse_address = true }) catch |err| {
+        logStartupFailure(&logger, io, "listener", err);
+        return err;
+    };
     defer server.deinit(io);
 
-    const stderr_is_tty = try std.Io.File.stderr().isTty(io);
-    var logger = logging.Logger.init(allocator, value.effectiveLoggingFormat(stderr_is_tty));
+    logBestEffort(&logger, io, .{
+        .level = "info",
+        .event = "server.listening",
+        .host = value.server.host,
+        .port = server.socket.address.getPort(),
+    });
+    var server_started = true;
+    var shutdown_reason: []const u8 = "signal";
+    defer if (server_started) logBestEffort(&logger, io, .{
+        .level = "info",
+        .event = "server.shutdown",
+        .reason = shutdown_reason,
+    });
+
     var server_context = web.ServerContext{
         .io = io,
         .allocator = allocator,
@@ -55,20 +100,37 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     errdefer handlers.cancel(io);
 
     while (!shutdown_requested.load(.seq_cst)) {
-        if (!try waitForConnection(server.socket.handle)) continue;
+        const ready = waitForConnection(server.socket.handle) catch |err| {
+            shutdown_reason = "failure";
+            logRuntimeFailure(&logger, io, "wait_for_connection", err);
+            return err;
+        };
+        if (!ready) continue;
 
         var stream = server.accept(io) catch |err| switch (err) {
             error.ConnectionAborted => continue,
-            else => return err,
+            else => {
+                shutdown_reason = "failure";
+                logRuntimeFailure(&logger, io, "accept", err);
+                return err;
+            },
         };
 
         handlers.concurrent(io, handleConnection, .{ stream, &server_context, &pipeline }) catch |err| {
             stream.close(io);
+            shutdown_reason = "failure";
+            logRuntimeFailure(&logger, io, "handler_dispatch", err);
             return err;
         };
     }
 
     handlers.cancel(io);
+    server_started = false;
+    logBestEffort(&logger, io, .{
+        .level = "info",
+        .event = "server.shutdown",
+        .reason = shutdown_reason,
+    });
 }
 
 fn handleConnection(
@@ -129,6 +191,28 @@ fn logConnectionFailure(
         .target = null,
         .status = null,
         .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
+        .error_name = @errorName(err),
+    });
+}
+
+fn logBestEffort(logger: *logging.Logger, io: std.Io, record: anytype) void {
+    logger.log(io, record) catch {};
+}
+
+fn logStartupFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, err: anyerror) void {
+    logBestEffort(logger, io, .{
+        .level = "error",
+        .event = "server.startup_failed",
+        .stage = stage,
+        .error_name = @errorName(err),
+    });
+}
+
+fn logRuntimeFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, err: anyerror) void {
+    logBestEffort(logger, io, .{
+        .level = "error",
+        .event = "server.runtime_failed",
+        .stage = stage,
         .error_name = @errorName(err),
     });
 }
@@ -249,6 +333,18 @@ test "prepareDirectories is repeatable" {
     const value = config.Config{};
     try prepareDirectories(std.testing.io, tmp.dir, value);
     try prepareDirectories(std.testing.io, tmp.dir, value);
+}
+
+test "prepareDirectories rejects a file in a configured parent path" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var blocker = try tmp.dir.createFile(std.testing.io, "blocked", .{});
+    blocker.close(std.testing.io);
+
+    var value = config.Config{};
+    value.database.url = "blocked/verso.db";
+    try std.testing.expectError(error.NotDir, prepareDirectories(std.testing.io, tmp.dir, value));
 }
 
 test "databasePath keeps relative SQLite URLs relative" {

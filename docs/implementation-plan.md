@@ -66,7 +66,7 @@ starting `DOC-001`.
     Add `verso config dump-default` to write the starter TOML configuration to
     standard output without creating or modifying files; leave database
     migration work to `SCHEMA-001`.
-  - [ ] **Diagnostics and bootstrap verification:** Add structured startup,
+  - [x] **Diagnostics and bootstrap verification:** Add structured startup,
     shutdown, and failure output, then verify successful built-in-default and
     file-backed `serve` flows, invalid configuration handling, repeatable
     directory preparation, and permission/path failures.

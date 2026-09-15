@@ -1,6 +1,7 @@
 const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
+const logging = verso.logging;
 
 const Command = enum {
     serve,
@@ -66,7 +67,7 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
-    var loaded_config = try verso.config.loadFile(
+    var loaded_config = verso.config.loadFile(
         init.io,
         init.gpa,
         "verso.toml",
@@ -74,9 +75,27 @@ fn serveCommand(init: std.process.Init, args: *std.process.Args.Iterator) !void 
             .envs = init.environ_map,
             .args = args,
         },
-    );
+    ) catch |err| {
+        logConfigurationFailure(init, err);
+        return err;
+    };
     defer loaded_config.deinit();
     return verso.runtime.serve(init.io, init.gpa, loaded_config.value);
+}
+
+fn logConfigurationFailure(init: std.process.Init, err: anyerror) void {
+    const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
+    var logger = logging.Logger.initWithColor(
+        init.gpa,
+        if (stderr_is_tty) .pretty else .text,
+        stderr_is_tty,
+    );
+    logger.log(init.io, .{
+        .level = "error",
+        .event = "configuration.failed",
+        .command = "serve",
+        .error_name = @errorName(err),
+    }) catch {};
 }
 
 fn configCommand(io: std.Io, allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !void {

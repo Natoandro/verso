@@ -88,9 +88,10 @@ variables, the optional configuration file, and built-in defaults.
 `serve` creates missing configured data, asset, and cache directories during
 startup, runs each accepted request through the threaded Zig I/O runtime, and
 writes one structured log record per request to standard error. The logging
-framework accepts arbitrary structured records and adds their wall-clock
+framework accepts arbitrary structured records and adds an ISO-8601 UTC
 timestamp at write time. Logging defaults to JSON in production and to pretty
-output for development TTYs (or plain text when stderr is redirected). The
+output with terminal colors for development TTYs (or plain text when stderr is
+redirected). The
 server runtime remains incomplete; its remaining work is tracked in the
 implementation plan.
 
