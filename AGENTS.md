@@ -36,6 +36,9 @@ assuming those exist.
   wrapper and evaluate it for compatibility; prefer the wrapper when it meets
   the project requirements. Use direct C translation only when no suitable
   wrapper exists, and document that decision.
+- Keep Zig source files focused: target fewer than 400 lines per file, and
+  never allow a single Zig source file to exceed 600 lines. Split cohesive
+  responsibilities into neighboring modules before reaching the hard limit.
 
 ## Expected layout
 

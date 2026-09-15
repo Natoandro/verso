@@ -95,7 +95,12 @@ redirected). Null-valued fields are omitted by default; set
 `logging.omit_null_fields = false` when consumers require explicit nulls. The
 conventional `event` field identifies a record for machines, while `message`
 provides its human-readable description; pretty output uses `message` as its
-headline when present. The
+headline when present. A record may instead provide a non-empty `format`
+template to build the human-readable message from named record fields; fields
+used by that template are omitted from trailing fields in text and pretty
+output. Record writers use an immutable `comptime format` field; runtime
+templates are not supported by the initial implementation. JSON preserves
+structured fields and omits the comptime `format` field. The
 server runtime remains incomplete; its remaining work is tracked in the
 implementation plan.
 

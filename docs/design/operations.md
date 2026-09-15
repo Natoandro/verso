@@ -255,6 +255,48 @@ identifier and `message` for a human-readable description. Pretty output uses
 `message` as its headline when present and falls back to `event`; JSON and text
 output retain both fields.
 
+### Record message templates
+
+In addition to `timestamp` and `timestamp_ms`, `format` is a reserved log
+record field. It is a `[]const u8` message-template control field, not ordinary
+record data. A non-empty `format` replaces the normal message headline in
+pretty output and the normal message value in text output. The logger renders
+the template before emitting remaining `key=value` fields. An empty `format`
+uses the ordinary `message`/`event` behavior.
+
+Templates use named placeholders: `{field}` inserts the record field named
+`field`; `{{` and `}}` insert literal braces. A placeholder may name any
+non-reserved field in the record, and its value uses the same human-readable
+rendering as a pretty headline. Referencing a missing field, a reserved field,
+or malformed template syntax is a compile error; it must not silently produce
+an ambiguous message. A field mentioned one or more times by a placeholder is
+considered consumed and is omitted from the trailing `key=value` fields. Other
+non-null fields retain their declaration order. `format` itself is never
+emitted as a trailing field in text or pretty output.
+
+Record writers use a comptime field when a template is intrinsic to the record
+type and never needs a per-record override:
+
+```zig
+comptime format: []const u8 = "request {method} completed with {status}",
+```
+
+A non-empty comptime template is parsed, checked against the record shape, and
+compiled into the record type's formatting path. The logger selects that path
+unconditionally: it neither reads a runtime `format` value nor checks for a
+dynamic override. This is the normal, inexpensive form for application-owned
+record types.
+
+The initial implementation accepts only a comptime `format` field. A
+non-comptime `format` field is a compile error, even when it has a default:
+runtime template overrides and their parser are deliberately deferred until a
+concrete need justifies them.
+
+JSON remains a complete structured representation: it includes the record's
+ordinary fields, including those consumed by a template. Its comptime `format`
+control field is always omitted. The logger-owned timestamp remains present in
+every format.
+
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
 and validation process. The current file-backed loader treats a missing path as
