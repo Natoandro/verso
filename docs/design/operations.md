@@ -297,6 +297,13 @@ ordinary fields, including those consumed by a template. Its comptime `format`
 control field is always omitted. The logger-owned timestamp remains present in
 every format.
 
+HTTP request records use one `duration_ms` field, measured with the monotonic
+clock and serialized as a fractional `f32` number of milliseconds. The
+in-memory representation has a relative rounding error below `10^-6` for
+normal positive values. Emitted representations are presentation-formatted
+with at most six significant digits. The same field is used for completed
+requests, downstream failures, and connection failures.
+
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
 and validation process. The current file-backed loader treats a missing path as

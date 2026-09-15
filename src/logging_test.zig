@@ -1,5 +1,6 @@
 const std = @import("std");
 const writeRecord = @import("logging.zig").writeRecord;
+const DurationMilliseconds = @import("web/logging.zig").DurationMilliseconds;
 
 test "generic records are JSON lines with logger-owned timestamps" {
     var buffer: [1024]u8 = undefined;
@@ -11,12 +12,12 @@ test "generic records are JSON lines with logger-owned timestamps" {
         .method = "GET",
         .target = "/notes/hello?draft=true",
         .status = 200,
-        .duration_ms = 3,
+        .duration_ms = DurationMilliseconds{ .value = 1.234567 },
         .error_name = null,
     });
 
     try std.testing.expectEqualStrings(
-        "{\"timestamp\":\"2025-01-01T00:00:00.000Z\",\"level\":\"info\",\"event\":\"http.request\",\"method\":\"GET\",\"target\":\"/notes/hello?draft=true\",\"status\":200,\"duration_ms\":3,\"error_name\":null}\n",
+        "{\"timestamp\":\"2025-01-01T00:00:00.000Z\",\"level\":\"info\",\"event\":\"http.request\",\"method\":\"GET\",\"target\":\"/notes/hello?draft=true\",\"status\":200,\"duration_ms\":1.23457,\"error_name\":null}\n",
         writer.buffered(),
     );
 }
@@ -31,13 +32,13 @@ test "generic records preserve message in text and use it as the pretty headline
         .method = @as([]const u8, "GET"),
         .target = @as([]const u8, "/notes/hello"),
         .status = @as(?u16, 200),
-        .duration_ms = @as(i64, 3),
+        .duration_ms = DurationMilliseconds{ .value = 1.234567 },
         .error_name = @as(?[]const u8, null),
     };
 
     try writeRecord(&text_writer, std.testing.allocator, .text, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
-        "timestamp=\"2025-01-01T00:00:00.000Z\" level=\"info\" event=\"http.request\" message=\"request completed\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
+        "timestamp=\"2025-01-01T00:00:00.000Z\" level=\"info\" event=\"http.request\" message=\"request completed\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=1.23457 error_name=null\n",
         text_writer.buffered(),
     );
 
@@ -45,8 +46,24 @@ test "generic records preserve message in text and use it as the pretty headline
     var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
     try writeRecord(&pretty_writer, std.testing.allocator, .pretty, 1_735_689_600_000, false, false, record);
     try std.testing.expectEqualStrings(
-        "[2025-01-01T00:00:00.000Z] INFO request completed method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
+        "[2025-01-01T00:00:00.000Z] INFO request completed method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=1.23457 error_name=null\n",
         pretty_writer.buffered(),
+    );
+}
+
+test "duration display caps large values at six significant digits" {
+    const record = .{
+        .level = @as([]const u8, "info"),
+        .event = @as([]const u8, "http.request"),
+        .duration_ms = DurationMilliseconds{ .value = 1_234_567 },
+    };
+
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecord(&writer, std.testing.allocator, .json, 42, false, false, record);
+    try std.testing.expectEqualStrings(
+        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"info\",\"event\":\"http.request\",\"duration_ms\":1.23457e6}\n",
+        writer.buffered(),
     );
 }
 
@@ -104,14 +121,14 @@ test "null fields can be omitted from every format" {
         .event = @as([]const u8, "http.request"),
         .status = @as(?u16, null),
         .error_name = @as(?[]const u8, null),
-        .duration_ms = @as(i64, 3),
+        .duration_ms = DurationMilliseconds{ .value = 3.25 },
     };
 
     var json_buffer: [1024]u8 = undefined;
     var json_writer = std.Io.Writer.fixed(&json_buffer);
     try writeRecord(&json_writer, std.testing.allocator, .json, 42, false, true, record);
     try std.testing.expectEqualStrings(
-        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"info\",\"event\":\"http.request\",\"duration_ms\":3}\n",
+        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"info\",\"event\":\"http.request\",\"duration_ms\":3.25}\n",
         json_writer.buffered(),
     );
 
@@ -119,7 +136,7 @@ test "null fields can be omitted from every format" {
     var text_writer = std.Io.Writer.fixed(&text_buffer);
     try writeRecord(&text_writer, std.testing.allocator, .text, 42, false, true, record);
     try std.testing.expectEqualStrings(
-        "timestamp=\"1970-01-01T00:00:00.042Z\" level=\"info\" event=\"http.request\" duration_ms=3\n",
+        "timestamp=\"1970-01-01T00:00:00.042Z\" level=\"info\" event=\"http.request\" duration_ms=3.25\n",
         text_writer.buffered(),
     );
 
@@ -127,7 +144,7 @@ test "null fields can be omitted from every format" {
     var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
     try writeRecord(&pretty_writer, std.testing.allocator, .pretty, 42, false, true, record);
     try std.testing.expectEqualStrings(
-        "[1970-01-01T00:00:00.042Z] INFO http.request duration_ms=3\n",
+        "[1970-01-01T00:00:00.042Z] INFO http.request duration_ms=3.25\n",
         pretty_writer.buffered(),
     );
 }

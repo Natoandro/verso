@@ -198,7 +198,9 @@ fn logConnectionFailure(
         .method = null,
         .target = null,
         .status = null,
-        .duration_ms = started_at.durationTo(finished_at).toMilliseconds(),
+        .duration_ms = .{
+            .value = web.logging.durationMilliseconds(started_at.durationTo(finished_at)),
+        },
         .error_name = @errorName(err),
     }) catch {};
 }
