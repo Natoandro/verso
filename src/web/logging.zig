@@ -21,8 +21,7 @@ fn logRequest(
 ) std.Io.Cancelable!void {
     const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    try request.server.logger.request(io, .{
-        .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
+    try request.server.logger.log(io, .{
         .level = level,
         .event = "http.request",
         .method = @tagName(request.request.head.method),

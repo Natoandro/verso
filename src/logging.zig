@@ -13,40 +13,33 @@ pub const ResolvedFormat = enum {
     pretty,
 };
 
-pub const RequestRecord = struct {
-    timestamp_ms: i64,
-    level: []const u8,
-    event: []const u8,
-    method: ?[]const u8,
-    target: ?[]const u8,
-    status: ?u16,
-    duration_ms: i64,
-    error_name: ?[]const u8,
-};
-
 pub const Logger = struct {
     allocator: std.mem.Allocator,
-    write_record: WriteRecord,
+    format: ResolvedFormat,
     mutex: std.Io.Mutex = .init,
 
     pub fn init(allocator: std.mem.Allocator, format: ResolvedFormat) Logger {
         return .{
             .allocator = allocator,
-            .write_record = switch (format) {
-                .json => writeJsonRecord,
-                .text => writeTextRecord,
-                .pretty => writePrettyRecord,
-            },
+            .format = format,
         };
     }
 
-    pub fn request(self: *Logger, io: std.Io, record: RequestRecord) std.Io.Cancelable!void {
+    /// Writes one structured log record. The record may be any struct; the
+    /// logger adds the wall-clock timestamp to the serialized output.
+    ///
+    /// `timestamp_ms` is reserved for the logger and must not be a field in
+    /// the supplied record. `level` and `event` are conventional fields used
+    /// by the pretty formatter when present, but are not otherwise required.
+    pub fn log(self: *Logger, io: std.Io, record: anytype) std.Io.Cancelable!void {
+        const timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds();
+
         try self.mutex.lock(io);
         defer self.mutex.unlock(io);
 
         var output = std.Io.Writer.Allocating.init(self.allocator);
         defer output.deinit();
-        self.write_record(&output.writer, record) catch return;
+        writeRecord(&output.writer, self.format, timestamp_ms, record) catch return;
 
         var buffer: [4096]u8 = undefined;
         var writer = std.Io.File.stderr().writer(io, &buffer);
@@ -55,82 +48,105 @@ pub const Logger = struct {
     }
 };
 
-const WriteRecord = *const fn (*std.Io.Writer, RequestRecord) anyerror!void;
-
-fn writeRecordLine(
-    comptime format: ResolvedFormat,
+fn writeRecord(
     writer: *std.Io.Writer,
-    record: RequestRecord,
+    format: ResolvedFormat,
+    timestamp_ms: i64,
+    record: anytype,
 ) !void {
+    ensureRecordType(@TypeOf(record));
+
     switch (format) {
-        .json => try writeJsonRecordBody(writer, record),
-        .text => try writeTextRecordBody(writer, record),
-        .pretty => try writePrettyRecordBody(writer, record),
+        .json => try writeJsonRecordBody(writer, timestamp_ms, record),
+        .text => try writeTextRecordBody(writer, timestamp_ms, record),
+        .pretty => try writePrettyRecordBody(writer, timestamp_ms, record),
     }
     try writer.writeByte('\n');
 }
 
-fn writeJsonRecord(writer: *std.Io.Writer, record: RequestRecord) !void {
-    try writeRecordLine(.json, writer, record);
+fn ensureRecordType(comptime Record: type) void {
+    switch (@typeInfo(Record)) {
+        .@"struct" => {},
+        else => @compileError("log records must be structs"),
+    }
+    if (@hasField(Record, "timestamp_ms")) {
+        @compileError("timestamp_ms is reserved for the logger");
+    }
 }
 
-fn writeTextRecord(writer: *std.Io.Writer, record: RequestRecord) !void {
-    try writeRecordLine(.text, writer, record);
-}
+fn writeJsonRecordBody(
+    writer: *std.Io.Writer,
+    timestamp_ms: i64,
+    record: anytype,
+) !void {
+    try writer.writeByte('{');
+    try writeJsonField(writer, "timestamp_ms", timestamp_ms, false);
 
-fn writePrettyRecord(writer: *std.Io.Writer, record: RequestRecord) !void {
-    try writeRecordLine(.pretty, writer, record);
-}
-
-fn writeJsonRecordBody(writer: *std.Io.Writer, record: RequestRecord) !void {
-    try std.json.Stringify.value(record, .{}, writer);
-}
-
-fn writeTextRecordBody(writer: *std.Io.Writer, record: anytype) !void {
     const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
-    inline for (fields, 0..) |field, index| {
-        if (index != 0) try writer.writeByte(' ');
+    inline for (fields) |field| {
+        try writeJsonField(writer, field.name, @field(record, field.name), true);
+    }
+
+    try writer.writeByte('}');
+}
+
+fn writeJsonField(writer: *std.Io.Writer, name: []const u8, value: anytype, comma: bool) !void {
+    if (comma) try writer.writeByte(',');
+    try std.json.Stringify.value(name, .{}, writer);
+    try writer.writeByte(':');
+    try std.json.Stringify.value(value, .{}, writer);
+}
+
+fn writeTextRecordBody(writer: *std.Io.Writer, timestamp_ms: i64, record: anytype) !void {
+    try writeTextField(writer, "timestamp_ms", timestamp_ms, false);
+
+    const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
+    inline for (fields) |field| {
+        try writeTextField(writer, field.name, @field(record, field.name), true);
+    }
+}
+
+fn writeTextField(writer: *std.Io.Writer, name: []const u8, value: anytype, space: bool) !void {
+    if (space) try writer.writeByte(' ');
+    try writer.writeAll(name);
+    try writer.writeByte('=');
+    try std.json.Stringify.value(value, .{}, writer);
+}
+
+fn writePrettyRecordBody(writer: *std.Io.Writer, timestamp_ms: i64, record: anytype) !void {
+    try writer.print("[{d}]", .{timestamp_ms});
+
+    if (@hasField(@TypeOf(record), "level")) {
+        try writer.writeByte(' ');
+        try writePrettyLevel(writer, @field(record, "level"));
+    }
+
+    if (@hasField(@TypeOf(record), "event")) {
+        try writer.writeByte(' ');
+        try writePrettyHeaderValue(writer, @field(record, "event"));
+    }
+
+    const fields = @typeInfo(@TypeOf(record)).@"struct".fields;
+    inline for (fields) |field| {
+        if (comptime std.mem.eql(u8, field.name, "level") or
+            std.mem.eql(u8, field.name, "event")) continue;
+        try writer.writeByte(' ');
         try writer.writeAll(field.name);
         try writer.writeByte('=');
-        try writeTextValue(writer, @field(record, field.name));
+        try std.json.Stringify.value(@field(record, field.name), .{}, writer);
     }
 }
 
-fn writePrettyRecordBody(writer: *std.Io.Writer, record: RequestRecord) !void {
-    try writer.print("[{d}] {s} ", .{ record.timestamp_ms, prettyLevel(record.level) });
-    if (record.method) |method| {
-        try writer.writeAll(method);
+fn writePrettyLevel(writer: *std.Io.Writer, value: anytype) !void {
+    if (@TypeOf(value) == []const u8) {
+        try writer.writeAll(prettyLevel(value));
     } else {
-        try writer.writeByte('-');
+        try writePrettyHeaderValue(writer, value);
     }
-    try writer.writeByte(' ');
-    if (record.target) |target| {
-        try std.json.Stringify.value(target, .{}, writer);
-    } else {
-        try writer.writeByte('-');
-    }
-    try writer.writeAll(" -> ");
-    if (record.status) |status| {
-        try writer.print("{d}", .{status});
-    } else if (record.error_name) |error_name| {
-        try writer.print("error={s}", .{error_name});
-    } else {
-        try writer.writeByte('-');
-    }
-    try writer.print(" ({d}ms)", .{record.duration_ms});
 }
 
-fn writeTextValue(writer: *std.Io.Writer, value: anytype) !void {
-    switch (@typeInfo(@TypeOf(value))) {
-        .int => try writer.print("{d}", .{value}),
-        .optional => if (value) |unwrapped| {
-            try writeTextValue(writer, unwrapped);
-        } else {
-            try writer.writeAll("null");
-        },
-        .pointer => try std.json.Stringify.value(value, .{}, writer),
-        else => @compileError("unsupported text log field type"),
-    }
+fn writePrettyHeaderValue(writer: *std.Io.Writer, value: anytype) !void {
+    try std.json.Stringify.value(value, .{}, writer);
 }
 
 fn prettyLevel(level: []const u8) []const u8 {
@@ -140,12 +156,11 @@ fn prettyLevel(level: []const u8) []const u8 {
     return level;
 }
 
-test "request records are JSON lines" {
+test "generic records are JSON lines with logger-owned timestamps" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
 
-    try writeJsonRecord(&writer, .{
-        .timestamp_ms = 1_735_689_600_000,
+    try writeRecord(&writer, .json, 1_735_689_600_000, .{
         .level = "info",
         .event = "http.request",
         .method = "GET",
@@ -161,21 +176,20 @@ test "request records are JSON lines" {
     );
 }
 
-test "request records support text and pretty formats" {
+test "generic records support text and pretty formats" {
     var text_buffer: [1024]u8 = undefined;
     var text_writer = std.Io.Writer.fixed(&text_buffer);
-    const record: RequestRecord = .{
-        .timestamp_ms = 1_735_689_600_000,
+    const record = .{
         .level = "info",
         .event = "http.request",
         .method = "GET",
         .target = "/notes/hello",
-        .status = 200,
-        .duration_ms = 3,
-        .error_name = null,
+        .status = @as(?u16, 200),
+        .duration_ms = @as(i64, 3),
+        .error_name = @as(?[]const u8, null),
     };
 
-    try writeTextRecord(&text_writer, record);
+    try writeRecord(&text_writer, .text, 1_735_689_600_000, record);
     try std.testing.expectEqualStrings(
         "timestamp_ms=1735689600000 level=\"info\" event=\"http.request\" method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         text_writer.buffered(),
@@ -183,9 +197,26 @@ test "request records support text and pretty formats" {
 
     var pretty_buffer: [1024]u8 = undefined;
     var pretty_writer = std.Io.Writer.fixed(&pretty_buffer);
-    try writePrettyRecord(&pretty_writer, record);
+    try writeRecord(&pretty_writer, .pretty, 1_735_689_600_000, record);
     try std.testing.expectEqualStrings(
-        "[1735689600000] INFO GET \"/notes/hello\" -> 200 (3ms)\n",
+        "[1735689600000] INFO http.request method=\"GET\" target=\"/notes/hello\" status=200 duration_ms=3 error_name=null\n",
         pretty_writer.buffered(),
+    );
+}
+
+test "pretty formatting accepts a non-request record" {
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+
+    try writeRecord(&writer, .pretty, 42, .{
+        .level = "info",
+        .event = "startup",
+        .component = "runtime",
+        .message = "ready",
+    });
+
+    try std.testing.expectEqualStrings(
+        "[42] INFO startup component=\"runtime\" message=\"ready\"\n",
+        writer.buffered(),
     );
 }

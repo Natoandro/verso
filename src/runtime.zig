@@ -122,8 +122,7 @@ fn logConnectionFailure(
 ) std.Io.Cancelable!void {
     const io = server_context.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    try server_context.logger.request(io, .{
-        .timestamp_ms = std.Io.Clock.now(.real, io).toMilliseconds(),
+    try server_context.logger.log(io, .{
         .level = "warn",
         .event = "http.request",
         .method = null,

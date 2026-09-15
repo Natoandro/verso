@@ -11,8 +11,8 @@ services, and focused verification. Its listed architectural divisions are
 its only subtasks; keep them focused and normally limit them to four.
 
 `[ ]` means not implemented; change it to `[x]` only when the stated outcome
-and every nested division are complete, with a short implementation note or
-PR reference. Public rendering comes before authentication because it is
+and every nested division are complete. Public rendering comes before
+authentication because it is
 anonymous and read-only; earlier editor work remains browser-local and
 creates no unauthenticated server mutation path. Rendering slices construct
 any needed published fixtures through application services for integration
@@ -55,11 +55,11 @@ starting `DOC-001`.
     The runtime uses the pinned `vrischmann/zig-sqlite` wrapper for SQLite
     opening, handles SIGINT/SIGTERM shutdown on Linux, keeps the HTTP listener
     single-process, runs connection handlers through `std.Io.Group.concurrent`,
-    and emits JSON-lines request records to standard error. It also provides
+    and emits structured request records to standard error. It also provides
     the initial `ServerContext`/`RequestContext` boundary and a composable
     `Layer`/`Pipeline` API whose handlers can delegate or terminate requests;
-    request logging is implemented as the first pipeline layer.
-  - [ ] **Runtime directories and default configuration:** After the `serve`
+    request logging is the first pipeline layer.
+  - [x] **Runtime directories and default configuration:** After the `serve`
     runtime exists, implement its startup preparation that recursively creates
     missing parent directories for the configured SQLite database, filesystem
     assets, and derived HTML cache, while failing clearly on unusable paths.

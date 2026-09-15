@@ -216,7 +216,9 @@ before or after delegation. This is a small request-pipeline boundary, not a
 general dependency-injection container; concrete dependencies should be added
 when the corresponding application service is implemented. Request logging is
 one such layer and surrounds the request pipeline so it can record both
-successful responses and downstream failures.
+successful responses and downstream failures. It uses the shared structured
+logging framework, which accepts arbitrary record structs and assigns their
+wall-clock timestamps at write time.
 
 ---
 
