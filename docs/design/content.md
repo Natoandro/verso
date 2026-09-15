@@ -196,6 +196,25 @@ A text section should remain a reasonably large semantic unit.
 
 ---
 
+### 3.1 Bibliographic References
+
+Each document version owns a collection of bibliographic reference records.
+Every record has a short name that is unique within that version. Future
+Markdown citation syntax resolves a citation's short name only against the
+loaded version's reference collection; it does not address a publication-wide
+or external bibliography.
+
+The reference's bibliographic metadata is stored as a structured object. Its
+precise fields, supported import formats, citation syntax, citation styles,
+and bibliography rendering are intentionally deferred. This storage model
+does not prescribe how citations are numbered or sorted.
+
+Reference records are version-owned nested content. Creating a next-version
+draft copies them with independent identities, so changing a draft's
+bibliography cannot alter its published or archived source version.
+
+---
+
 ## 4. Image Sections
 
 An image section references an asset rather than embedding image bytes in SQLite.
@@ -600,11 +619,11 @@ fields.
 
 Publication versions are immutable. Once a version is published, no operation
 may change its publication content or identity: this includes metadata,
-sections, nested objects, asset references, and interactive-module
-configuration. A published version is never edited in place, and an archived
-version is never edited in place. The deliberately mutable
-`archive_accessible` field is an access-control exception; changing it does
-not change the version's content or publication identity.
+sections, nested objects, bibliographic references, asset references, and
+interactive-module configuration. A published version is never edited in
+place, and an archived version is never edited in place. The deliberately
+mutable `archive_accessible` field is an access-control exception; changing it
+does not change the version's content or publication identity.
 
 To edit a published document, an application service must create the next
 version explicitly from the currently published version:

@@ -150,6 +150,25 @@ CREATE TABLE sections (
 
 CREATE INDEX sections_by_version_position ON sections (version_id, position);
 
+-- Bibliographic records are owned by a document version. Their short names
+-- are the version-local identifiers that future Markdown citation syntax will
+-- resolve; the structured metadata format and citation rendering are defined
+-- separately from this canonical storage model.
+CREATE TABLE version_references (
+    id INTEGER PRIMARY KEY,
+    version_id INTEGER NOT NULL REFERENCES document_versions(id) ON DELETE CASCADE,
+    short_name TEXT NOT NULL COLLATE NOCASE CHECK (
+        length(short_name) BETWEEN 1 AND 128
+        AND short_name = trim(short_name)
+    ),
+    data TEXT NOT NULL CHECK (json_valid(data) AND json_type(data) = 'object'),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    created_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+    UNIQUE (version_id, short_name)
+) STRICT;
+
 CREATE TABLE working_revisions (
     id INTEGER PRIMARY KEY,
     version_id INTEGER NOT NULL REFERENCES document_versions(id) ON DELETE CASCADE,
@@ -599,6 +618,37 @@ FOR EACH ROW WHEN EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'immutable version sections cannot be deleted');
+END;
+
+CREATE TRIGGER version_references_cannot_modify_immutable_version
+BEFORE INSERT ON version_references
+FOR EACH ROW WHEN EXISTS (
+    SELECT 1 FROM document_versions
+    WHERE id = NEW.version_id AND state IN ('published', 'archived')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'cannot add references to immutable version');
+END;
+
+CREATE TRIGGER version_references_cannot_update_immutable_version
+BEFORE UPDATE ON version_references
+FOR EACH ROW WHEN EXISTS (
+    SELECT 1 FROM document_versions
+    WHERE id IN (OLD.version_id, NEW.version_id)
+      AND state IN ('published', 'archived')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'immutable version references cannot be changed');
+END;
+
+CREATE TRIGGER version_references_cannot_delete_immutable_version
+BEFORE DELETE ON version_references
+FOR EACH ROW WHEN EXISTS (
+    SELECT 1 FROM document_versions
+    WHERE id = OLD.version_id AND state IN ('published', 'archived')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'immutable version references cannot be deleted');
 END;
 
 CREATE TRIGGER version_authors_cannot_modify_immutable_version
