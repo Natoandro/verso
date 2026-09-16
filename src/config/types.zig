@@ -110,13 +110,13 @@ pub const Config = struct {
         allow_publish: bool = false,
     };
 
-    pub fn parse(allocator: std.mem.Allocator, input: []const u8) !toml.Parsed(Config) {
+    pub fn parse(allocator: std.mem.Allocator, toml_source: []const u8) !toml.Parsed(Config) {
         var parser = toml.Parser(Config).init(allocator);
         defer parser.deinit();
 
-        var parsed = try parser.parseString(input);
-        errdefer parsed.deinit();
-        return parsed;
+        var parsed_config = try parser.parseString(toml_source);
+        errdefer parsed_config.deinit();
+        return parsed_config;
     }
 
     pub fn writeDefault(writer: *std.Io.Writer) !void {

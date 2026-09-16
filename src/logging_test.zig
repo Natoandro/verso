@@ -12,7 +12,7 @@ test "generic records are JSON lines with logger-owned timestamps" {
         .method = "GET",
         .target = "/notes/hello?draft=true",
         .status = 200,
-        .duration_ms = DurationMilliseconds{ .value = 3.25 },
+        .duration_ms = DurationMilliseconds{ .milliseconds = 3.25 },
         .error_name = null,
     });
 
@@ -32,7 +32,7 @@ test "generic records preserve message in text and use it as the pretty headline
         .method = @as([]const u8, "GET"),
         .target = @as([]const u8, "/notes/hello"),
         .status = @as(?u16, 200),
-        .duration_ms = DurationMilliseconds{ .value = 3.25 },
+        .duration_ms = DurationMilliseconds{ .milliseconds = 3.25 },
         .error_name = @as(?[]const u8, null),
     };
 
@@ -54,7 +54,7 @@ test "generic records preserve message in text and use it as the pretty headline
 test "duration display switches to seconds for long requests" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try (DurationMilliseconds{ .value = 1_234_567 }).logFormat(&writer);
+    try (DurationMilliseconds{ .milliseconds = 1_234_567 }).logFormat(&writer);
     try std.testing.expectEqualStrings(
         "1.23457e3s",
         writer.buffered(),
@@ -115,7 +115,7 @@ test "null fields can be omitted from every format" {
         .event = @as([]const u8, "http.request"),
         .status = @as(?u16, null),
         .error_name = @as(?[]const u8, null),
-        .duration_ms = DurationMilliseconds{ .value = 3.25 },
+        .duration_ms = DurationMilliseconds{ .milliseconds = 3.25 },
     };
 
     var json_buffer: [1024]u8 = undefined;

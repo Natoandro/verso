@@ -5,12 +5,12 @@ pub fn resolveMigrationDirectory(
     allocator: std.mem.Allocator,
     configured_path: []const u8,
 ) ![]u8 {
-    var directory = std.Io.Dir.cwd().openDir(io, configured_path, .{}) catch |err| switch (err) {
+    var directory = std.Io.Dir.cwd().openDir(io, configured_path, .{}) catch |path_error| switch (path_error) {
         error.FileNotFound => null,
-        else => return err,
+        else => return path_error,
     };
-    if (directory) |*value| {
-        value.close(io);
+    if (directory) |*directory_handle| {
+        directory_handle.close(io);
         return allocator.dupe(u8, configured_path);
     }
 

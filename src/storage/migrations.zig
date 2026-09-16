@@ -37,15 +37,15 @@ pub const MigrationContext = struct {
     }
 
     pub fn migrateUp(self: *MigrationContext) !usize {
-        return self.migrateUpInner() catch |err| {
+        return self.migrateUpInner() catch |migration_error| {
             self.logger.log(self.io, .{
                 .level = "error",
                 .event = "migrations.failed",
                 .message = "migration run failed",
                 .directory = self.directory_path,
-                .error_name = @errorName(err),
+                .error_name = @errorName(migration_error),
             }) catch {};
-            return err;
+            return migration_error;
         };
     }
 
@@ -129,14 +129,14 @@ fn loadMigrationFiles(
     while (try iterator.next(io)) |entry| {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".sql")) continue;
 
-        const parsed = try parseFilename(entry.name);
-        const name = try allocator.dupe(u8, parsed.name);
-        errdefer allocator.free(name);
+        const parsed_filename = try parseFilename(entry.name);
+        const migration_name = try allocator.dupe(u8, parsed_filename.name);
+        errdefer allocator.free(migration_name);
         const sql = try directory.readFileAlloc(io, entry.name, allocator, .limited(16 * 1024 * 1024));
         errdefer allocator.free(sql);
         try files.append(allocator, .{
-            .version = parsed.version,
-            .name = name,
+            .version = parsed_filename.version,
+            .name = migration_name,
             .sql = sql,
         });
     }
@@ -194,11 +194,11 @@ fn applyMigration(database: *sqlite.Db, allocator: std.mem.Allocator, migration:
         .{},
         .{migration.version},
     );
-    if (applied) |value| {
-        defer allocator.free(value.name.data);
-        defer allocator.free(value.checksum_sha256.data);
-        if (!std.mem.eql(u8, value.name.data, migration.name) or
-            !std.mem.eql(u8, value.checksum_sha256.data, &checksum)) return error.MigrationDrift;
+    if (applied) |applied_migration| {
+        defer allocator.free(applied_migration.name.data);
+        defer allocator.free(applied_migration.checksum_sha256.data);
+        if (!std.mem.eql(u8, applied_migration.name.data, migration.name) or
+            !std.mem.eql(u8, applied_migration.checksum_sha256.data, &checksum)) return error.MigrationDrift;
         try database.execMulti("COMMIT;", .{});
         return false;
     }
@@ -238,9 +238,9 @@ fn executeScript(database: *sqlite.Db, allocator: std.mem.Allocator, sql: []cons
 }
 
 test "migration filenames provide version and name" {
-    const parsed = try parseFilename("0007_add_authors.sql");
-    try std.testing.expectEqual(@as(i64, 7), parsed.version);
-    try std.testing.expectEqualStrings("add_authors", parsed.name);
+    const parsed_filename = try parseFilename("0007_add_authors.sql");
+    try std.testing.expectEqual(@as(i64, 7), parsed_filename.version);
+    try std.testing.expectEqualStrings("add_authors", parsed_filename.name);
 }
 
 test "migration filenames reject version zero and malformed names" {

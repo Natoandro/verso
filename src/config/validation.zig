@@ -1,33 +1,33 @@
 const std = @import("std");
 
-pub fn isSafeText(value: []const u8) bool {
-    if (value.len == 0 or !std.unicode.utf8ValidateSlice(value)) return false;
-    for (value) |char| {
+pub fn isSafeText(text: []const u8) bool {
+    if (text.len == 0 or !std.unicode.utf8ValidateSlice(text)) return false;
+    for (text) |char| {
         if (std.ascii.isControl(char)) return false;
     }
     return true;
 }
 
-pub fn isSafeToken(value: []const u8) bool {
-    if (!isSafeText(value)) return false;
-    for (value) |char| {
+pub fn isSafeToken(token: []const u8) bool {
+    if (!isSafeText(token)) return false;
+    for (token) |char| {
         if (std.ascii.isWhitespace(char)) return false;
     }
     return true;
 }
 
-pub fn isValidPath(value: []const u8) bool {
-    if (!isSafeText(value)) return false;
+pub fn isValidPath(path: []const u8) bool {
+    if (!isSafeText(path)) return false;
 
-    var components = std.fs.path.componentIterator(value);
+    var components = std.fs.path.componentIterator(path);
     while (components.next()) |component| {
         if (std.mem.eql(u8, component.name, "..")) return false;
     }
     return true;
 }
 
-pub fn isValidBaseUrl(value: []const u8) bool {
-    const uri = std.Uri.parse(value) catch return false;
+pub fn isValidBaseUrl(url: []const u8) bool {
+    const uri = std.Uri.parse(url) catch return false;
     if (!std.ascii.eqlIgnoreCase(uri.scheme, "http") and
         !std.ascii.eqlIgnoreCase(uri.scheme, "https"))
     {
@@ -37,14 +37,14 @@ pub fn isValidBaseUrl(value: []const u8) bool {
     return false;
 }
 
-pub fn isValidServerHost(value: []const u8) bool {
-    if (std.Io.net.IpAddress.parse(value, 0)) |_| return true else |_| {}
-    std.Io.net.HostName.validate(value) catch return false;
+pub fn isValidServerHost(host: []const u8) bool {
+    if (std.Io.net.IpAddress.parse(host, 0)) |_| return true else |_| {}
+    std.Io.net.HostName.validate(host) catch return false;
     return true;
 }
 
-pub fn isLoopbackHost(value: []const u8) bool {
-    if (std.Io.net.IpAddress.parse(value, 0)) |address| {
+pub fn isLoopbackHost(host: []const u8) bool {
+    if (std.Io.net.IpAddress.parse(host, 0)) |address| {
         return switch (address) {
             .ip4 => |ip4| ip4.bytes[0] == 127,
             .ip6 => |ip6| std.mem.eql(u8, &ip6.bytes, &.{
@@ -54,27 +54,27 @@ pub fn isLoopbackHost(value: []const u8) bool {
         };
     } else |_| {}
 
-    return std.ascii.eqlIgnoreCase(value, "localhost");
+    return std.ascii.eqlIgnoreCase(host, "localhost");
 }
 
-pub fn isLoopbackBaseUrl(value: []const u8) bool {
-    const uri = std.Uri.parse(value) catch return false;
+pub fn isLoopbackBaseUrl(url: []const u8) bool {
+    const uri = std.Uri.parse(url) catch return false;
     var host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
     const host = uri.getHost(&host_buffer) catch return false;
     return isLoopbackHost(host.bytes);
 }
 
-pub fn isValidDatabaseUrl(value: []const u8) bool {
-    if (!isSafeText(value)) return false;
-    if (std.mem.indexOfScalar(u8, value, ':') == null) return isValidPath(value);
+pub fn isValidDatabaseUrl(database_url: []const u8) bool {
+    if (!isSafeText(database_url)) return false;
+    if (std.mem.indexOfScalar(u8, database_url, ':') == null) return isValidPath(database_url);
 
-    const uri = std.Uri.parse(value) catch return false;
+    const uri = std.Uri.parse(database_url) catch return false;
     if (!std.ascii.eqlIgnoreCase(uri.scheme, "sqlite")) return false;
     if (uri.path.isEmpty() and uri.host == null) return false;
 
     var path_buffer: [1024]u8 = undefined;
-    const path = uri.path.toRaw(&path_buffer) catch return false;
-    return isValidPath(path);
+    const database_path = uri.path.toRaw(&path_buffer) catch return false;
+    return isValidPath(database_path);
 }
 
 test "path validation rejects traversal while allowing configured roots" {
