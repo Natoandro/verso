@@ -150,7 +150,24 @@ fn migrateUp(init: std.process.Init) !void {
     var database = try verso.storage.sqlite.Database.open(init.gpa, database_path);
     defer database.close();
 
-    const applied = try database.migrateUp(init.io, init.gpa);
+    const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
+    var logger = logging.Logger.initWithOptions(
+        init.gpa,
+        loaded_config.value.effectiveLoggingFormat(stderr_is_tty),
+        .{
+            .use_color = stderr_is_tty,
+            .omit_null_fields = loaded_config.value.logging.omit_null_fields,
+        },
+    );
+    const migration_directory = try verso.storage.migrations.runtimeDirectoryPath(init.io, init.gpa);
+    defer init.gpa.free(migration_directory);
+    var migration_context = database.migrationContext(
+        init.io,
+        init.gpa,
+        migration_directory,
+        &logger,
+    );
+    const applied = try migration_context.migrateUp();
     var buffer: [128]u8 = undefined;
     var writer = std.Io.File.stdout().writer(init.io, &buffer);
     if (applied == 0) {

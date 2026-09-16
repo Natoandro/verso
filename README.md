@@ -95,8 +95,10 @@ The server uses built-in defaults when `verso.toml` is absent. Command-line
 configuration options are planned to take precedence over environment
 variables, the optional configuration file, and built-in defaults.
 `serve` creates missing configured data, asset, and cache directories during
-startup, runs each accepted request through the threaded Zig I/O runtime, and
-writes one structured log record per request to standard error. The logging
+startup, applies pending migrations before listening, runs each accepted
+request through the threaded Zig I/O runtime, and writes structured records to
+standard error. Migration discovery and application are logged alongside the
+other startup events. The logging
 framework accepts arbitrary structured records and adds an ISO-8601 UTC
 timestamp at write time. Logging defaults to JSON in production and to pretty
 output with terminal colors for development TTYs (or plain text when stderr is

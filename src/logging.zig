@@ -87,7 +87,7 @@ pub const Logger = struct {
         );
 
         var buffer: [4096]u8 = undefined;
-        var writer = std.Io.File.stderr().writer(io, &buffer);
+        var writer = std.Io.File.stderr().writerStreaming(io, &buffer);
         try writer.interface.writeAll(output.written());
         try writer.flush();
     }

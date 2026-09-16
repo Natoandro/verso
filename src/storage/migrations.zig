@@ -1,11 +1,97 @@
 const std = @import("std");
 const sqlite = @import("sqlite");
 const embedded = @import("embedded_migrations");
+const logging = @import("../logging.zig");
 
 pub const Migration = struct {
     version: i64,
     name: []const u8,
     sql: []const u8,
+};
+
+pub const MigrationContext = struct {
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    directory_path: []const u8,
+    database: *sqlite.Db,
+    logger: *logging.Logger,
+
+    pub fn init(
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        directory_path: []const u8,
+        database: *sqlite.Db,
+        logger: *logging.Logger,
+    ) MigrationContext {
+        return .{
+            .io = io,
+            .allocator = allocator,
+            .directory_path = directory_path,
+            .database = database,
+            .logger = logger,
+        };
+    }
+
+    pub fn up(self: *MigrationContext) !usize {
+        return self.migrateUp();
+    }
+
+    pub fn migrateUp(self: *MigrationContext) !usize {
+        return self.migrateUpInner() catch |err| {
+            self.logger.log(self.io, .{
+                .level = "error",
+                .event = "migrations.failed",
+                .message = "migration run failed",
+                .directory = self.directory_path,
+                .error_name = @errorName(err),
+            }) catch {};
+            return err;
+        };
+    }
+
+    fn migrateUpInner(self: *MigrationContext) !usize {
+        try executeScript(self.database, self.allocator, embedded.bootstrap_sql);
+
+        var files = try loadMigrationFiles(self.io, self.allocator, self.directory_path);
+        defer files.deinit();
+        self.logger.log(self.io, .{
+            .level = "debug",
+            .event = "migrations.loaded",
+            .message = "loaded migrations",
+            .directory = self.directory_path,
+            .migration_count = files.items.len,
+        }) catch {};
+
+        var applied_count: usize = 0;
+        for (files.items) |migration| {
+            if (try applyMigration(self.database, self.allocator, migration)) {
+                applied_count += 1;
+                self.logger.log(self.io, .{
+                    .level = "info",
+                    .event = "migration.applied",
+                    .message = "applied migration",
+                    .version = migration.version,
+                    .name = migration.name,
+                }) catch {};
+            } else {
+                self.logger.log(self.io, .{
+                    .level = "debug",
+                    .event = "migration.verified",
+                    .message = "migration already applied",
+                    .version = migration.version,
+                    .name = migration.name,
+                }) catch {};
+            }
+        }
+
+        self.logger.log(self.io, .{
+            .level = "debug",
+            .event = "migrations.completed",
+            .message = "migration run completed",
+            .applied_count = applied_count,
+        }) catch {};
+        return applied_count;
+    }
 };
 
 pub fn runtimeDirectoryPath(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
@@ -37,24 +123,6 @@ const MigrationFiles = struct {
         self.* = undefined;
     }
 };
-
-pub fn migrateUp(
-    database: *sqlite.Db,
-    io: std.Io,
-    allocator: std.mem.Allocator,
-    directory_path: []const u8,
-) !usize {
-    try executeScript(database, allocator, embedded.bootstrap_sql);
-
-    var files = try loadMigrationFiles(io, allocator, directory_path);
-    defer files.deinit();
-
-    var applied_count: usize = 0;
-    for (files.items) |migration| {
-        if (try applyMigration(database, allocator, migration)) applied_count += 1;
-    }
-    return applied_count;
-}
 
 fn loadMigrationFiles(
     io: std.Io,
@@ -202,9 +270,11 @@ test "migration is recorded and repeatable" {
         .open_flags = .{ .write = true, .create = true },
     });
     defer database.deinit();
+    var logger = logging.Logger.init(std.testing.allocator, .text);
+    var context = MigrationContext.init(std.testing.io, std.testing.allocator, "migrations", &database, &logger);
 
-    try std.testing.expectEqual(@as(usize, 1), try migrateUp(&database, std.testing.io, std.testing.allocator, "migrations"));
-    try std.testing.expectEqual(@as(usize, 0), try migrateUp(&database, std.testing.io, std.testing.allocator, "migrations"));
+    try std.testing.expectEqual(@as(usize, 1), try context.migrateUp());
+    try std.testing.expectEqual(@as(usize, 0), try context.up());
 
     const count = try database.one(i64, "SELECT count(*) FROM schema_migrations", .{}, .{});
     try std.testing.expectEqual(@as(?i64, 1), count);
@@ -224,12 +294,14 @@ test "migration ledger rejects checksum drift" {
         .open_flags = .{ .write = true, .create = true },
     });
     defer database.deinit();
-    _ = try migrateUp(&database, std.testing.io, std.testing.allocator, "migrations");
+    var logger = logging.Logger.init(std.testing.allocator, .text);
+    var context = MigrationContext.init(std.testing.io, std.testing.allocator, "migrations", &database, &logger);
+    _ = try context.migrateUp();
 
     try database.exec(
         "UPDATE schema_migrations SET checksum_sha256 = ? WHERE version = 1",
         .{},
         .{"0000000000000000000000000000000000000000000000000000000000000000"},
     );
-    try std.testing.expectError(error.MigrationDrift, migrateUp(&database, std.testing.io, std.testing.allocator, "migrations"));
+    try std.testing.expectError(error.MigrationDrift, context.migrateUp());
 }

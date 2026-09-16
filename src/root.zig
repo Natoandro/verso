@@ -1,6 +1,7 @@
 pub const config = @import("config.zig");
 pub const logging = @import("logging.zig");
 pub const storage = struct {
+    pub const migrations = @import("storage/migrations.zig");
     pub const sqlite = @import("storage/sqlite.zig");
 };
 

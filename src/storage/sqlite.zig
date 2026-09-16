@@ -1,6 +1,7 @@
 const std = @import("std");
 const sqlite = @import("sqlite");
 const migrations = @import("migrations.zig");
+const logging = @import("../logging.zig");
 
 pub const Database = struct {
     handle: sqlite.Db,
@@ -20,14 +21,14 @@ pub const Database = struct {
         return database;
     }
 
-    pub fn migrateUp(
+    pub fn migrationContext(
         self: *Database,
         io: std.Io,
         allocator: std.mem.Allocator,
-    ) !usize {
-        const directory_path = try migrations.runtimeDirectoryPath(io, allocator);
-        defer allocator.free(directory_path);
-        return migrations.migrateUp(&self.handle, io, allocator, directory_path);
+        directory_path: []const u8,
+        logger: *logging.Logger,
+    ) migrations.MigrationContext {
+        return migrations.MigrationContext.init(io, allocator, directory_path, &self.handle, logger);
     }
 
     pub fn close(self: *Database) void {
