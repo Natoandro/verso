@@ -83,44 +83,11 @@ verso serve
 ```
 
 `config dump-default` prints a starter configuration without writing files.
-`migrate up` creates the configured database parent when needed, applies
-pending forward-only SQLite migrations, and records their checksums. Re-running
-it is safe; migration rollback uses a verified database backup rather than a
-`migrate down` command. The executable embeds only the migration-ledger
-bootstrap; numbered migration SQL files are read from the runtime `migrations/`
-directory and installed under the build install prefix. Runtime files use the
-`<version>_<name>.sql` convention; the runner derives both ledger fields from
-the filename and applies them in version order.
-The migration directory is configurable with `migrations.path`; the default
-path is `migrations`, with the installed runtime directory used as a fallback.
-`migrations.run_on_startup` defaults to `true` and can disable migration
-application before the server starts listening. Environment and CLI overrides
-for these settings are deferred.
-This default suits the current SQLite, single-service deployment. If a future
-deployment uses a shared target database or multiple service replicas, disable
-startup migrations and run `verso migrate up` once as a serialized deployment
-pipeline step before rolling out the replicas.
-The server uses built-in defaults when `verso.toml` is absent. Command-line
-configuration options are planned to take precedence over environment
-variables, the optional configuration file, and built-in defaults.
-`serve` creates missing configured data, asset, and cache directories during
-startup, applies pending migrations before listening, runs each accepted
-request through the threaded Zig I/O runtime, and writes structured records to
-standard error. Migration discovery and application are logged alongside the
-other startup events. The logging
-framework accepts arbitrary structured records and adds an ISO-8601 UTC
-timestamp at write time. Logging defaults to JSON in production and to pretty
-output with terminal colors for development TTYs (or plain text when stderr is
-redirected). Null-valued fields are omitted by default; set
-`logging.omit_null_fields = false` when consumers require explicit nulls. The
-conventional `event` field identifies a record for machines, while `message`
-provides its human-readable description; pretty output uses `message` as its
-headline when present. A record may instead provide a non-empty `format`
-template to build the human-readable message from named record fields; fields
-used by that template are omitted from trailing fields in text and pretty
-output. Record writers use an immutable `comptime format` field; runtime
-templates are not supported by the initial implementation. JSON preserves
-structured fields and omits the comptime `format` field.
+The server uses built-in defaults when `verso.toml` is absent and creates its
+configured runtime directories during startup.
+
+See [`docs/design/operations.md`](docs/design/operations.md) for migration,
+configuration, deployment, and logging details.
 
 ## Development
 

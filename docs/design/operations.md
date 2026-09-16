@@ -254,8 +254,8 @@ Relative paths are resolved from the process working directory. The default
 directory, allowing an installed binary to find its packaged migrations. The
 `migrate up` command always uses this path. `migrations.run_on_startup` defaults
 to `true`; when enabled, `serve` applies pending migrations before it binds the
-HTTP listener. Environment and command-line overrides for these settings are
-deferred.
+HTTP listener. Environment overrides are applied before validation; command-line
+overrides remain deferred.
 
 This startup default is appropriate for the initial SQLite, single-service
 deployment. If Verso later targets a shared database or supports multiple
