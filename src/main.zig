@@ -150,10 +150,14 @@ fn migrateUp(init: std.process.Init) !void {
     var database = try verso.storage.sqlite.Database.open(init.gpa, database_path);
     defer database.close();
 
-    const applied = try database.migrateUp(init.gpa);
+    const applied = try database.migrateUp(init.io, init.gpa);
     var buffer: [128]u8 = undefined;
     var writer = std.Io.File.stdout().writer(init.io, &buffer);
-    try writer.interface.writeAll(if (applied) "Applied migration 0001_initial.\n" else "Database is up to date.\n");
+    if (applied == 0) {
+        try writer.interface.writeAll("Database is up to date.\n");
+    } else {
+        try writer.interface.print("Applied {d} migration{s}.\n", .{ applied, if (applied == 1) "" else "s" });
+    }
     try writer.flush();
 }
 

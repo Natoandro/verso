@@ -86,7 +86,11 @@ verso serve
 `migrate up` creates the configured database parent when needed, applies
 pending forward-only SQLite migrations, and records their checksums. Re-running
 it is safe; migration rollback uses a verified database backup rather than a
-`migrate down` command.
+`migrate down` command. The executable embeds only the migration-ledger
+bootstrap; numbered migration SQL files are read from the runtime `migrations/`
+directory and installed under the build install prefix. Runtime files use the
+`<version>_<name>.sql` convention; the runner derives both ledger fields from
+the filename and applies them in version order.
 The server uses built-in defaults when `verso.toml` is absent. Command-line
 configuration options are planned to take precedence over environment
 variables, the optional configuration file, and built-in defaults.

@@ -15,8 +15,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).module("sqlite");
-    const migrations = b.addModule("migrations", .{
-        .root_source_file = b.path("migrations/embedded.zig"),
+    const embedded_migrations = b.addModule("embedded_migrations", .{
+        .root_source_file = b.path("src/migrations/embedded.zig"),
         .target = target,
     });
 
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "toml", .module = toml },
             .{ .name = "sqlite", .module = sqlite },
-            .{ .name = "migrations", .module = migrations },
+            .{ .name = "embedded_migrations", .module = embedded_migrations },
         },
     });
 
@@ -44,6 +44,11 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(exe);
+    b.installDirectory(.{
+        .source_dir = b.path("migrations"),
+        .install_dir = .prefix,
+        .install_subdir = "migrations",
+    });
 
     const run_step = b.step("run", "Run the app");
     const run_cmd = b.addRunArtifact(exe);

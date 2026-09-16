@@ -1,4 +1,4 @@
--- Bootstrap metadata for Verso's migration runner.
+-- Bootstrap metadata for the generic migration runner.
 --
 -- WAL mode and per-connection safety PRAGMAs are configured by Database.open.
 -- This idempotent ledger setup runs before migrations are inspected.
