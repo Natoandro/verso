@@ -51,33 +51,77 @@ fn applyEnvironment(
     app_config: *config.Config,
     environ_map: ?*const std.process.Environ.Map,
 ) !void {
-    try overrideEnum(config.Environment, environ_map, "VERSO_RUNTIME_ENVIRONMENT", &app_config.runtime.environment);
-    try overrideEnum(config.LoggingFormat, environ_map, "VERSO_LOGGING_FORMAT", &app_config.logging.format);
-    try overrideBool(environ_map, "VERSO_LOGGING_OMIT_NULL_FIELDS", &app_config.logging.omit_null_fields);
-    try overrideString(allocator, environ_map, "VERSO_SITE_NAME", &app_config.site.name);
-    try overrideString(allocator, environ_map, "VERSO_SITE_BASE_URL", &app_config.site.base_url);
-    try overrideString(allocator, environ_map, "VERSO_SERVER_HOST", &app_config.server.host);
-    try overrideUnsigned(u16, environ_map, "VERSO_SERVER_PORT", &app_config.server.port);
-    try overrideString(allocator, environ_map, "VERSO_DATABASE_URL", &app_config.database.url);
+    try applyEnvironmentStruct(allocator, app_config, environ_map, "VERSO_");
 
     if (environment.get(environ_map, "VERSO_STORAGE_FS_PATH")) |asset_path| {
         switch (app_config.storage) {
             .filesystem => |*filesystem| filesystem.path = try allocator.dupe(u8, asset_path),
         }
     }
-    try overrideString(allocator, environ_map, "VERSO_CACHE_PATH", &app_config.cache.path);
+}
 
-    try overrideEnum(config.UiLanguage, environ_map, "VERSO_UI_LANGUAGE", &app_config.ui.language);
-    try overrideString(allocator, environ_map, "VERSO_UI_THEME", &app_config.ui.theme);
-    try overrideString(allocator, environ_map, "VERSO_UI_LOGO", &app_config.ui.logo);
-    try overrideString(allocator, environ_map, "VERSO_UI_ICON", &app_config.ui.icon);
-    try overrideString(allocator, environ_map, "VERSO_UI_LOGO_WORDMARK", &app_config.ui.logo_wordmark);
+fn applyEnvironmentStruct(
+    allocator: std.mem.Allocator,
+    target: anytype,
+    environ_map: ?*const std.process.Environ.Map,
+    comptime prefix: []const u8,
+) !void {
+    const Target = @TypeOf(target);
+    const Struct = @typeInfo(Target).pointer.child;
 
-    try overrideBool(environ_map, "VERSO_FEATURES_MATH", &app_config.features.math);
-    try overrideBool(environ_map, "VERSO_FEATURES_INTERACTIVE_SECTIONS", &app_config.features.interactive_sections);
-    try overrideUnsigned(u32, environ_map, "VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", &app_config.editor.local_preview_debounce_ms);
-    try overrideBool(environ_map, "VERSO_MCP_ENABLED", &app_config.mcp.enabled);
-    try overrideBool(environ_map, "VERSO_MCP_ALLOW_PUBLISH", &app_config.mcp.allow_publish);
+    inline for (@typeInfo(Struct).@"struct".fields) |field| {
+        // The storage union has a deliberately stable, custom environment
+        // variable name: VERSO_STORAGE_FS_PATH.
+        if (comptime Struct == config.Config and std.mem.eql(u8, field.name, "storage")) continue;
+
+        const environment_name = comptime makeEnvironmentName(prefix, field.name);
+        const field_target = &@field(target.*, field.name);
+
+        switch (@typeInfo(field.type)) {
+            .@"struct" => {
+                const nested_prefix = comptime std.fmt.comptimePrint("{s}_", .{environment_name});
+                try applyEnvironmentStruct(allocator, field_target, environ_map, nested_prefix);
+            },
+            .@"union" => @compileError("configuration union requires a custom environment override"),
+            else => try overrideValue(allocator, environ_map, environment_name[0..], field_target),
+        }
+    }
+}
+
+fn makeEnvironmentName(comptime prefix: []const u8, comptime field_name: []const u8) [prefix.len + field_name.len]u8 {
+    var result: [prefix.len + field_name.len]u8 = undefined;
+    @memcpy(result[0..prefix.len], prefix);
+    inline for (field_name, 0..) |character, index| {
+        result[prefix.len + index] = std.ascii.toUpper(character);
+    }
+    return result;
+}
+
+fn overrideValue(
+    allocator: std.mem.Allocator,
+    environ_map: ?*const std.process.Environ.Map,
+    name: []const u8,
+    target: anytype,
+) !void {
+    const T = @TypeOf(target.*);
+
+    if (T == bool) {
+        return overrideBool(environ_map, name, target);
+    }
+    if (T == []const u8 or T == ?[]const u8) {
+        return overrideString(allocator, environ_map, name, target);
+    }
+
+    switch (@typeInfo(T)) {
+        .int => |int| {
+            if (int.signedness != .unsigned) {
+                @compileError("environment overrides only support unsigned integer fields");
+            }
+            return overrideUnsigned(T, environ_map, name, target);
+        },
+        .@"enum" => return overrideEnum(T, environ_map, name, target),
+        else => @compileError("configuration field requires a custom environment override"),
+    }
 }
 
 fn overrideString(

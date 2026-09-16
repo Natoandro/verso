@@ -208,6 +208,8 @@ test "environment overrides take precedence over TOML" {
     try environ.put("VERSO_SERVER_PORT", "9090");
     try environ.put("VERSO_DATABASE_URL", "./data/environment.db");
     try environ.put("VERSO_STORAGE_FS_PATH", "./data/environment-assets");
+    try environ.put("VERSO_MIGRATIONS_PATH", "./data/environment-migrations");
+    try environ.put("VERSO_MIGRATIONS_RUN_ON_STARTUP", "false");
     try environ.put("VERSO_LOGGING_OMIT_NULL_FIELDS", "false");
     try environ.put("VERSO_FEATURES_MATH", "false");
     try environ.put("VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", "750");
@@ -220,6 +222,8 @@ test "environment overrides take precedence over TOML" {
     try std.testing.expectEqual(@as(u16, 9090), parsed_config.value.server.port);
     try std.testing.expectEqual(false, parsed_config.value.logging.omit_null_fields);
     try std.testing.expectEqualStrings("./data/environment.db", parsed_config.value.database.url);
+    try std.testing.expectEqualStrings("./data/environment-migrations", parsed_config.value.migrations.path);
+    try std.testing.expectEqual(false, parsed_config.value.migrations.run_on_startup);
     try std.testing.expectEqual(false, parsed_config.value.features.math);
     try std.testing.expectEqual(@as(u32, 750), parsed_config.value.editor.local_preview_debounce_ms);
     switch (parsed_config.value.storage) {

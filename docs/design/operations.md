@@ -355,7 +355,7 @@ highest, is built-in defaults, the optional `verso.toml`, environment variables,
 then command-line arguments. The command-line interface is intended to use an
 explicit allowlist of configuration options, and its values win over all other
 sources.
-The application only reads the following explicit allowlist:
+The current environment-variable allowlist is:
 
 | Environment variable | Configuration value |
 | --- | --- |
@@ -367,6 +367,8 @@ The application only reads the following explicit allowlist:
 | `VERSO_SERVER_HOST` | `server.host` |
 | `VERSO_SERVER_PORT` | `server.port` |
 | `VERSO_DATABASE_URL` | `database.url` |
+| `VERSO_MIGRATIONS_PATH` | `migrations.path` |
+| `VERSO_MIGRATIONS_RUN_ON_STARTUP` | `migrations.run_on_startup` |
 | `VERSO_STORAGE_FS_PATH` | `storage.filesystem.path` |
 | `VERSO_CACHE_PATH` | `cache.path` |
 | `VERSO_UI_LANGUAGE` | `ui.language` |
@@ -382,7 +384,11 @@ The application only reads the following explicit allowlist:
 
 Boolean overrides must be exactly `true` or `false`; enum and integer values
 use the same lowercase names and decimal representation as the configuration
-file. Unknown variables, including unknown `VERSO_*` variables, are ignored.
+file. The ordinary scalar configuration fields use the uppercase nested field
+path convention shown in the table; the loader derives those mappings at
+compile time. Tagged unions and other fields whose environment name or
+handling differs from that convention are explicit custom overrides. Unknown
+variables, including unknown `VERSO_*` variables, are ignored.
 All overrides are applied before the normal validation pass, so a production
 deployment still requires a public non-loopback base URL even when that value
 is supplied through the environment. Environment-provided database URLs are
