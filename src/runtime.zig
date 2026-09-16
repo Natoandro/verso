@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const config = @import("config.zig");
 const logging = @import("logging.zig");
+const migration_directory = @import("storage/migration_directory.zig");
 const migrations = @import("storage/migrations.zig");
 const database = @import("storage/sqlite.zig");
 const web = @import("web.zig");
@@ -71,16 +72,22 @@ pub fn serve(io: std.Io, allocator: std.mem.Allocator, value: config.Config) !vo
     };
     defer db.close();
 
-    const migration_directory = migrations.runtimeDirectoryPath(io, allocator) catch |err| {
-        logStartupFailure(&logger, io, "migrations", err);
-        return err;
-    };
-    defer allocator.free(migration_directory);
-    var migration_context = db.migrationContext(io, allocator, migration_directory, &logger);
-    _ = migration_context.migrateUp() catch |err| {
-        logStartupFailure(&logger, io, "migrations", err);
-        return err;
-    };
+    if (value.migrations.run_on_startup) {
+        const directory_path = migration_directory.resolveMigrationDirectory(
+            io,
+            allocator,
+            value.migrations.path,
+        ) catch |err| {
+            logStartupFailure(&logger, io, "migrations", err);
+            return err;
+        };
+        defer allocator.free(directory_path);
+        var migration_context = db.migrationContext(io, allocator, directory_path, &logger);
+        _ = migration_context.migrateUp() catch |err| {
+            logStartupFailure(&logger, io, "migrations", err);
+            return err;
+        };
+    }
 
     var address = resolveAddress(io, value.server.host, value.server.port) catch |err| {
         logStartupFailure(&logger, io, "address", err);

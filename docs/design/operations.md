@@ -214,6 +214,10 @@ port = 8080
 [database]
 url = "./data/verso.db"
 
+[migrations]
+path = "migrations"
+run_on_startup = true
+
 [storage.filesystem]
 path = "./data/assets"
 
@@ -243,6 +247,23 @@ allow_publish = false
 production configuration must provide an explicit non-loopback `base_url`, so
 a missing value cannot silently leave the deployment pointing at a local
 address.
+
+`migrations.path` identifies the directory containing runtime migration files.
+Relative paths are resolved from the process working directory. The default
+`migrations` path also falls back to the installed executable's runtime
+directory, allowing an installed binary to find its packaged migrations. The
+`migrate up` command always uses this path. `migrations.run_on_startup` defaults
+to `true`; when enabled, `serve` applies pending migrations before it binds the
+HTTP listener. Environment and command-line overrides for these settings are
+deferred.
+
+This startup default is appropriate for the initial SQLite, single-service
+deployment. If Verso later targets a shared database or supports multiple
+service replicas, deployments should set `migrations.run_on_startup = false`
+and run `verso migrate up` as a separate, serialized deployment-pipeline step
+before rolling out the service. Only one migration runner should operate on a
+target database at a time; application replicas should start after that step
+has completed successfully.
 
 `logging.format` accepts `auto`, `json`, `text`, or `pretty`. The default
 `auto` format uses JSON in production, pretty output when development stderr

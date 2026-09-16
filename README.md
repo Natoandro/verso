@@ -91,6 +91,15 @@ bootstrap; numbered migration SQL files are read from the runtime `migrations/`
 directory and installed under the build install prefix. Runtime files use the
 `<version>_<name>.sql` convention; the runner derives both ledger fields from
 the filename and applies them in version order.
+The migration directory is configurable with `migrations.path`; the default
+path is `migrations`, with the installed runtime directory used as a fallback.
+`migrations.run_on_startup` defaults to `true` and can disable migration
+application before the server starts listening. Environment and CLI overrides
+for these settings are deferred.
+This default suits the current SQLite, single-service deployment. If a future
+deployment uses a shared target database or multiple service replicas, disable
+startup migrations and run `verso migrate up` once as a serialized deployment
+pipeline step before rolling out the replicas.
 The server uses built-in defaults when `verso.toml` is absent. Command-line
 configuration options are planned to take precedence over environment
 variables, the optional configuration file, and built-in defaults.

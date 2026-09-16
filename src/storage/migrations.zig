@@ -94,22 +94,6 @@ pub const MigrationContext = struct {
     }
 };
 
-pub fn runtimeDirectoryPath(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
-    var directory = std.Io.Dir.cwd().openDir(io, "migrations", .{}) catch |err| switch (err) {
-        error.FileNotFound => null,
-        else => return err,
-    };
-    if (directory) |*value| {
-        value.close(io);
-        return allocator.dupe(u8, "migrations");
-    }
-
-    const executable_directory = try std.process.executableDirPathAlloc(io, allocator);
-    defer allocator.free(executable_directory);
-    const install_prefix = std.fs.path.dirname(executable_directory) orelse return error.InvalidExecutablePath;
-    return std.fs.path.join(allocator, &.{ install_prefix, "migrations" });
-}
-
 const MigrationFiles = struct {
     items: []Migration,
     allocator: std.mem.Allocator,

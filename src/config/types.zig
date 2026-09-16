@@ -10,6 +10,7 @@ pub const ConfigError = error{
     MissingBaseUrl,
     InvalidServerHost,
     InvalidDatabaseUrl,
+    InvalidMigrationConfiguration,
     InvalidStoragePath,
     InvalidCachePath,
     InvalidTheme,
@@ -39,6 +40,7 @@ pub const Config = struct {
     site: Site = .{},
     server: Server = .{},
     database: Database = .{},
+    migrations: Migrations = .{},
     storage: Storage = .{ .filesystem = .{} },
     cache: Cache = .{},
     ui: Ui = .{},
@@ -63,6 +65,11 @@ pub const Config = struct {
     pub const Server = struct {
         host: []const u8 = "127.0.0.1",
         port: u16 = 8080,
+    };
+
+    pub const Migrations = struct {
+        path: []const u8 = "migrations",
+        run_on_startup: bool = true,
     };
 
     pub const Database = struct {
@@ -133,6 +140,7 @@ pub const Config = struct {
         }
 
         if (!validation.isValidDatabaseUrl(self.database.url)) return error.InvalidDatabaseUrl;
+        if (!validation.isValidPath(self.migrations.path)) return error.InvalidMigrationConfiguration;
 
         switch (self.storage) {
             .filesystem => |filesystem| {

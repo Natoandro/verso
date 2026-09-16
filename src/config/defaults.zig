@@ -22,6 +22,10 @@ pub const text =
     \\[database]
     \\url = "./data/verso.db"
     \\
+    \\[migrations]
+    \\path = "migrations"
+    \\run_on_startup = true
+    \\
     \\[storage.filesystem]
     \\path = "./data/assets"
     \\

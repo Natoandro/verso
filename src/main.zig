@@ -159,7 +159,11 @@ fn migrateUp(init: std.process.Init) !void {
             .omit_null_fields = loaded_config.value.logging.omit_null_fields,
         },
     );
-    const migration_directory = try verso.storage.migrations.runtimeDirectoryPath(init.io, init.gpa);
+    const migration_directory = try verso.storage.migration_directory.resolveMigrationDirectory(
+        init.io,
+        init.gpa,
+        loaded_config.value.migrations.path,
+    );
     defer init.gpa.free(migration_directory);
     var migration_context = database.migrationContext(
         init.io,

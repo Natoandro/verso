@@ -18,6 +18,10 @@ test "parses and validates a complete configuration" {
         \\[database]
         \\url = './data/verso.db'
         \\
+        \\[migrations]
+        \\path = './schema'
+        \\run_on_startup = false
+        \\
         \\[storage.filesystem]
         \\path = './data/assets'
         \\
@@ -51,6 +55,8 @@ test "parses and validates a complete configuration" {
     try std.testing.expectEqual(types.UiLanguage.en, parsed.value.ui.language);
     try std.testing.expectEqualStrings("en", parsed.value.uiLanguageTag());
     try std.testing.expectEqual(@as(u16, 9090), parsed.value.server.port);
+    try std.testing.expectEqualStrings("./schema", parsed.value.migrations.path);
+    try std.testing.expectEqual(false, parsed.value.migrations.run_on_startup);
     try std.testing.expectEqual(@as(u32, 500), parsed.value.editor.local_preview_debounce_ms);
     switch (parsed.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/assets", filesystem.path),
@@ -163,6 +169,13 @@ test "unsafe configuration is rejected" {
     var traversal = try types.Config.parse(std.testing.allocator, "[database]\nurl = './data/../secrets.db'\n");
     defer traversal.deinit();
     try std.testing.expectError(error.InvalidDatabaseUrl, traversal.value.validate());
+
+    var migration_traversal = try types.Config.parse(
+        std.testing.allocator,
+        "[migrations]\npath = './data/../migrations'\n",
+    );
+    defer migration_traversal.deinit();
+    try std.testing.expectError(error.InvalidMigrationConfiguration, migration_traversal.value.validate());
 }
 
 test "loads a configuration file" {
@@ -183,6 +196,8 @@ test "optional configuration falls back to built-in defaults" {
     try std.testing.expectEqualStrings("Verso", parsed.value.site.name);
     try std.testing.expectEqual(@as(u16, 8080), parsed.value.server.port);
     try std.testing.expectEqualStrings("./data/verso.db", parsed.value.database.url);
+    try std.testing.expectEqualStrings("migrations", parsed.value.migrations.path);
+    try std.testing.expectEqual(true, parsed.value.migrations.run_on_startup);
 }
 
 test "environment overrides take precedence over TOML" {
