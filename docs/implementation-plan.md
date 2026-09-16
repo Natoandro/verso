@@ -24,7 +24,7 @@ interface.
 These are deliberately not feature slices. They must be complete before
 starting `DOC-001`.
 
-- [ ] **BOOT-001 — Application bootstrap**
+- [x] **BOOT-001 — Application bootstrap**
 
   Build the initial executable around validated built-in defaults and an
   optional `verso.toml`, automatic preparation of configured runtime

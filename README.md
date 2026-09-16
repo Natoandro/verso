@@ -5,8 +5,8 @@ and interactive content. It is intended for technical articles, research
 notes, mathematical writing, essays, tutorials, image-rich documents, and
 small multi-author publications.
 
-The project is currently at the architecture/design stage. The architecture
-index and topic specifications are linked from
+The project is in early implementation. The architecture index and topic
+specifications are linked from
 [`docs/design.md`](docs/design.md).
 
 ## Planned architecture
@@ -120,16 +120,15 @@ template to build the human-readable message from named record fields; fields
 used by that template are omitted from trailing fields in text and pretty
 output. Record writers use an immutable `comptime format` field; runtime
 templates are not supported by the initial implementation. JSON preserves
-structured fields and omits the comptime `format` field. The
-server runtime remains incomplete; its remaining work is tracked in the
-implementation plan.
+structured fields and omits the comptime `format` field.
 
 ## Development
 
 Implementation work and progress are tracked in
 [`docs/implementation-plan.md`](docs/implementation-plan.md). Commands shown
 above may still expose partial behavior until their corresponding plan entries
-are complete and verified.
+are complete and verified. Run `zig build test` for unit tests and
+`zig build verify` for the executable bootstrap flows.
 
 ## Scope
 

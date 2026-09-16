@@ -65,4 +65,9 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    const verify_step = b.step("verify", "Verify executable bootstrap flows");
+    const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });
+    verify_command.addArtifactArg(exe);
+    verify_step.dependOn(&verify_command.step);
 }
