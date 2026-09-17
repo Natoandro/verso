@@ -2,8 +2,9 @@
     "use strict";
 
     const model = window.VersoEditorModel;
+    const renderer = window.VersoEditorRenderer;
     const editor = document.querySelector("[data-editor]");
-    if (!model || !editor) return;
+    if (!model || !renderer || !editor) return;
 
     let idSequence = 0;
     const idFactory = () => "local-" + (++idSequence).toString(36);
@@ -12,6 +13,8 @@
     const list = editor.querySelector("[data-section-list]");
     const count = editor.querySelector("[data-section-count]");
     const status = editor.querySelector("[data-editor-status]");
+    const preview = editor.querySelector("[data-preview-content]");
+    const previewRenderer = renderer.createPreviewRenderer();
 
     function button(label, action, sectionId) {
         const element = document.createElement("button");
@@ -98,6 +101,18 @@
         count.textContent = sectionCount + " section" + (sectionCount === 1 ? "" : "s");
         status.textContent = "Unsaved browser-local document · " + sectionCount + " section" + (sectionCount === 1 ? "" : "s");
         window.__versoEditorState = documentState;
+        requestPreview();
+    }
+
+    function requestPreview() {
+        status.textContent = "Unsaved browser-local document · rendering provisional preview";
+        previewRenderer.request(documentState, (html) => {
+            preview.innerHTML = html;
+            status.textContent = "Unsaved browser-local document · preview is provisional";
+        }).catch(() => {
+            preview.textContent = "The local preview could not be rendered.";
+            status.textContent = "Unsaved browser-local document · preview unavailable";
+        });
     }
 
     function updateField(target) {
@@ -111,7 +126,7 @@
             documentState = model.updateMetadata(documentState, changes);
         }
         window.__versoEditorState = documentState;
-        status.textContent = "Unsaved browser-local document · changes are held in memory";
+        requestPreview();
     }
 
     editor.addEventListener("input", (event) => {

@@ -119,6 +119,13 @@ Markdown and section semantics as the server. Features requiring document
 context are unavailable in an unsaved live preview; after an explicit save,
 the editor may request a server preview of that persisted draft.
 
+The initial browser-local subset renders headings, paragraphs, line breaks,
+emphasis, strong text, inline code, fenced code, block quotes, ordered and
+unordered lists, and links or images with an allowed `http`, `https`,
+`mailto`, relative, or fragment URL. Raw HTML and unsupported URL schemes are
+escaped as text. Image sections remain placeholders until the asset workflow
+exists; the local preview does not resolve `assets://` references.
+
 Before inserting local preview output into the editor DOM, the client renderer
 must apply the same no-raw-HTML profile and safe URL rules as the server
 renderer. This protects the editor experience, but the server independently

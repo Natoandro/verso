@@ -43,6 +43,18 @@
       </div>
     </section>
 
+    <aside class="preview-pane" aria-labelledby="preview-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Local only</p>
+          <h2 id="preview-heading">Preview</h2>
+        </div>
+        <span class="preview-badge">Provisional</span>
+      </div>
+      <p class="preview-note">This preview is rendered in your browser from the current unsaved document. It is not persisted or sent to Verso.</p>
+      <div class="preview-content" data-preview-content aria-live="polite"></div>
+    </aside>
+
     <footer class="editor-footer">
       <span class="status-dot" aria-hidden="true"></span>
       <span data-editor-status>Unsaved browser-local document</span>
@@ -50,6 +62,7 @@
     </footer>
   </main>
   <script src="/admin/editor-model.js"></script>
+  <script src="/admin/editor-renderer.js"></script>
   <script src="/admin/editor.js"></script>
 </body>
 </html>

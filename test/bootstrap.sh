@@ -87,6 +87,9 @@ run_server() {
 
     editor_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor") || fail "editor shell was not served"
     printf '%s\n' "$editor_response" | grep -F 'data-local-only' >/dev/null || fail "editor shell was not browser-local"
+    printf '%s\n' "$editor_response" | grep -F '/admin/editor-renderer.js' >/dev/null || fail "editor preview renderer was not linked"
+    renderer_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor-renderer.js") || fail "editor preview renderer was not served"
+    printf '%s\n' "$renderer_response" | grep -F 'createPreviewRenderer' >/dev/null || fail "editor preview renderer was incomplete"
     editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
     [ "$editor_post_status" = "405" ] || fail "editor accepted a mutation request"
     grep -F 'read-only to the server' "$case_directory/editor-post.body" >/dev/null || fail "editor mutation rejection was unclear"

@@ -212,18 +212,18 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [x] **UI tests:** Verify section lifecycle operations, ordering, placeholder
     behavior, and the absence of an unauthenticated mutation endpoint.
 
-- [ ] **ED-002 — Render a safe local preview**
+- [x] **ED-002 — Render a safe local preview**
 
   The editor renders unsaved text content in an explicitly provisional local
   preview pane. Its Markdown subset disables raw HTML, escapes output,
   validates URLs, and prevents stale asynchronous work from replacing a newer
   render.
 
-  - [ ] **Web/editor:** Add a clearly provisional preview pane that is separate
+  - [x] **Web/editor:** Add a clearly provisional preview pane that is separate
     from persisted and published rendering paths.
-  - [ ] **Client renderer:** Implement the restricted Markdown subset, escaping,
+  - [x] **Client renderer:** Implement the restricted Markdown subset, escaping,
     safe-link handling, and stale-render cancellation or sequencing.
-  - [ ] **Security tests:** Cover raw HTML, unsafe URLs, malformed input, and
+  - [x] **Security tests:** Cover raw HTML, unsafe URLs, malformed input, and
     out-of-order asynchronous preview results.
 
 - [ ] **ED-003 — Recover browser-local drafts**
