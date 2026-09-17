@@ -107,7 +107,7 @@ migration task.
 
 ## 1. Core document drafts and typed sections
 
-- [ ] **DOC-001 — Create a bootstrap text draft**
+- [x] **DOC-001 — Create a bootstrap text draft**
 
   A local operator can create a new, unlisted text document draft through a
   narrow bootstrap command that calls the ordinary document application
@@ -116,15 +116,15 @@ migration task.
   temporary bootstrap surface is removed from normal use once protected
   editorial creation is delivered in `IAM-003`.
 
-  - [ ] **Domain:** Define the draft and version invariants, including stable
+  - [x] **Domain:** Define the draft and version invariants, including stable
     document identity, version 1, supported document types, and the one
     mutable-draft rule.
-  - [ ] **Application:** Provide the create-draft use case with validation and
+  - [x] **Application:** Provide the create-draft use case with validation and
     authorization boundaries that every interface can call.
-  - [ ] **SQLite storage:** Persist the document, initial version, metadata,
+  - [x] **SQLite storage:** Persist the document, initial version, metadata,
     and text section atomically while enforcing uniqueness and foreign-key
     constraints.
-  - [ ] **CLI:** Add the narrow local bootstrap command and verify its success,
+  - [x] **CLI:** Add the narrow local bootstrap command and verify its success,
     invalid-input failures, and duplicate-draft behavior.
 
 - [ ] **DOC-002 — Edit typed draft sections**

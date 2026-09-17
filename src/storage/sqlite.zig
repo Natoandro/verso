@@ -31,6 +31,10 @@ pub const Database = struct {
         return migrations.MigrationContext.init(io, allocator, directory_path, &self.handle, logger);
     }
 
+    pub fn sqliteHandle(self: *Database) *sqlite.Db {
+        return &self.handle;
+    }
+
     pub fn close(self: *Database) void {
         self.handle.deinit();
         self.* = undefined;

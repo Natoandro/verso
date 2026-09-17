@@ -128,6 +128,36 @@ assert_log_contains "$default_directory/stderr.log" 'event="server.listening"'
 assert_log_contains "$default_directory/stderr.log" 'event="http.request"'
 assert_log_contains "$default_directory/stderr.log" 'event="server.shutdown"'
 
+document_output="$default_directory/document.out"
+document_error="$default_directory/document.err"
+(
+    cd "$default_directory"
+    env -i \
+        "PATH=${PATH:-/usr/bin:/bin}" \
+        VERSO_MIGRATIONS_PATH="$migrations_directory" \
+        "$binary" document create-draft \
+        --type article \
+        --title "Bootstrap document" \
+        --slug bootstrap-document \
+        --text "# Hello" >"$document_output" 2>"$document_error"
+)
+grep -F 'document_id=1 version_id=1 version=1 section_id=1 state=draft' "$document_output" >/dev/null || fail "document draft was not created"
+if (
+    cd "$default_directory"
+    env -i \
+        "PATH=${PATH:-/usr/bin:/bin}" \
+        VERSO_MIGRATIONS_PATH="$migrations_directory" \
+        "$binary" document create-draft \
+        --id 1 \
+        --type article \
+        --title "Duplicate draft" \
+        --slug duplicate-draft \
+        --text "# Duplicate" >"$default_directory/duplicate.out" 2>"$default_directory/duplicate.err"
+); then
+    fail "duplicate mutable draft was accepted"
+fi
+grep -F 'MutableDraftExists' "$default_directory/duplicate.err" >/dev/null || fail "duplicate draft failure was not reported"
+
 file_directory="$temporary_directory/file-backed"
 mkdir "$file_directory"
 printf '%s\n' \
