@@ -1,5 +1,6 @@
 pub const config = @import("config.zig");
 pub const logging = @import("logging.zig");
+pub const tmpl = @import("tmpl");
 pub const application = struct {
     pub const bootstrap = @import("application/bootstrap.zig");
     pub const documents = @import("application/documents.zig");
@@ -23,6 +24,7 @@ test {
     _ = @import("storage/documents.zig");
     _ = @import("storage/sections.zig");
     _ = @import("logging_test.zig");
+    _ = @import("template/tests.zig");
     _ = @import("storage/sqlite.zig");
 }
 pub const server = @import("server.zig");

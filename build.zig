@@ -19,6 +19,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/migrations/embedded.zig"),
         .target = target,
     });
+    const tmpl = b.addModule("tmpl", .{
+        .root_source_file = b.path("src/template/root.zig"),
+        .target = target,
+    });
 
     const mod = b.addModule("verso", .{
         .root_source_file = b.path("src/root.zig"),
@@ -27,6 +31,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "toml", .module = toml },
             .{ .name = "sqlite", .module = sqlite },
             .{ .name = "embedded_migrations", .module = embedded_migrations },
+            .{ .name = "tmpl", .module = tmpl },
         },
     });
 
@@ -62,9 +67,41 @@ pub fn build(b: *std.Build) void {
     const exe_tests = b.addTest(.{ .root_module = exe.root_module });
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
+    const malformed_template_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/malformed.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    malformed_template_test.expect_errors = .{ .contains = "unclosed template interpolation" };
+
+    const unknown_template_field_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unknown_field.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unknown_template_field_test.expect_errors = .{ .contains = ":?:?: error: unknown field 'titel' in template expression 'post.titel' on unknown_field.Post" };
+
+    const unsupported_template_traversal_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unsupported_traversal.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unsupported_template_traversal_test.expect_errors = .{
+        .contains = ":?:?: error: template expression 'post.title.length' traverses a non-struct value of type []const u8",
+    };
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+    test_step.dependOn(&malformed_template_test.step);
+    test_step.dependOn(&unknown_template_field_test.step);
+    test_step.dependOn(&unsupported_template_traversal_test.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

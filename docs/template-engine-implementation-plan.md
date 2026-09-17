@@ -14,7 +14,7 @@ when the stated outcome and every nested division are complete.
 
 ## 1. Compile-Time Parsing and Output
 
-- [ ] **TPL-001 — Parse and stream escaped interpolation**
+- [x] **TPL-001 — Parse and stream escaped interpolation**
 
   Provide the `tmpl.parse` and writer-based `render` API for inline strings and
   `@embedFile` sources. Templates parse into comptime nodes, interpolate
@@ -22,15 +22,15 @@ when the stated outcome and every nested division are complete.
   to the writer. Syntax and invalid path access fail during compilation;
   normal rendering performs no parsing or allocation.
 
-  - [ ] **AST and parser:** Define the comptime node, expression, and parsed
+  - [x] **AST and parser:** Define the comptime node, expression, and parsed
     path representations; parse text, double-brace interpolation, and
     triple-brace interpolation; reject malformed syntax.
-  - [ ] **Typed resolution:** Resolve paths through named and anonymous struct
+  - [x] **Typed resolution:** Resolve paths through named and anonymous struct
     contexts, including supported pointers to structs, and produce useful
     compile diagnostics for unknown fields and unsupported traversal.
-  - [ ] **Writer renderer:** Stream text and supported scalar values, with a
+  - [x] **Writer renderer:** Stream text and supported scalar values, with a
     dedicated writer-based HTML escaper and explicit raw-output behavior.
-  - [ ] **Tests:** Cover inline multiline and embedded-file sources, strings,
+  - [x] **Tests:** Cover inline multiline and embedded-file sources, strings,
     integers, floats, booleans, enums, nested fields, escaping, raw output,
     malformed syntax, and unknown fields.
 
