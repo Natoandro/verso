@@ -49,39 +49,44 @@ The editor represents documents as ordered sections.
 Each section has two browser-local presentation modes:
 
 * `edit`, where its fields and section controls are visible;
-* `preview`, where the validated section is replaced by its rendered view and
-  an `Edit` action is available.
+* `preview`, where the validated section is rendered as part of the article
+  flow and an `Edit` action is available from its contextual toolbar.
+
+The editor presents the draft as an article rather than a stack of framed
+section cards. Preview output contains only the section content. Reordering,
+duplication, deletion, and edit/validate actions are icon-only controls in the
+section's upper corner; they appear on hover or keyboard focus. Clicking a
+section activates its toolbar until another section is activated, which keeps
+the controls usable on touch devices. Every icon has an accessible label and a
+native tooltip.
+
+The document title is the primary heading of the article. It is edited inline
+as a content-editable heading and is made non-editable after the local
+validation action. Slug and description remain available from the compact
+document-details control without adding a separate metadata card to the
+article surface.
 
 New sections start in `edit` mode. The editor explicitly validates a section
-with a `Done` or `Preview` action before switching it to `preview` mode. A
-failed validation keeps the section in `edit` mode and displays an inline
-error. Returning to `edit` mode never changes the canonical document because
-the entire workflow is still browser-local.
+with its check action before switching it to `preview` mode. A failed
+validation keeps the section in `edit` mode and displays an inline error.
+Returning to `edit` mode never changes the canonical document because the
+entire workflow is still browser-local.
 
-The same two-mode treatment applies to displayed document metadata such as the
-title, slug, and description. Reordering, duplication, and deletion controls
-remain available in the section header in either mode.
+The title follows the same two-mode treatment. Slug and description are
+editable from the compact document-details control. Reordering, duplication,
+and deletion controls remain available from the section toolbar in either
+mode.
 
 Example:
 
 ```text
-┌──────────────────────────────────┐
-│ Article title                    │
-├──────────────────────────────────┤
-│ ≡ Text                           │
-│   rendered Markdown              │
-│   [Edit]                        │
-├──────────────────────────────────┤
-│ ≡ Image                          │
-│   image placeholder + caption    │
-│   [Edit]                         │
-├──────────────────────────────────┤
-│ ≡ Interactive                    │
-│   Monte Carlo Area               │
-├──────────────────────────────────┤
-│                                  │
-│          + Add section           │
-└──────────────────────────────────┘
+Article title                                      [document details]
+
+Rendered Markdown                           [move · copy · delete · edit]
+
+Image placeholder + caption                 [move · copy · delete · edit]
+
+                                                   [add]
 ```
 
 Sections may be:
@@ -110,17 +115,11 @@ browser does not send unsaved document content to a Verso preview endpoint.
 Example:
 
 ```text
-┌──────────────────────────────────┐
-│ Article title                    │
-├──────────────────────────────────┤
-│ Text · preview                   │
-│ Rendered Markdown                │
-│                         [Edit]   │
-├──────────────────────────────────┤
-│ Image · edit                     │
-│ [asset] [alt text] [caption]     │
-│                       [Preview]  │
-└──────────────────────────────────┘
+Article title
+
+Rendered Markdown                          [move · copy · delete · edit]
+
+[asset] [alt text] [caption]                [move · copy · delete · validate]
 ```
 
 The Verso server remains authoritative for publication-equivalent output. A

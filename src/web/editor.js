@@ -6,10 +6,25 @@
     const editor = document.querySelector("[data-editor]");
     if (!model || !renderer || !editor) return;
 
+    const ICONS = {
+        check: '<path d="m4 9 3.3 3.3L14 5.7"/>',
+        copy: '<rect x="6" y="6" width="8" height="8" rx="1"/><path d="M4 11V4.8A.8.8 0 0 1 4.8 4H11"/>',
+        delete: '<path d="M4 6h10M6 6v7.5a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5V6M7 4h4M7.5 8.5v3M10.5 8.5v3"/>',
+        details: '<path d="M4 5h10M4 9h10M4 13h10"/><circle class="fill" cx="7" cy="5" r="1"/><circle class="fill" cx="11" cy="9" r="1"/><circle class="fill" cx="6" cy="13" r="1"/>',
+        edit: '<path d="m4 12.5-.5 2 2-.5L13.8 5.7a1.4 1.4 0 0 0-2-2L4 12.5Z"/><path d="m10.8 4.7 2 2"/>',
+        image: '<rect x="3" y="4" width="12" height="10" rx="1"/><circle cx="7" cy="7.5" r="1"/><path d="m4 12 3.2-3 2.3 2 1.6-1.5L14 12.5"/>',
+        plus: '<path d="M9 4v10M4 9h10"/>',
+        text: '<path d="M4 5h10M9 5v9M6.5 14h5"/>',
+        up: '<path d="m5 10 4-4 4 4M9 6v9"/>',
+        down: '<path d="m5 8 4 4 4-4M9 12V3"/>',
+    };
+
     let idSequence = 0;
     const idFactory = () => "local-" + (++idSequence).toString(36);
     let documentState = model.createDocument({ sections: [] }, idFactory);
-    let metadataMode = "edit";
+    let titleMode = "edit";
+    let detailsOpen = false;
+    let activeSectionId = null;
     const sectionModes = new Map();
     const sectionPreviewHtml = new Map();
     const sectionErrors = new Map();
@@ -18,34 +33,28 @@
     const list = editor.querySelector("[data-section-list]");
     const count = editor.querySelector("[data-section-count]");
     const status = editor.querySelector("[data-editor-status]");
-    const metadataCard = editor.querySelector("[data-metadata-card]");
+    const titleEditor = editor.querySelector("[data-title-editor]");
+    const titleActions = editor.querySelector("[data-title-actions]");
+    const detailsPanel = editor.querySelector("[data-details-panel]");
 
-    function button(label, action, sectionId) {
+    function icon(name) {
+        const span = document.createElement("span");
+        span.className = "icon";
+        span.setAttribute("aria-hidden", "true");
+        span.innerHTML = '<svg viewBox="0 0 18 18" focusable="false">' + (ICONS[name] || "") + "</svg>";
+        return span;
+    }
+
+    function iconButton(name, label, action, sectionId) {
         const element = document.createElement("button");
         element.type = "button";
-        element.textContent = label;
+        element.className = "icon-button";
+        element.title = label;
+        element.setAttribute("aria-label", label);
         element.dataset.action = action;
         if (sectionId) element.dataset.sectionId = sectionId;
+        element.appendChild(icon(name));
         return element;
-    }
-
-    function field(labelText, value, fieldName, sectionId) {
-        const label = document.createElement("label");
-        label.textContent = labelText;
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = value || "";
-        input.dataset.field = fieldName;
-        input.dataset.sectionId = sectionId;
-        label.appendChild(input);
-        return label;
-    }
-
-    function modeBadge(mode) {
-        const badge = document.createElement("span");
-        badge.className = "mode-badge";
-        badge.textContent = mode === "preview" ? "Provisional preview" : "Edit mode";
-        return badge;
     }
 
     function sectionMode(id) {
@@ -68,165 +77,139 @@
         sectionErrors.delete(id);
     }
 
-    function renderMetadata() {
-        metadataCard.replaceChildren();
-        const heading = document.createElement("div");
-        heading.className = "section-heading";
-        const title = document.createElement("div");
-        const eyebrow = document.createElement("p");
-        eyebrow.className = "eyebrow";
-        eyebrow.textContent = "Document details";
-        const headingText = document.createElement("h2");
-        headingText.id = "document-details-heading";
-        headingText.textContent = "Metadata";
-        title.append(eyebrow, headingText);
-        heading.append(title, modeBadge(metadataMode));
-        metadataCard.appendChild(heading);
+    function setActiveSection(id) {
+        activeSectionId = id || null;
+        list.querySelectorAll(".section-card").forEach((card) => {
+            card.classList.toggle("is-active", card.dataset.sectionId === activeSectionId);
+        });
+    }
 
-        if (metadataMode === "preview") {
-            const preview = document.createElement("div");
-            preview.className = "metadata-preview";
-            const documentTitle = document.createElement("h3");
-            documentTitle.textContent = documentState.title || "Untitled document";
-            const details = document.createElement("dl");
-            [["Slug", documentState.slug || "Not set"], ["Description", documentState.description || "Not set"]].forEach(([label, value]) => {
-                const term = document.createElement("dt");
-                term.textContent = label;
-                const definition = document.createElement("dd");
-                definition.textContent = value;
-                details.append(term, definition);
-            });
-            preview.append(documentTitle, details);
-            const actions = document.createElement("div");
-            actions.className = "mode-actions";
-            actions.appendChild(button("Edit", "edit-metadata"));
-            preview.appendChild(actions);
-            metadataCard.appendChild(preview);
-            return;
+    function renderTitle() {
+        titleEditor.textContent = documentState.title;
+        if (titleMode === "edit") {
+            titleEditor.contentEditable = "true";
+            titleEditor.setAttribute("aria-label", "Edit document title");
+        } else {
+            titleEditor.contentEditable = "false";
+            titleEditor.setAttribute("aria-label", "Document title");
         }
+        titleActions.replaceChildren(iconButton(
+            titleMode === "edit" ? "check" : "edit",
+            titleMode === "edit" ? "Validate title" : "Edit title",
+            titleMode === "edit" ? "validate-title" : "edit-title",
+        ));
+        const description = editor.querySelector("[data-article-description]");
+        description.textContent = documentState.description;
+        description.hidden = !documentState.description;
+    }
 
-        const note = document.createElement("p");
-        note.className = "mode-note";
-        note.textContent = "Edit locally, then validate to display the metadata as a provisional view.";
+    function detailsField(fieldName, value, placeholder, multiline) {
+        const field = document.createElement(multiline ? "textarea" : "input");
+        field.dataset.field = fieldName;
+        field.setAttribute("aria-label", placeholder);
+        field.placeholder = placeholder;
+        field.value = value || "";
+        if (multiline) field.rows = 2;
+        return field;
+    }
+
+    function renderDetails() {
+        detailsPanel.hidden = !detailsOpen;
+        detailsPanel.replaceChildren();
+        if (!detailsOpen) return;
         const grid = document.createElement("div");
-        grid.className = "meta-grid";
-        const titleField = document.createElement("label");
-        titleField.textContent = "Title";
-        const titleInput = document.createElement("input");
-        titleInput.type = "text";
-        titleInput.autocomplete = "off";
-        titleInput.placeholder = "A thoughtful title";
-        titleInput.value = documentState.title;
-        titleInput.dataset.field = "title";
-        titleField.appendChild(titleInput);
-        const slugField = document.createElement("label");
-        slugField.textContent = "Slug";
-        const slugInput = document.createElement("input");
-        slugInput.type = "text";
-        slugInput.autocomplete = "off";
-        slugInput.placeholder = "a-thoughtful-title";
-        slugInput.value = documentState.slug;
-        slugInput.dataset.field = "slug";
-        slugField.appendChild(slugInput);
-        const descriptionField = document.createElement("label");
-        descriptionField.className = "wide-field";
-        descriptionField.textContent = "Description";
-        const descriptionInput = document.createElement("textarea");
-        descriptionInput.rows = 2;
-        descriptionInput.placeholder = "A short description (optional)";
-        descriptionInput.value = documentState.description;
-        descriptionInput.dataset.field = "description";
-        descriptionField.appendChild(descriptionInput);
-        grid.append(titleField, slugField, descriptionField);
-        metadataCard.append(note, grid);
-        const actions = document.createElement("div");
-        actions.className = "mode-actions";
-        actions.appendChild(button("Validate metadata", "validate-metadata"));
-        metadataCard.appendChild(actions);
+        grid.className = "details-grid";
+        grid.append(
+            detailsField("slug", documentState.slug, "URL slug", false),
+            detailsField("description", documentState.description, "Short description", true),
+        );
+        detailsPanel.appendChild(grid);
+    }
+
+    function renderHeader() {
+        const detailsButton = editor.querySelector('[data-action="toggle-details"]');
+        detailsButton.replaceChildren(icon("details"));
+        detailsButton.setAttribute("aria-pressed", String(detailsOpen));
+        editor.querySelectorAll('[data-action="add-section"]').forEach((button) => {
+            button.replaceChildren(icon(button.dataset.kind === "image" ? "image" : "text"));
+        });
+        renderTitle();
+        renderDetails();
+    }
+
+    function textField(section) {
+        const textarea = document.createElement("textarea");
+        textarea.value = section.markdown;
+        textarea.dataset.field = "markdown";
+        textarea.dataset.sectionId = section.id;
+        textarea.setAttribute("aria-label", "Markdown content");
+        textarea.spellcheck = false;
+        return textarea;
+    }
+
+    function imageField(section, fieldName, placeholder) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = section[fieldName] || "";
+        input.placeholder = placeholder;
+        input.dataset.field = fieldName;
+        input.dataset.sectionId = section.id;
+        input.setAttribute("aria-label", placeholder);
+        return input;
     }
 
     function sectionCard(section, index) {
         const mode = sectionMode(section.id);
         const card = document.createElement("article");
-        card.className = "section-card " + section.kind + "-section";
+        card.className = "section-card " + section.kind + "-section" + (section.id === activeSectionId ? " is-active" : "");
         card.dataset.sectionId = section.id;
-
-        const header = document.createElement("header");
-        header.className = "section-card-header";
-        const kind = document.createElement("span");
-        kind.className = "section-kind";
-        kind.textContent = section.kind === "text" ? "Text" : "Image placeholder";
-        header.appendChild(kind);
+        card.tabIndex = 0;
 
         const actions = document.createElement("div");
         actions.className = "section-actions";
-        const up = button("↑", "move-up", section.id);
+        const up = iconButton("up", "Move section up", "move-up", section.id);
         up.disabled = index === 0;
-        const down = button("↓", "move-down", section.id);
+        const down = iconButton("down", "Move section down", "move-down", section.id);
         down.disabled = index === documentState.sections.length - 1;
-        actions.append(up, down, button("Duplicate", "duplicate", section.id), button("Delete", "delete", section.id));
-        header.appendChild(modeBadge(mode));
-        header.appendChild(actions);
-        card.appendChild(header);
+        actions.append(up, down, iconButton("copy", "Duplicate section", "duplicate", section.id), iconButton("delete", "Delete section", "delete", section.id));
+        actions.appendChild(iconButton(mode === "preview" ? "edit" : "check", mode === "preview" ? "Edit section" : "Validate section", mode === "preview" ? "edit-section" : "validate-section", section.id));
+        card.appendChild(actions);
 
         const body = document.createElement("div");
-        body.className = "section-card-body";
+        body.className = mode === "preview" ? "section-card-body section-preview" : "section-card-body section-editor";
         if (mode === "preview") {
-            const preview = document.createElement("div");
-            preview.className = "section-preview";
-            preview.innerHTML = sectionPreviewHtml.get(section.id) || renderer.renderSection(section);
-            body.appendChild(preview);
-            const modeActions = document.createElement("div");
-            modeActions.className = "mode-actions";
-            modeActions.appendChild(button("Edit", "edit-section", section.id));
-            body.appendChild(modeActions);
+            body.innerHTML = sectionPreviewHtml.get(section.id) || renderer.renderSection(section);
+        } else if (section.kind === "text") {
+            body.appendChild(textField(section));
         } else {
-            if (section.kind === "text") {
-                const label = document.createElement("label");
-                label.textContent = "Markdown text";
-                const textarea = document.createElement("textarea");
-                textarea.value = section.markdown;
-                textarea.dataset.field = "markdown";
-                textarea.dataset.sectionId = section.id;
-                textarea.spellcheck = false;
-                label.appendChild(textarea);
-                body.appendChild(label);
-            } else {
-                const note = document.createElement("div");
-                note.className = "asset-note";
-                note.textContent = "Image upload is not part of the unsaved editor yet. This placeholder can be arranged and described locally.";
-                body.appendChild(note);
-                const fields = document.createElement("div");
-                fields.className = "image-fields";
-                fields.appendChild(field("Asset name", section.asset, "asset", section.id));
-                fields.appendChild(field("Alt text", section.alt, "alt", section.id));
-                body.appendChild(fields);
-                body.appendChild(field("Caption", section.caption, "caption", section.id));
-            }
-            if (sectionErrors.has(section.id)) {
-                const error = document.createElement("p");
-                error.className = "validation-error";
-                error.textContent = sectionErrors.get(section.id);
-                body.appendChild(error);
-            }
-            const actions = document.createElement("div");
-            actions.className = "mode-actions";
-            const validate = button(sectionErrors.has(section.id) ? "Try again" : "Validate section", "validate-section", section.id);
-            validate.className = "primary";
-            actions.appendChild(validate);
-            body.appendChild(actions);
+            const imageEditor = document.createElement("div");
+            imageEditor.className = "image-editor";
+            const note = document.createElement("div");
+            note.className = "asset-note";
+            note.textContent = "Image upload is not part of the unsaved editor yet.";
+            const fields = document.createElement("div");
+            fields.className = "image-fields";
+            fields.append(imageField(section, "asset", "Asset name"), imageField(section, "alt", "Alt text"));
+            imageEditor.append(note, fields, imageField(section, "caption", "Caption"));
+            body.appendChild(imageEditor);
+        }
+        if (sectionErrors.has(section.id)) {
+            const error = document.createElement("p");
+            error.className = "validation-error";
+            error.textContent = sectionErrors.get(section.id);
+            body.appendChild(error);
         }
         card.appendChild(body);
         return card;
     }
 
     function render() {
-        renderMetadata();
+        renderHeader();
         list.replaceChildren();
         if (documentState.sections.length === 0) {
             const empty = document.createElement("p");
             empty.className = "empty-state";
-            empty.textContent = "No sections yet. Add text or an image placeholder to begin composing.";
+            empty.textContent = "Your article is empty. Add text or an image placeholder to begin.";
             list.appendChild(empty);
         } else {
             documentState.sections.forEach((section, index) => list.appendChild(sectionCard(section, index)));
@@ -244,9 +227,15 @@
             invalidateSection(target.dataset.sectionId);
             documentState = model.updateSection(documentState, target.dataset.sectionId, changes, idFactory);
         } else {
-            metadataMode = "edit";
             documentState = model.updateMetadata(documentState, changes);
+            if (target.dataset.field === "description") renderTitle();
         }
+        window.__versoEditorState = documentState;
+        status.textContent = "Unsaved browser-local document · changes are held in memory";
+    }
+
+    function updateTitle(target) {
+        documentState = model.updateMetadata(documentState, { title: target.textContent.replace(/\s+/g, " ").trim() });
         window.__versoEditorState = documentState;
         status.textContent = "Unsaved browser-local document · changes are held in memory";
     }
@@ -267,53 +256,68 @@
     }
 
     editor.addEventListener("input", (event) => {
-        if (event.target.matches("[data-field]")) updateField(event.target);
+        if (event.target.matches("[data-title-editor]")) updateTitle(event.target);
+        else if (event.target.matches("[data-field]")) updateField(event.target);
+    });
+
+    editor.addEventListener("keydown", (event) => {
+        if (event.target.matches("[data-title-editor]") && event.key === "Enter") {
+            event.preventDefault();
+            titleMode = "preview";
+            render();
+        }
+        if (event.target.matches(".section-card") && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            setActiveSection(event.target.dataset.sectionId);
+        }
     });
 
     editor.addEventListener("click", (event) => {
+        const card = event.target.closest(".section-card");
         const target = event.target.closest("[data-action]");
+        if (card && !target) setActiveSection(card.dataset.sectionId);
         if (!target) return;
         const action = target.dataset.action;
         const sectionId = target.dataset.sectionId;
-        if (action === "validate-section") {
+        if (sectionId) setActiveSection(sectionId);
+        if (action === "toggle-details") {
+            detailsOpen = !detailsOpen;
+            render();
+        } else if (action === "validate-title") {
+            titleMode = "preview";
+            render();
+        } else if (action === "edit-title") {
+            titleMode = "edit";
+            render();
+            titleEditor.focus();
+        } else if (action === "validate-section") {
             validateSection(sectionId);
-            return;
-        }
-        if (action === "edit-section") {
+        } else if (action === "edit-section") {
             invalidateSection(sectionId);
             render();
-            return;
-        }
-        if (action === "validate-metadata") {
-            metadataMode = "preview";
-            render();
-            return;
-        }
-        if (action === "edit-metadata") {
-            metadataMode = "edit";
-            render();
-            return;
-        }
-        if (action === "add-section") {
+        } else if (action === "add-section") {
             const section = target.dataset.kind === "image"
                 ? { kind: "image", asset: "", alt: "", caption: "", display: "inline" }
                 : { kind: "text", markdown: "" };
             documentState = model.insertSection(documentState, documentState.sections.length, section, idFactory);
+            activeSectionId = documentState.sections[documentState.sections.length - 1].id;
+            render();
         } else if (action === "delete") {
             invalidateSection(sectionId);
             sectionSchedulers.delete(sectionId);
             documentState = model.deleteSection(documentState, sectionId);
+            activeSectionId = null;
+            render();
         } else if (action === "duplicate") {
             const sourceIndex = documentState.sections.findIndex((section) => section.id === sectionId);
             documentState = model.duplicateSection(documentState, sectionId, sourceIndex + 1, idFactory);
-        } else if (action === "move-up") {
+            activeSectionId = documentState.sections[sourceIndex + 1].id;
+            render();
+        } else if (action === "move-up" || action === "move-down") {
             const sourceIndex = documentState.sections.findIndex((section) => section.id === sectionId);
-            documentState = model.moveSection(documentState, sectionId, sourceIndex - 1);
-        } else if (action === "move-down") {
-            const sourceIndex = documentState.sections.findIndex((section) => section.id === sectionId);
-            documentState = model.moveSection(documentState, sectionId, sourceIndex + 1);
+            documentState = model.moveSection(documentState, sectionId, sourceIndex + (action === "move-up" ? -1 : 1));
+            render();
         }
-        render();
     });
 
     render();
@@ -321,10 +325,12 @@
         getDocument: () => documentState,
         insertText: () => {
             documentState = model.insertSection(documentState, documentState.sections.length, { kind: "text", markdown: "" }, idFactory);
+            activeSectionId = documentState.sections[documentState.sections.length - 1].id;
             render();
         },
         insertImagePlaceholder: () => {
             documentState = model.insertSection(documentState, documentState.sections.length, { kind: "image" }, idFactory);
+            activeSectionId = documentState.sections[documentState.sections.length - 1].id;
             render();
         },
     };

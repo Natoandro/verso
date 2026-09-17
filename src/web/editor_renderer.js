@@ -175,7 +175,7 @@
     function renderSection(section) {
         if (!section || typeof section !== "object") return "";
         if (section.kind === "text") {
-            return "<section class=\"preview-text-section\">" + renderMarkdown(section.markdown) + "</section>";
+            return renderMarkdown(section.markdown);
         }
         if (section.kind === "image") {
             const alt = typeof section.alt === "string" ? section.alt : "";

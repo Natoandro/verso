@@ -10,29 +10,35 @@
 <body>
   <main class="editor-shell" data-editor data-local-only data-model-schema-version="1">
     <header class="editor-header">
-      <div>
-        <p class="eyebrow">Verso editorial workspace</p>
-        <h1>Compose document</h1>
-        <p class="lede">This is an unsaved document held in this browser. Nothing on this page is sent to the server.</p>
+      <div class="editor-context">
+        <p class="eyebrow">Verso</p>
+        <p class="editor-heading">Compose document</p>
       </div>
-      <span class="local-badge">Browser-local</span>
+      <div class="editor-header-actions">
+        <button type="button" class="icon-button" data-action="toggle-details" title="Document details" aria-label="Document details"></button>
+        <span class="local-badge">Browser-local</span>
+      </div>
     </header>
 
-    <section class="document-meta" data-metadata-card aria-labelledby="document-details-heading"></section>
-
-    <section class="composition" aria-labelledby="sections-heading">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Structured content</p>
-          <h2 id="sections-heading">Sections</h2>
+    <section class="document-article" aria-labelledby="document-title">
+      <div class="article-title-row">
+        <div class="article-title-content">
+          <h1 id="document-title" class="document-title" data-title-editor data-placeholder="Untitled document" role="textbox" aria-label="Document title"></h1>
+          <p class="article-description" data-article-description hidden></p>
         </div>
+        <div class="title-actions" data-title-actions></div>
+      </div>
+
+      <div class="details-panel" data-details-panel hidden></div>
+
+      <div class="article-toolbar">
         <span class="section-count" data-section-count>0 sections</span>
       </div>
       <div class="section-list" data-section-list aria-live="polite"></div>
       <div class="add-section" data-add-section>
-        <span>Add a section</span>
-        <button type="button" data-action="add-section" data-kind="text">+ Text</button>
-        <button type="button" data-action="add-section" data-kind="image">+ Image placeholder</button>
+        <span class="add-section-label">Add to article</span>
+        <button type="button" class="icon-button" data-action="add-section" data-kind="text" title="Add text" aria-label="Add text"></button>
+        <button type="button" class="icon-button" data-action="add-section" data-kind="image" title="Add image placeholder" aria-label="Add image placeholder"></button>
       </div>
     </section>
 
