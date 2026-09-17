@@ -127,20 +127,20 @@ migration task.
   - [x] **CLI:** Add the narrow local bootstrap command and verify its success,
     invalid-input failures, and duplicate-draft behavior.
 
-- [ ] **DOC-002 — Edit typed draft sections**
+- [x] **DOC-002 — Edit typed draft sections**
 
   The same draft supports inserting, editing, moving, duplicating, and
   deleting text and image section records through application services.
   Ordering is stable and validation rejects invalid positions, malformed data,
   or mutations of non-drafts.
 
-  - [ ] **Domain:** Model text and image sections, ordering, duplication, and
+  - [x] **Domain:** Model text and image sections, ordering, duplication, and
     the rules that prevent edits to published or archived versions.
-  - [ ] **Application:** Expose section mutation use cases with position,
+  - [x] **Application:** Expose section mutation use cases with position,
     payload, draft-state, and expected-revision validation.
-  - [ ] **SQLite storage:** Store ordered section records and implement
+  - [x] **SQLite storage:** Store ordered section records and implement
     transaction-safe insert, move, duplicate, update, and delete operations.
-  - [ ] **CLI:** Provide a small verification surface for section mutations
+  - [x] **CLI:** Provide a small verification surface for section mutations
     and exercise valid operations alongside malformed and non-draft cases.
 
 - [ ] **DOC-003 — Create the next document version**

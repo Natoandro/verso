@@ -104,21 +104,6 @@ above may still expose partial behavior until their corresponding plan entries
 are complete and verified. Run `zig build test` for unit tests and
 `zig build verify` for the executable bootstrap flows.
 
-After the database migration is available, a local operator can create an
-unlisted text draft through the temporary bootstrap command:
-
-```bash
-verso document create-draft \
-  --type article \
-  --title "A first draft" \
-  --slug a-first-draft \
-  --text "# Hello"
-```
-
-The command creates document version 1 and its initial text section. It is a
-temporary local bootstrap surface; protected editorial creation is planned for
-`IAM-003`.
-
 ## Scope
 
 Initial versions intentionally do not target PostgreSQL/MySQL support,
