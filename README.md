@@ -9,6 +9,13 @@ The project is in early implementation. The architecture index and topic
 specifications are linked from
 [`docs/design.md`](docs/design.md).
 
+## License
+
+Verso is free software licensed under the GNU Affero General Public License,
+version 3 only (`AGPL-3.0-only`). See [`LICENSE`](LICENSE) for the complete
+license text. User-created publications and assets remain the property of
+their respective authors and operators and are not covered by this license.
+
 ## Planned architecture
 
 Verso is designed as a small, single-process application with:
