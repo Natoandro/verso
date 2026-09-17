@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import IconButton from "./IconButton.svelte";
   import SectionCard from "./SectionCard.svelte";
   import type { EditorDocument } from "./model";
@@ -75,16 +75,30 @@
     return (event.currentTarget as HTMLInputElement | HTMLTextAreaElement).value;
   }
 
+  function resizeTitleInput(inputElement: HTMLTextAreaElement): void {
+    inputElement.style.height = "auto";
+    inputElement.style.height = `${inputElement.scrollHeight}px`;
+  }
+
   function titleInput(event: Event): void {
-    const title = (event.currentTarget as HTMLElement).textContent?.replace(/\s+/g, " ").trim() || "";
+    const inputElement = event.currentTarget as HTMLTextAreaElement;
+    resizeTitleInput(inputElement);
+    const title = inputElement.value.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").trim();
     dispatch({ type: "update-metadata", changes: { title } });
   }
 
   function titleKeydown(event: KeyboardEvent): void {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       dispatch({ type: "set-title-mode", mode: "preview" });
     }
+  }
+
+  function attachTitleInput(inputElement: HTMLTextAreaElement): void {
+    // Initialize once per edit-mode mount. Keeping the input uncontrolled while
+    // typing prevents state updates from moving the browser-managed caret.
+    inputElement.value = untrack(() => state.document.title);
+    resizeTitleInput(inputElement);
   }
 
   function setMetadata(field: "slug" | "description", event: Event): void {
@@ -126,8 +140,11 @@
   <section class="document-article" aria-labelledby="document-title">
     <div class="article-title-row">
       <div class="article-title-content">
-        <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
-        <h1 id="document-title" class="document-title" data-placeholder="Untitled document" role="textbox" aria-label={state.titleMode === "edit" ? "Edit document title" : "Document title"} contenteditable={state.titleMode === "edit"} oninput={titleInput} onkeydown={titleKeydown}>{state.document.title}</h1>
+        {#if state.titleMode === "edit"}
+          <textarea {@attach attachTitleInput} id="document-title" class="document-title document-title-editor" data-placeholder="Untitled document" placeholder="Untitled document" rows="1" aria-label="Edit document title" oninput={titleInput} onkeydown={titleKeydown}></textarea>
+        {:else}
+          <h1 id="document-title" class="document-title" data-placeholder="Untitled document" aria-label="Document title">{state.document.title}</h1>
+        {/if}
         {#if state.document.description}<p class="article-description">{state.document.description}</p>{/if}
       </div>
       <div class="title-actions">

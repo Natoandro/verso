@@ -65,10 +65,11 @@ until another section is activated, which keeps the controls usable on touch
 devices. Every icon has an accessible label and a native tooltip.
 
 The document title is the primary heading of the article. It is edited inline
-as a content-editable heading and is made non-editable after the local
-validation action. Slug and description remain available from the compact
-document-details control without adding a separate metadata card to the
-article surface.
+in a multiline, auto-growing textarea styled as a heading and is made
+non-editable after the local validation action. Enter inserts a line break;
+Ctrl+Enter or Cmd+Enter validates the title. Slug and description remain
+available from the compact document-details control without adding a separate
+metadata card to the article surface.
 
 Text sections retain a textarea so their Markdown source remains exact. A CSS
 grid mirror behind the textarea tracks the current value and supplies its

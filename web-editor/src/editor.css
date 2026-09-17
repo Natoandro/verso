@@ -22,10 +22,12 @@ button { cursor: pointer; }
 .document-article { max-width: 760px; margin: 0 auto; }
 .article-title-row { position: relative; display: flex; align-items: flex-start; gap: 24px; margin-bottom: 52px; }
 .article-title-content { min-width: 0; flex: 1; }
-.document-title { position: relative; margin: 0; color: #1f2d33; font-size: clamp(2.45rem, 7vw, 5.25rem); font-weight: 760; letter-spacing: -0.065em; line-height: 0.98; outline: none; overflow-wrap: anywhere; }
-.document-title:empty::before { color: #aeb8b4; content: attr(data-placeholder); pointer-events: none; }
-.document-title[contenteditable="true"] { border-radius: 8px; box-shadow: 0 0 0 5px transparent; transition: box-shadow 140ms ease; }
-.document-title[contenteditable="true"]:focus { box-shadow: 0 0 0 5px rgb(63 139 112 / 12%); }
+.document-title { position: relative; display: block; width: 100%; margin: 0; border: 0; border-radius: 8px; padding: 0; color: #1f2d33; background: transparent; font-size: clamp(2.45rem, 7vw, 5.25rem); font-weight: 760; letter-spacing: -0.065em; line-height: 0.98; outline: none; overflow-wrap: anywhere; white-space: pre-wrap; }
+.document-title::placeholder { color: #aeb8b4; opacity: 1; }
+.document-title:not(.document-title-editor):empty::before { color: #aeb8b4; content: attr(data-placeholder); pointer-events: none; }
+.document-title-editor { min-height: 1em; overflow: hidden; resize: none; white-space: pre-wrap; }
+.document-title-editor { box-shadow: 0 0 0 5px transparent; transition: box-shadow 140ms ease; }
+.document-title-editor:focus { box-shadow: 0 0 0 5px rgb(63 139 112 / 12%); }
 .article-description { max-width: 620px; margin: 20px 0 0; color: #687773; font-size: 1.05rem; line-height: 1.6; }
 .title-actions { flex: 0 0 auto; padding-top: 5px; }
 .details-panel { margin: -28px 0 44px; border-top: 1px solid #e3e7e3; border-bottom: 1px solid #e3e7e3; padding: 18px 0; }
@@ -118,5 +120,5 @@ button { cursor: pointer; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .section-actions, .document-title[contenteditable="true"] { transition: none; }
+  .section-actions, .document-title-editor { transition: none; }
 }
