@@ -34,20 +34,20 @@ when the stated outcome and every nested division are complete.
     integers, floats, booleans, enums, nested fields, escaping, raw output,
     malformed syntax, and unknown fields.
 
-- [ ] **TPL-002 — Add typed control flow**
+- [x] **TPL-002 — Add typed control flow**
 
   Templates support comments, boolean `if`, `if`/`else`, optional capture, and
   nested array/slice loops. Invalid block structure, captures, condition types,
   and iteration types are compile errors.
 
-  - [ ] **Block parser:** Parse comments, `if`, `else`, `for`, captures, and
+  - [x] **Block parser:** Parse comments, `if`, `else`, `for`, captures, and
     nested block bodies while rejecting unexpected or unclosed directives.
-  - [ ] **Scoped resolution:** Model lexical capture scope so branch and loop
+  - [x] **Scoped resolution:** Model lexical capture scope so branch and loop
     variables resolve with their compile-time Zig types without leaking outside
     their blocks.
-  - [ ] **Renderer:** Evaluate bools and optionals, unwrap optional captures,
+  - [x] **Renderer:** Evaluate bools and optionals, unwrap optional captures,
     and iterate arrays and slices without allocating a dynamic context.
-  - [ ] **Tests:** Cover true/false and else branches, present/absent optional
+  - [x] **Tests:** Cover true/false and else branches, present/absent optional
     captures, loops, nested loops, comments, invalid conditions, invalid
     iteration, malformed captures, and unmatched blocks.
 

@@ -1,7 +1,28 @@
 const std = @import("std");
 
+pub fn Scope(comptime Outer: type, comptime name: []const u8, comptime Value: type) type {
+    return struct {
+        pub const template_scope = true;
+        pub const capture_name = name;
+        pub const capture_type = Value;
+        pub const outer_type = Outer;
+
+        outer: Outer,
+        value: Value,
+    };
+}
+
 pub fn resolvePathType(comptime Context: type, comptime path: anytype, comptime index: usize) type {
     if (index == path.count) return Context;
+
+    if (comptime isScope(Context) and index == 0) {
+        const segment = path.segments[index];
+        const name = path.source[segment.start .. segment.start + segment.len];
+        if (comptime std.mem.eql(u8, name, Context.capture_name)) {
+            return resolvePathType(Context.capture_type, path, index + 1);
+        }
+        return resolvePathType(Context.outer_type, path, index);
+    }
 
     const Struct = structType(Context, path.source);
     const segment = path.segments[index];
@@ -16,10 +37,26 @@ pub fn resolvePath(comptime path: anytype, context: anytype) resolvePathType(@Ty
 fn resolvePathAt(comptime path: anytype, comptime index: usize, value: anytype) resolvePathType(@TypeOf(value), path, index) {
     if (index == path.count) return value;
 
+    if (comptime isScope(@TypeOf(value)) and index == 0) {
+        const segment = path.segments[index];
+        const name = path.source[segment.start .. segment.start + segment.len];
+        if (comptime std.mem.eql(u8, name, @TypeOf(value).capture_name)) {
+            return resolvePathAt(path, index + 1, value.value);
+        }
+        return resolvePathAt(path, index, value.outer);
+    }
+
     const dereferenced = dereference(value);
     const segment = path.segments[index];
     const name = path.source[segment.start .. segment.start + segment.len];
     return resolvePathAt(path, index + 1, @field(dereferenced, name));
+}
+
+fn isScope(comptime Value: type) bool {
+    return switch (@typeInfo(Value)) {
+        .@"struct" => @hasDecl(Value, "template_scope"),
+        else => false,
+    };
 }
 
 fn structType(comptime Value: type, comptime expression: []const u8) type {

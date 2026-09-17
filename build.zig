@@ -96,12 +96,132 @@ pub fn build(b: *std.Build) void {
         .contains = ":?:?: error: template expression 'post.title.length' traverses a non-struct value of type []const u8",
     };
 
+    const invalid_template_condition_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/invalid_condition.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    invalid_template_condition_test.expect_errors = .{
+        .contains = ":?:?: error: template if condition must be bool or optional, got *const [15:0]u8",
+    };
+
+    const invalid_template_iteration_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/invalid_iteration.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    invalid_template_iteration_test.expect_errors = .{
+        .contains = ":?:?: error: template for requires an array or slice, got *const [12:0]u8",
+    };
+
+    const malformed_template_capture_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/malformed_capture.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    malformed_template_capture_test.expect_errors = .{
+        .contains = "for directive requires a closing capture bar",
+    };
+
+    const unmatched_template_block_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unmatched_block.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unmatched_template_block_test.expect_errors = .{
+        .contains = "unclosed template if block",
+    };
+
+    const leaked_template_capture_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/capture_scope.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    leaked_template_capture_test.expect_errors = .{
+        .contains = ":?:?: error: unknown field 'item' in template expression 'item.name' on capture_scope.Context",
+    };
+
+    const malformed_if_capture_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/malformed_if_capture.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    malformed_if_capture_test.expect_errors = .{
+        .contains = "if directive has malformed capture syntax",
+    };
+
+    const malformed_for_capture_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/malformed_for_capture.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    malformed_for_capture_test.expect_errors = .{
+        .contains = "for directive has malformed capture syntax",
+    };
+
+    const unexpected_template_closer_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unexpected_closer.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unexpected_template_closer_test.expect_errors = .{
+        .contains = "unexpected template if closer",
+    };
+
+    const mismatched_template_closer_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/mismatched_closer.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    mismatched_template_closer_test.expect_errors = .{
+        .contains = "unexpected template for closer",
+    };
+
+    const duplicate_template_else_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/duplicate_else.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    duplicate_template_else_test.expect_errors = .{
+        .contains = "unclosed template if block",
+    };
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
     test_step.dependOn(&malformed_template_test.step);
     test_step.dependOn(&unknown_template_field_test.step);
     test_step.dependOn(&unsupported_template_traversal_test.step);
+    test_step.dependOn(&invalid_template_condition_test.step);
+    test_step.dependOn(&invalid_template_iteration_test.step);
+    test_step.dependOn(&malformed_template_capture_test.step);
+    test_step.dependOn(&unmatched_template_block_test.step);
+    test_step.dependOn(&leaked_template_capture_test.step);
+    test_step.dependOn(&malformed_if_capture_test.step);
+    test_step.dependOn(&malformed_for_capture_test.step);
+    test_step.dependOn(&unexpected_template_closer_test.step);
+    test_step.dependOn(&mismatched_template_closer_test.step);
+    test_step.dependOn(&duplicate_template_else_test.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });
