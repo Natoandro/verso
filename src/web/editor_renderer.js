@@ -165,19 +165,26 @@
         }
         if (Array.isArray(document.sections)) {
             document.sections.forEach((section) => {
-                if (!section || typeof section !== "object") return;
-                if (section.kind === "text") {
-                    blocks.push("<section class=\"preview-text-section\">" + renderMarkdown(section.markdown) + "</section>");
-                } else if (section.kind === "image") {
-                    const alt = typeof section.alt === "string" ? section.alt : "";
-                    const caption = typeof section.caption === "string" ? section.caption : "";
-                    blocks.push("<figure class=\"preview-image-placeholder\"><div>Image placeholder</div>" +
-                        (alt ? "<p>Alt text: " + escapeHtml(alt) + "</p>" : "") +
-                        (caption ? "<figcaption>" + escapeHtml(caption) + "</figcaption>" : "") + "</figure>");
-                }
+                const rendered = renderSection(section);
+                if (rendered) blocks.push(rendered);
             });
         }
         return blocks.join("");
+    }
+
+    function renderSection(section) {
+        if (!section || typeof section !== "object") return "";
+        if (section.kind === "text") {
+            return "<section class=\"preview-text-section\">" + renderMarkdown(section.markdown) + "</section>";
+        }
+        if (section.kind === "image") {
+            const alt = typeof section.alt === "string" ? section.alt : "";
+            const caption = typeof section.caption === "string" ? section.caption : "";
+            return "<figure class=\"preview-image-placeholder\"><div>Image placeholder</div>" +
+                (alt ? "<p>Alt text: " + escapeHtml(alt) + "</p>" : "") +
+                (caption ? "<figcaption>" + escapeHtml(caption) + "</figcaption>" : "") + "</figure>";
+        }
+        return "";
     }
 
     function createPreviewRenderer(options) {
@@ -204,5 +211,5 @@
         };
     }
 
-    return { escapeHtml, safeUrl, renderMarkdown, renderDocument, createPreviewRenderer };
+    return { escapeHtml, safeUrl, renderMarkdown, renderSection, renderDocument, createPreviewRenderer };
 });

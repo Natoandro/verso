@@ -87,6 +87,8 @@ run_server() {
 
     editor_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor") || fail "editor shell was not served"
     printf '%s\n' "$editor_response" | grep -F 'data-local-only' >/dev/null || fail "editor shell was not browser-local"
+    printf '%s\n' "$editor_response" | grep -F 'data-metadata-card' >/dev/null || fail "editor metadata mode was not present"
+    if printf '%s\n' "$editor_response" | grep -F 'data-preview-content' >/dev/null; then fail "editor still exposed a side preview pane"; fi
     printf '%s\n' "$editor_response" | grep -F '/admin/editor-renderer.js' >/dev/null || fail "editor preview renderer was not linked"
     renderer_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor-renderer.js") || fail "editor preview renderer was not served"
     printf '%s\n' "$renderer_response" | grep -F 'createPreviewRenderer' >/dev/null || fail "editor preview renderer was incomplete"

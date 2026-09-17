@@ -36,6 +36,18 @@ test("malformed input does not throw or create executable markup", () => {
     assert.doesNotMatch(html, /<em>/);
 });
 
+test("section rendering keeps image placeholders and metadata escaped", () => {
+    const html = renderer.renderSection({
+        kind: "image",
+        alt: '<script>alert("x")</script>',
+        caption: "A caption",
+    });
+    assert.match(html, /Image placeholder/);
+    assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
+    assert.match(html, /<figcaption>A caption<\/figcaption>/);
+    assert.doesNotMatch(html, /<script>/);
+});
+
 test("out-of-order preview results cannot replace the latest generation", async () => {
     const pending = [];
     const preview = renderer.createPreviewRenderer({

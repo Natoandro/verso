@@ -18,14 +18,7 @@
       <span class="local-badge">Browser-local</span>
     </header>
 
-    <section class="document-meta" aria-labelledby="document-details-heading">
-      <h2 id="document-details-heading">Document details</h2>
-      <div class="meta-grid">
-        <label>Title <input data-field="title" type="text" autocomplete="off" placeholder="A thoughtful title"></label>
-        <label>Slug <input data-field="slug" type="text" autocomplete="off" placeholder="a-thoughtful-title"></label>
-        <label class="wide-field">Description <textarea data-field="description" rows="2" placeholder="A short description (optional)"></textarea></label>
-      </div>
-    </section>
+    <section class="document-meta" data-metadata-card aria-labelledby="document-details-heading"></section>
 
     <section class="composition" aria-labelledby="sections-heading">
       <div class="section-heading">
@@ -42,18 +35,6 @@
         <button type="button" data-action="add-section" data-kind="image">+ Image placeholder</button>
       </div>
     </section>
-
-    <aside class="preview-pane" aria-labelledby="preview-heading">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Local only</p>
-          <h2 id="preview-heading">Preview</h2>
-        </div>
-        <span class="preview-badge">Provisional</span>
-      </div>
-      <p class="preview-note">This preview is rendered in your browser from the current unsaved document. It is not persisted or sent to Verso.</p>
-      <div class="preview-content" data-preview-content aria-live="polite"></div>
-    </aside>
 
     <footer class="editor-footer">
       <span class="status-dot" aria-hidden="true"></span>
