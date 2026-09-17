@@ -138,13 +138,17 @@
     }
 
     function textField(section) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "growing-textarea";
+        wrapper.dataset.replicatedValue = section.markdown;
         const textarea = document.createElement("textarea");
         textarea.value = section.markdown;
         textarea.dataset.field = "markdown";
         textarea.dataset.sectionId = section.id;
         textarea.setAttribute("aria-label", "Markdown content");
         textarea.spellcheck = false;
-        return textarea;
+        wrapper.appendChild(textarea);
+        return wrapper;
     }
 
     function imageField(section, fieldName, placeholder) {
@@ -226,6 +230,7 @@
         if (target.dataset.sectionId) {
             invalidateSection(target.dataset.sectionId);
             documentState = model.updateSection(documentState, target.dataset.sectionId, changes, idFactory);
+            if (target.matches("textarea")) target.parentElement.dataset.replicatedValue = target.value;
         } else {
             documentState = model.updateMetadata(documentState, changes);
             if (target.dataset.field === "description") renderTitle();

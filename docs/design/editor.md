@@ -54,17 +54,22 @@ Each section has two browser-local presentation modes:
 
 The editor presents the draft as an article rather than a stack of framed
 section cards. Preview output contains only the section content. Reordering,
-duplication, deletion, and edit/validate actions are icon-only controls in the
-section's upper corner; they appear on hover or keyboard focus. Clicking a
-section activates its toolbar until another section is activated, which keeps
-the controls usable on touch devices. Every icon has an accessible label and a
-native tooltip.
+duplication, deletion, and edit/validate actions are icon-only controls in a
+vertical rail just outside the article's right margin on larger screens; they
+appear on hover or keyboard focus. On narrow screens the rail moves inside the
+section so it remains reachable. Clicking a section activates its toolbar
+until another section is activated, which keeps the controls usable on touch
+devices. Every icon has an accessible label and a native tooltip.
 
 The document title is the primary heading of the article. It is edited inline
 as a content-editable heading and is made non-editable after the local
 validation action. Slug and description remain available from the compact
 document-details control without adding a separate metadata card to the
 article surface.
+
+Text sections retain a textarea so their Markdown source remains exact. A CSS
+grid mirror behind the textarea tracks the current value and supplies its
+height, avoiding an inner scroll area without using programmatic measurement.
 
 New sections start in `edit` mode. The editor explicitly validates a section
 with its check action before switching it to `preview` mode. A failed
