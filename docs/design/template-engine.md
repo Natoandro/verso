@@ -252,21 +252,22 @@ runtime.
 
 ### 4.3 Shared fragment representation
 
-External components and local snippets are different sources for the same
-comptime fragment representation:
+External components and local snippets share the same comptime call and binding
+rules, but remain different compile-time representations in the initial
+engine. Local snippets are AST declaration ranges; external components are
+registered template values:
 
 ```zig
-const TemplateFragment = struct {
-    parameters: []const Parameter,
-    nodes: []const Node,
-};
+local declaration -> AST node range
+external component -> registered Template value
 ```
 
-A comptime scope maps names to `TemplateFragment` values. Component calls first
-resolve a fragment using lexical scope, then bind arguments into the fragment's
-child rendering context and render it through the ordinary node renderer. This
-does not introduce a snippet-specific runtime abstraction or string-based
-lookup.
+A comptime scope maps local names to declaration indices. Component calls first
+resolve a local declaration using lexical scope, then fall back to externally
+registered components. Both paths bind arguments at comptime and render through
+the ordinary component call path; local snippets introduce no runtime fragment
+abstraction or string-based lookup. A unified fragment value remains a future
+layout-composition concern rather than a requirement for local snippets.
 
 Layouts use the same mechanism rather than template inheritance. A layout may
 receive header, content, and footer component values through a comptime-known

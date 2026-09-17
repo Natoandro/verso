@@ -71,7 +71,7 @@ when the stated outcome and every nested division are complete.
     nested components, unknown components, missing arguments, and invalid
     argument types.
 
-- [ ] **TPL-004 — Add lexical local snippets**
+- [x] **TPL-004 — Add lexical local snippets**
 
   Templates can declare zero-output local snippets with explicit parameters and
   invoke them through the ordinary component path. Declarations are
@@ -79,17 +79,17 @@ when the stated outcome and every nested division are complete.
   implicit outer-context capture, and local names take precedence over enclosing
   snippets and external components.
 
-  - [ ] **Parser and scope collection:** Parse `snippet` declarations and
+  - [x] **Parser and scope collection:** Parse `snippet` declarations and
     comma-separated parameter lists; collect declarations for every lexical
     body before resolving calls; reject malformed parameters and duplicate names
     in the same scope.
-  - [ ] **Shared fragments:** Represent local snippets and external components
-    as `TemplateFragment` values and resolve calls by nearest local scope,
-    enclosing scopes, then externally registered components.
-  - [ ] **Argument binding:** Bind positional arguments by declared order and
+  - [x] **Shared rendering path:** Resolve local declaration ranges by nearest
+    lexical scope, then fall back to externally registered components; bind and
+    render both through the ordinary component call path.
+  - [x] **Argument binding:** Bind positional arguments by declared order and
     named arguments by parameter name into an isolated child context; reject
     missing, excess, unknown, and duplicate bindings.
-  - [ ] **Tests:** Cover single and multiple snippets, positional and named
+  - [x] **Tests:** Cover single and multiple snippets, positional and named
     arguments, multiple parameters, calls before and after declaration,
     snippets in loops, nesting, lexical visibility, shadowing, external
     fallback, and all specified invalid declarations and calls.

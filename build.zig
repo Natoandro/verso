@@ -239,6 +239,127 @@ pub fn build(b: *std.Build) void {
         .contains = "template expression 'user.name' traverses a non-struct value of type i64",
     };
 
+    const duplicate_template_snippet_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/duplicate_snippet.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    duplicate_template_snippet_test.expect_errors = .{
+        .contains = "duplicate snippet name 'card' in the same scope",
+    };
+
+    const malformed_template_snippet_parameters_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/malformed_snippet_parameters.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    malformed_template_snippet_parameters_test.expect_errors = .{
+        .contains = "snippet declarations have malformed parameters",
+    };
+
+    const duplicate_template_snippet_parameter_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/duplicate_snippet_parameter.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    duplicate_template_snippet_parameter_test.expect_errors = .{
+        .contains = "duplicate snippet parameter 'value'",
+    };
+
+    const missing_template_snippet_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/missing_snippet_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    missing_template_snippet_argument_test.expect_errors = .{
+        .contains = "missing arguments for snippet 'card'",
+    };
+
+    const missing_positional_template_snippet_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/missing_positional_snippet_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    missing_positional_template_snippet_argument_test.expect_errors = .{
+        .contains = "missing arguments for snippet 'card'",
+    };
+
+    const mixed_template_snippet_arguments_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/mixed_snippet_arguments.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    mixed_template_snippet_arguments_test.expect_errors = .{
+        .contains = "cannot mix positional and named arguments",
+    };
+
+    const excess_template_snippet_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/excess_snippet_arguments.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    excess_template_snippet_argument_test.expect_errors = .{
+        .contains = "too many arguments for snippet 'card'",
+    };
+
+    const unknown_template_snippet_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unknown_snippet_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unknown_template_snippet_argument_test.expect_errors = .{
+        .contains = "unknown argument 'other' for snippet 'card'",
+    };
+
+    const duplicate_template_snippet_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/duplicate_snippet_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    duplicate_template_snippet_argument_test.expect_errors = .{
+        .contains = "duplicate argument 'value' for snippet 'card'",
+    };
+
+    const snippet_visibility_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/snippet_visibility.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    snippet_visibility_test.expect_errors = .{
+        .contains = "unknown template component 'inner'",
+    };
+
+    const snippet_isolation_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/snippet_isolation.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    snippet_isolation_test.expect_errors = .{
+        .contains = ":?:?: error: unknown field 'title' in template expression 'title' on render.EmptyContext",
+    };
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
@@ -258,6 +379,17 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&unknown_template_component_test.step);
     test_step.dependOn(&missing_template_component_argument_test.step);
     test_step.dependOn(&invalid_template_component_argument_test.step);
+    test_step.dependOn(&duplicate_template_snippet_test.step);
+    test_step.dependOn(&malformed_template_snippet_parameters_test.step);
+    test_step.dependOn(&duplicate_template_snippet_parameter_test.step);
+    test_step.dependOn(&missing_template_snippet_argument_test.step);
+    test_step.dependOn(&missing_positional_template_snippet_argument_test.step);
+    test_step.dependOn(&mixed_template_snippet_arguments_test.step);
+    test_step.dependOn(&excess_template_snippet_argument_test.step);
+    test_step.dependOn(&unknown_template_snippet_argument_test.step);
+    test_step.dependOn(&duplicate_template_snippet_argument_test.step);
+    test_step.dependOn(&snippet_visibility_test.step);
+    test_step.dependOn(&snippet_isolation_test.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

@@ -36,7 +36,7 @@ fn validateComponentNames(comptime parsed: anytype, comptime options: anytype) v
     inline for (parsed.nodes[0..parsed.count]) |node| {
         switch (node) {
             .component => |call| {
-                if (comptime !hasRegisteredComponent(options, call.name)) {
+                if (comptime call.local_decl == null and !hasRegisteredComponent(options, call.name)) {
                     @compileError(std.fmt.comptimePrint(
                         "unknown template component '{s}'",
                         .{call.name},

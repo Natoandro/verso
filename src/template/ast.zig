@@ -50,6 +50,18 @@ pub fn Component(comptime capacity: usize) type {
         name: []const u8,
         args: [capacity]ComponentArg,
         count: usize,
+        local_decl: ?usize,
+    };
+}
+
+pub fn Snippet(comptime capacity: usize) type {
+    return struct {
+        name: []const u8,
+        parameters: [capacity][]const u8,
+        parameter_count: usize,
+        body_start: usize,
+        body_end: usize,
+        node_end: usize,
     };
 }
 
@@ -61,6 +73,7 @@ pub fn Node(comptime capacity: usize) type {
         if_block: IfBlock(capacity),
         for_block: ForBlock(capacity),
         component: Component(capacity),
+        snippet_declaration: Snippet(capacity),
     };
 }
 

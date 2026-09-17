@@ -145,3 +145,60 @@ test "renders nested registered components" {
     try page.render(&writer, .{ .title = "Nested" });
     try std.testing.expectEqualStrings("<strong>Nested</strong><em>Nested</em>", writer.buffered());
 }
+
+test "renders local snippets with positional and named arguments" {
+    const template = tmpl.parse(
+        "{{> link title \"read more\"}}{{#snippet link |href, label|}}<a href=\"{{ href }}\">{{ label }}</a>{{/snippet}}",
+        .{},
+    );
+    const named_template = tmpl.parse(
+        "{{> link label=\"read more\" href=title}}{{#snippet link |href, label|}}<a href=\"{{ href }}\">{{ label }}</a>{{/snippet}}",
+        .{},
+    );
+    var buffer: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try template.render(&writer, .{ .title = "/posts/1" });
+    try std.testing.expectEqualStrings("<a href=\"/posts/1\">read more</a>", writer.buffered());
+
+    writer = std.Io.Writer.fixed(&buffer);
+    try named_template.render(&writer, .{ .title = "/posts/1" });
+    try std.testing.expectEqualStrings("<a href=\"/posts/1\">read more</a>", writer.buffered());
+}
+
+test "renders multiple snippets after their declarations" {
+    const template = tmpl.parse(
+        "{{#snippet bold |value|}}<b>{{ value }}</b>{{/snippet}}{{#snippet italic |value|}}<i>{{ value }}</i>{{/snippet}}{{> bold title}}{{> italic title}}",
+        .{},
+    );
+    var buffer: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try template.render(&writer, .{ .title = "Text" });
+    try std.testing.expectEqualStrings("<b>Text</b><i>Text</i>", writer.buffered());
+}
+
+test "resolves nested snippets lexically and shadows external components" {
+    const external_badge = tmpl.parse("<i>{{ text }}</i>", .{ .parameters = .{ .text = {} } });
+    const template = tmpl.parse(
+        "{{> article post}}{{#snippet article |article|}}{{#snippet heading |text|}}<h2>{{ text }}</h2>{{/snippet}}{{#snippet article |article|}}<strong>{{ article.title }}</strong>{{/snippet}}<article>{{> heading article.title}}{{> article article}}{{> badge text=article.title}}</article>{{/snippet}}",
+        .{ .components = .{ .article = external_badge, .heading = external_badge, .badge = external_badge } },
+    );
+    var buffer: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try template.render(&writer, .{ .post = ComponentPost{ .id = 1, .title = "Lexical" } });
+    try std.testing.expectEqualStrings("<article><h2>Lexical</h2><strong>Lexical</strong><i>Lexical</i></article>", writer.buffered());
+}
+
+test "resolves snippets declared in loop bodies" {
+    const posts = [_]ComponentPost{
+        .{ .id = 1, .title = "First" },
+        .{ .id = 2, .title = "Second" },
+    };
+    const template = tmpl.parse(
+        "{{#for posts |post|}}{{> card post}}{{#snippet card |post|}}<p>{{ post.title }}</p>{{/snippet}}{{/for}}",
+        .{},
+    );
+    var buffer: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try template.render(&writer, .{ .posts = posts });
+    try std.testing.expectEqualStrings("<p>First</p><p>Second</p>", writer.buffered());
+}

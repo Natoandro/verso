@@ -1,8 +1,13 @@
 const std = @import("std");
 const ast = @import("ast.zig");
+const components = @import("component_parser.zig");
+const path_parser = @import("path_parser.zig");
+const snippets = @import("snippet_parser.zig");
 
-const Stop = enum { root, if_block, for_block };
-const SequenceEnd = enum { end, else_tag, if_close, for_close };
+pub const parsePath = path_parser.parsePath;
+
+const Stop = enum { root, if_block, for_block, snippet_block };
+const SequenceEnd = enum { end, else_tag, if_close, for_close, snippet_close };
 
 pub fn parse(comptime source: []const u8) ast.Parsed(source.len) {
     @setEvalBranchQuota(10_000 + source.len * 100);
@@ -14,6 +19,7 @@ pub fn parse(comptime source: []const u8) ast.Parsed(source.len) {
 
     comptime {
         _ = parseSequence(&state, .root);
+        snippets.annotateLocalCalls(&state.parsed);
     }
     return state.parsed;
 }
@@ -62,7 +68,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
         }
 
         if (token[0] == '>') {
-            appendNode(&state.parsed, .{ .component = parseComponent(token[1..], source.len) });
+            appendNode(&state.parsed, .{ .component = components.parse(token[1..], source.len) });
             state.cursor = close + close_token.len;
             continue;
         }
@@ -121,6 +127,26 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
                 state.parsed.nodes[node_index].for_block.node_end = state.parsed.count;
                 continue;
             }
+            if (startsKeyword(header, "snippet")) {
+                const parsed_header = snippets.parseHeader(header[7..], source.len);
+                const node_index = state.parsed.count;
+                appendNode(&state.parsed, .{ .snippet_declaration = .{
+                    .name = parsed_header.name,
+                    .parameters = parsed_header.parameters,
+                    .parameter_count = parsed_header.parameter_count,
+                    .body_start = 0,
+                    .body_end = 0,
+                    .node_end = 0,
+                } });
+                state.cursor = close + close_token.len;
+                const body_start_index = state.parsed.count;
+                const close_result = parseSequence(state, .snippet_block);
+                if (close_result != .snippet_close) @compileError("unclosed template snippet");
+                state.parsed.nodes[node_index].snippet_declaration.body_start = body_start_index;
+                state.parsed.nodes[node_index].snippet_declaration.body_end = state.parsed.count;
+                state.parsed.nodes[node_index].snippet_declaration.node_end = state.parsed.count;
+                continue;
+            }
             if (std.mem.eql(u8, header, "else")) {
                 if (stop != .if_block) @compileError("unexpected template else directive");
                 state.cursor = close + close_token.len;
@@ -141,6 +167,11 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
                 state.cursor = close + close_token.len;
                 return .for_close;
             }
+            if (std.mem.eql(u8, name, "snippet")) {
+                if (stop != .snippet_block) @compileError("unexpected template snippet closer");
+                state.cursor = close + close_token.len;
+                return .snippet_close;
+            }
             @compileError("unknown template block closer");
         }
 
@@ -150,6 +181,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
 
     if (stop == .if_block) @compileError("unclosed template if block");
     if (stop == .for_block) @compileError("unclosed template for block");
+    if (stop == .snippet_block) @compileError("unclosed template snippet");
     return .end;
 }
 
@@ -169,36 +201,6 @@ fn find(comptime source: []const u8, start: usize, comptime needle: []const u8) 
         if (std.mem.eql(u8, source[index .. index + needle.len], needle)) return index;
     }
     return null;
-}
-
-pub fn parsePath(comptime expression: []const u8, comptime capacity: usize) ast.Path(capacity) {
-    const trimmed = std.mem.trim(u8, expression, " \t\r\n");
-    if (trimmed.len == 0) @compileError("template interpolation cannot be empty");
-
-    comptime var path: ast.Path(capacity) = .{
-        .source = trimmed,
-        .segments = undefined,
-        .count = 0,
-    };
-    comptime var segment_start: usize = 0;
-    comptime var index: usize = 0;
-    inline while (index <= trimmed.len) : (index += 1) {
-        if (index != trimmed.len and trimmed[index] != '.') continue;
-
-        const raw_segment = trimmed[segment_start..index];
-        const left = trimLeft(raw_segment);
-        const right = trimRight(raw_segment);
-        if (left >= right or !isIdentifier(trimmed[left + segment_start .. right + segment_start])) {
-            @compileError("template paths require valid field identifiers");
-        }
-        path.segments[path.count] = .{
-            .start = left + segment_start,
-            .len = right - left,
-        };
-        path.count += 1;
-        segment_start = index + 1;
-    }
-    return path;
 }
 
 fn IfHeader(comptime capacity: usize) type {
@@ -236,7 +238,7 @@ fn parseForHeader(comptime value: []const u8, comptime capacity: usize) ForHeade
     }
     const iterable = std.mem.trim(u8, rest[0..first], " \t\r\n");
     const capture = std.mem.trim(u8, rest[first + 1 .. second], " \t\r\n");
-    if (iterable.len == 0 or capture.len == 0 or !isIdentifier(capture)) {
+    if (iterable.len == 0 or capture.len == 0 or !path_parser.isIdentifier(capture)) {
         @compileError("for directive has malformed capture syntax");
     }
     return .{ .iterable = parsePath(iterable, capacity), .capture = capture };
@@ -256,96 +258,10 @@ fn parseOptionalCaptureHeader(comptime rest: []const u8, comptime capacity: usiz
     }
     const condition = std.mem.trim(u8, rest[0..first], " \t\r\n");
     const capture = std.mem.trim(u8, rest[first + 1 .. second], " \t\r\n");
-    if (condition.len == 0 or capture.len == 0 or !isIdentifier(capture)) {
+    if (condition.len == 0 or capture.len == 0 or !path_parser.isIdentifier(capture)) {
         @compileError(std.fmt.comptimePrint("{s} directive has malformed capture syntax", .{directive}));
     }
     return .{ .condition = parsePath(condition, capacity), .capture = capture };
-}
-
-fn parseComponent(comptime value: []const u8, comptime capacity: usize) ast.Component(capacity) {
-    comptime var component: ast.Component(capacity) = .{
-        .name = undefined,
-        .args = undefined,
-        .count = 0,
-    };
-    comptime var cursor: usize = 0;
-    skipWhitespace(value, &cursor);
-
-    const name_start = cursor;
-    while (cursor < value.len and !isWhitespace(value[cursor])) : (cursor += 1) {}
-    const name = value[name_start..cursor];
-    if (!isIdentifier(name)) @compileError("component calls require a valid component name");
-    component.name = name;
-
-    while (true) {
-        skipWhitespace(value, &cursor);
-        if (cursor == value.len) break;
-
-        const argument_start = cursor;
-        while (cursor < value.len and !isWhitespace(value[cursor]) and value[cursor] != '=') : (cursor += 1) {}
-        const argument_name = value[argument_start..cursor];
-        if (!isIdentifier(argument_name)) @compileError("component calls require valid argument names");
-        skipWhitespace(value, &cursor);
-        if (cursor == value.len or value[cursor] != '=') {
-            @compileError("component arguments require '='");
-        }
-        cursor += 1;
-        skipWhitespace(value, &cursor);
-        if (cursor == value.len) @compileError("component arguments require a value");
-
-        const expression_start = cursor;
-        if (value[cursor] == '"' or value[cursor] == '\'') {
-            const quote = value[cursor];
-            cursor += 1;
-            while (cursor < value.len and value[cursor] != quote) : (cursor += 1) {}
-            if (cursor == value.len) @compileError("unclosed component string literal");
-            cursor += 1;
-        } else {
-            while (cursor < value.len and !isWhitespace(value[cursor])) : (cursor += 1) {}
-        }
-        const expression_text = value[expression_start..cursor];
-        component.args[component.count] = .{
-            .name = argument_name,
-            .value = parseComponentExpr(expression_text, capacity),
-        };
-        component.count += 1;
-    }
-    return component;
-}
-
-fn parseComponentExpr(comptime value: []const u8, comptime capacity: usize) ast.Expr {
-    if (value.len >= 2 and (value[0] == '"' or value[0] == '\'') and value[value.len - 1] == value[0]) {
-        if (std.mem.indexOfScalar(u8, value[1 .. value.len - 1], '\\') != null) {
-            @compileError("component string literal escapes are not supported");
-        }
-        return .{ .string = value[1 .. value.len - 1] };
-    }
-    if (std.mem.eql(u8, value, "true")) return .{ .boolean = true };
-    if (std.mem.eql(u8, value, "false")) return .{ .boolean = false };
-    if (isIntegerLiteral(value)) {
-        const integer = std.fmt.parseInt(i64, value, 10) catch
-            @compileError("component integer literal is out of range");
-        return .{ .integer = integer };
-    }
-    _ = parsePath(value, capacity);
-    return .{ .path = value };
-}
-
-fn skipWhitespace(value: []const u8, cursor: *usize) void {
-    while (cursor.* < value.len and isWhitespace(value[cursor.*])) : (cursor.* += 1) {}
-}
-
-fn isIntegerLiteral(value: []const u8) bool {
-    if (value.len == 0) return false;
-    var start: usize = 0;
-    if (value[0] == '-') {
-        if (value.len == 1) return false;
-        start = 1;
-    }
-    for (value[start..]) |character| {
-        if (character < '0' or character > '9') return false;
-    }
-    return true;
 }
 
 fn startsKeyword(value: []const u8, keyword: []const u8) bool {
@@ -353,36 +269,6 @@ fn startsKeyword(value: []const u8, keyword: []const u8) bool {
         (value.len == keyword.len or isWhitespace(value[keyword.len]));
 }
 
-fn trimLeft(value: []const u8) usize {
-    var index: usize = 0;
-    while (index < value.len and isWhitespace(value[index])) : (index += 1) {}
-    return index;
-}
-
-fn trimRight(value: []const u8) usize {
-    var index: usize = value.len;
-    while (index > 0 and isWhitespace(value[index - 1])) : (index -= 1) {}
-    return index;
-}
-
 fn isWhitespace(character: u8) bool {
     return character == ' ' or character == '\t' or character == '\r' or character == '\n';
-}
-
-fn isIdentifier(value: []const u8) bool {
-    if (value.len == 0 or !isIdentifierStart(value[0])) return false;
-    for (value[1..]) |character| {
-        if (!isIdentifierContinue(character)) return false;
-    }
-    return true;
-}
-
-fn isIdentifierStart(character: u8) bool {
-    return character == '_' or
-        character >= 'a' and character <= 'z' or
-        character >= 'A' and character <= 'Z';
-}
-
-fn isIdentifierContinue(character: u8) bool {
-    return isIdentifierStart(character) or character >= '0' and character <= '9';
 }

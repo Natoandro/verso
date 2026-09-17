@@ -2,6 +2,9 @@ const std = @import("std");
 const escape = @import("escape.zig");
 const expression = @import("expression.zig");
 const parser = @import("parser.zig");
+const component_renderer = @import("component_renderer.zig");
+
+const EmptyContext = struct {};
 
 pub fn writePath(writer: *std.Io.Writer, comptime path: anytype, context: anytype, comptime escaped: bool) !void {
     const Value = expression.resolvePathType(@TypeOf(context), path, 0);
@@ -42,6 +45,7 @@ fn renderRange(
                 index = block.node_end - 1;
             },
             .component => |call| try renderComponent(writer, nodes, components, call, context),
+            .snippet_declaration => |snippet| index = snippet.node_end - 1,
         }
     }
 }
@@ -125,6 +129,11 @@ fn renderComponent(
     comptime call: anytype,
     context: anytype,
 ) !void {
+    if (comptime call.local_decl != null) {
+        try renderLocalSnippet(writer, nodes, components, call, call.local_decl.?, context);
+        return;
+    }
+
     const Components = @TypeOf(components);
     const fields = switch (@typeInfo(Components)) {
         .@"struct" => |structure| structure.fields,
@@ -135,91 +144,115 @@ fn renderComponent(
         if (comptime std.mem.eql(u8, field.name, call.name)) {
             found = true;
             const child = @field(components, field.name);
-            try renderRegisteredComponent(writer, child, call, context);
+            try component_renderer.renderRegisteredComponent(writer, child, call, context);
         }
     }
     if (comptime !found) {
         @compileError(std.fmt.comptimePrint("unknown template component '{s}'", .{call.name}));
     }
-    _ = nodes;
 }
 
-fn renderRegisteredComponent(writer: *std.Io.Writer, comptime child: anytype, comptime call: anytype, context: anytype) !void {
-    const Options = @TypeOf(@TypeOf(child).template_options);
-    if (comptime @hasField(Options, "parameters")) {
-        const parameters = @TypeOf(child).template_options.parameters;
-        const bindings = comptime validateComponentArguments(call, parameters);
-        const base: struct {} = .{};
-        try bindComponentParameters(writer, child, parameters, call, bindings, 0, context, base);
-    } else {
-        if (call.count != 0) @compileError("component does not declare parameters");
-        try child.render(writer, .{});
-    }
+fn renderLocalSnippet(
+    writer: *std.Io.Writer,
+    comptime nodes: anytype,
+    comptime components: anytype,
+    comptime call: anytype,
+    comptime declaration_index: usize,
+    context: anytype,
+) !void {
+    const declaration = nodes[declaration_index].snippet_declaration;
+    const bindings = comptime validateSnippetArguments(call, declaration);
+    const base: EmptyContext = .{};
+    try bindSnippetParameters(writer, nodes, components, declaration, call, bindings, 0, context, base);
 }
 
-fn validateComponentArguments(comptime call: anytype, comptime parameters: anytype) [parameterCount(parameters)]usize {
-    const ParameterType = @TypeOf(parameters);
-    const fields = switch (@typeInfo(ParameterType)) {
-        .@"struct" => |structure| structure.fields,
-        else => @compileError("component parameters must be a struct"),
-    };
-    comptime var bindings: [fields.len]usize = undefined;
-    comptime var bound: [fields.len]bool = [_]bool{false} ** fields.len;
-
-    inline for (call.args[0..call.count], 0..) |argument, argument_index| {
-        const parameter_index = findParameter(fields, argument.name) orelse
+fn validateSnippetArguments(comptime call: anytype, comptime declaration: anytype) [declaration.parameter_count]usize {
+    comptime var bindings: [declaration.parameter_count]usize = undefined;
+    if (call.count == 0) {
+        if (declaration.parameter_count != 0) {
             @compileError(std.fmt.comptimePrint(
-                "unknown argument '{s}' for component '{s}'",
-                .{ argument.name, call.name },
-            ));
-        if (bound[parameter_index]) {
-            @compileError(std.fmt.comptimePrint(
-                "duplicate argument '{s}' for component '{s}'",
-                .{ argument.name, call.name },
+                "missing arguments for snippet '{s}'",
+                .{declaration.name},
             ));
         }
-        bound[parameter_index] = true;
-        bindings[parameter_index] = argument_index;
+        return bindings;
     }
 
-    inline for (fields, 0..) |field, parameter_index| {
-        if (!bound[parameter_index]) {
+    const positional = call.args[0].name.len == 0;
+    inline for (call.args[0..call.count]) |argument| {
+        if ((argument.name.len == 0) != positional) {
             @compileError(std.fmt.comptimePrint(
-                "missing argument '{s}' for component '{s}'",
-                .{ field.name, call.name },
+                "snippet '{s}' cannot mix positional and named arguments",
+                .{declaration.name},
             ));
+        }
+    }
+
+    if (positional) {
+        if (call.count < declaration.parameter_count) {
+            @compileError(std.fmt.comptimePrint(
+                "missing arguments for snippet '{s}'",
+                .{declaration.name},
+            ));
+        }
+        if (call.count > declaration.parameter_count) {
+            @compileError(std.fmt.comptimePrint(
+                "too many arguments for snippet '{s}'",
+                .{declaration.name},
+            ));
+        }
+        inline for (call.args[0..call.count], 0..) |_, argument_index| {
+            bindings[argument_index] = argument_index;
+        }
+    } else {
+        comptime var bound: [declaration.parameter_count]bool = [_]bool{false} ** declaration.parameter_count;
+        inline for (call.args[0..call.count], 0..) |argument, argument_index| {
+            const parameter_index = findSnippetParameter(declaration.parameters, declaration.parameter_count, argument.name) orelse
+                @compileError(std.fmt.comptimePrint(
+                    "unknown argument '{s}' for snippet '{s}'",
+                    .{ argument.name, declaration.name },
+                ));
+            if (bound[parameter_index]) {
+                @compileError(std.fmt.comptimePrint(
+                    "duplicate argument '{s}' for snippet '{s}'",
+                    .{ argument.name, declaration.name },
+                ));
+            }
+            bound[parameter_index] = true;
+            bindings[parameter_index] = argument_index;
+        }
+        inline for (declaration.parameters[0..declaration.parameter_count], 0..) |parameter, parameter_index| {
+            if (!bound[parameter_index]) {
+                @compileError(std.fmt.comptimePrint(
+                    "missing argument '{s}' for snippet '{s}'",
+                    .{ parameter, declaration.name },
+                ));
+            }
         }
     }
     return bindings;
 }
 
-fn parameterCount(comptime parameters: anytype) usize {
-    return switch (@typeInfo(@TypeOf(parameters))) {
-        .@"struct" => |structure| structure.fields.len,
-        else => 0,
-    };
-}
-
-fn findParameter(comptime fields: anytype, comptime name: []const u8) ?usize {
-    inline for (fields, 0..) |field, index| {
-        if (comptime std.mem.eql(u8, field.name, name)) return index;
+fn findSnippetParameter(parameters: anytype, comptime count: usize, comptime name: []const u8) ?usize {
+    inline for (parameters[0..count], 0..) |parameter, index| {
+        if (comptime std.mem.eql(u8, parameter, name)) return index;
     }
     return null;
 }
 
-fn bindComponentParameters(
+fn bindSnippetParameters(
     writer: *std.Io.Writer,
-    comptime child: anytype,
-    comptime parameters: anytype,
+    comptime nodes: anytype,
+    comptime components: anytype,
+    comptime declaration: anytype,
     comptime call: anytype,
     comptime bindings: anytype,
     comptime index: usize,
     parent: anytype,
     scope: anytype,
 ) !void {
-    const fields = @typeInfo(@TypeOf(parameters)).@"struct".fields;
-    if (index == fields.len) {
-        try child.render(writer, scope);
+    if (index == declaration.parameter_count) {
+        try renderRange(writer, nodes, components, declaration.body_start, declaration.body_end, scope);
         return;
     }
 
@@ -227,10 +260,11 @@ fn bindComponentParameters(
     switch (argument.value) {
         .path => |path_source| {
             const path = comptime parser.parsePath(path_source, path_source.len);
-            try bindComponentValue(
+            try bindSnippetValue(
                 writer,
-                child,
-                parameters,
+                nodes,
+                components,
+                declaration,
                 call,
                 bindings,
                 index,
@@ -239,16 +273,17 @@ fn bindComponentParameters(
                 expression.resolvePath(path, parent),
             );
         },
-        .string => |value| try bindComponentValue(writer, child, parameters, call, bindings, index, parent, scope, value),
-        .boolean => |value| try bindComponentValue(writer, child, parameters, call, bindings, index, parent, scope, value),
-        .integer => |value| try bindComponentValue(writer, child, parameters, call, bindings, index, parent, scope, value),
+        .string => |value| try bindSnippetValue(writer, nodes, components, declaration, call, bindings, index, parent, scope, value),
+        .boolean => |value| try bindSnippetValue(writer, nodes, components, declaration, call, bindings, index, parent, scope, value),
+        .integer => |value| try bindSnippetValue(writer, nodes, components, declaration, call, bindings, index, parent, scope, value),
     }
 }
 
-fn bindComponentValue(
+fn bindSnippetValue(
     writer: *std.Io.Writer,
-    comptime child: anytype,
-    comptime parameters: anytype,
+    comptime nodes: anytype,
+    comptime components: anytype,
+    comptime declaration: anytype,
     comptime call: anytype,
     comptime bindings: anytype,
     comptime index: usize,
@@ -256,10 +291,9 @@ fn bindComponentValue(
     scope: anytype,
     value: anytype,
 ) !void {
-    const fields = @typeInfo(@TypeOf(parameters)).@"struct".fields;
-    const Scoped = expression.Scope(@TypeOf(scope), fields[index].name, @TypeOf(value));
+    const Scoped = expression.Scope(@TypeOf(scope), declaration.parameters[index], @TypeOf(value));
     const scoped: Scoped = .{ .outer = scope, .value = value };
-    try bindComponentParameters(writer, child, parameters, call, bindings, index + 1, parent, scoped);
+    try bindSnippetParameters(writer, nodes, components, declaration, call, bindings, index + 1, parent, scoped);
 }
 
 fn ensureCondition(comptime Value: type) void {
