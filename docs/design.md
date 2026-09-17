@@ -72,6 +72,9 @@ The initial system should deliberately avoid generalizing for hypothetical futur
   archives.
 - [Rendering and cache](design/rendering.md) — server rendering, published
   page caching, invalidation, and draft-cache boundaries.
+- [Compile-time markup templates](design/template-engine.md) — typed,
+  developer-authored Zig templates, comptime validation, components, and
+  writer-based HTML rendering.
 - [Web editor and preview](design/editor.md) — HTMX editing, client-side live
   previews, persisted-draft server previews, and local draft recovery.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,

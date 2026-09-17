@@ -99,9 +99,10 @@ configuration, deployment, and logging details.
 ## Development
 
 Implementation work and progress are tracked in
-[`docs/implementation-plan.md`](docs/implementation-plan.md). Commands shown
-above may still expose partial behavior until their corresponding plan entries
-are complete and verified. Run `zig build test` for unit tests and
+[`docs/implementation-plan.md`](docs/implementation-plan.md) and the dedicated
+[template-engine implementation plan](docs/template-engine-implementation-plan.md).
+Commands shown above may still expose partial behavior until their corresponding
+plan entries are complete and verified. Run `zig build test` for unit tests and
 `zig build verify` for the executable bootstrap flows.
 
 ## Scope
