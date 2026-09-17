@@ -85,6 +85,12 @@ run_server() {
     }
     [ "$response" = "Verso is running" ] || fail "unexpected HTTP response: $response"
 
+    editor_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor") || fail "editor shell was not served"
+    printf '%s\n' "$editor_response" | grep -F 'data-local-only' >/dev/null || fail "editor shell was not browser-local"
+    editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
+    [ "$editor_post_status" = "405" ] || fail "editor accepted a mutation request"
+    grep -F 'read-only to the server' "$case_directory/editor-post.body" >/dev/null || fail "editor mutation rejection was unclear"
+
     case "$shutdown_signal" in
         INT) kill -INT "$server_pid" ;;
         TERM) kill -TERM "$server_pid" ;;

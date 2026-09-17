@@ -402,6 +402,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&snippet_visibility_test.step);
     test_step.dependOn(&snippet_isolation_test.step);
     test_step.dependOn(&missing_layout_slot_test.step);
+    const editor_model_tests = b.addSystemCommand(&.{ "node", b.pathFromRoot("test/editor_model.test.js") });
+    test_step.dependOn(&editor_model_tests.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

@@ -198,18 +198,18 @@ migration task.
 This section is intentionally browser-local. It has no endpoint that accepts
 unsaved document content and no server mutation path before `IAM-003`.
 
-- [ ] **ED-001 — Compose an unsaved structured document**
+- [x] **ED-001 — Compose an unsaved structured document**
 
   A browser can compose an unsaved structured document with text and
   image-section placeholders, including insertion, edit, reorder, duplication,
   and deletion. The HTMX-oriented shell and minimal JavaScript use the shared
   client document model.
 
-  - [ ] **Web/editor:** Build the browser-local editor shell and controls for
+  - [x] **Web/editor:** Build the browser-local editor shell and controls for
     manipulating sections without sending unsaved content to the server.
-  - [ ] **Client document model:** Define the shared in-memory representation
+  - [x] **Client document model:** Define the shared in-memory representation
     and deterministic operations used by the editor and preview.
-  - [ ] **UI tests:** Verify section lifecycle operations, ordering, placeholder
+  - [x] **UI tests:** Verify section lifecycle operations, ordering, placeholder
     behavior, and the absence of an unauthenticated mutation endpoint.
 
 - [ ] **ED-002 — Render a safe local preview**

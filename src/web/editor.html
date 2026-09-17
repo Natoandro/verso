@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Compose document — Verso</title>
+  <link rel="stylesheet" href="/admin/editor.css">
+</head>
+<body>
+  <main class="editor-shell" data-editor data-local-only data-model-schema-version="1">
+    <header class="editor-header">
+      <div>
+        <p class="eyebrow">Verso editorial workspace</p>
+        <h1>Compose document</h1>
+        <p class="lede">This is an unsaved document held in this browser. Nothing on this page is sent to the server.</p>
+      </div>
+      <span class="local-badge">Browser-local</span>
+    </header>
+
+    <section class="document-meta" aria-labelledby="document-details-heading">
+      <h2 id="document-details-heading">Document details</h2>
+      <div class="meta-grid">
+        <label>Title <input data-field="title" type="text" autocomplete="off" placeholder="A thoughtful title"></label>
+        <label>Slug <input data-field="slug" type="text" autocomplete="off" placeholder="a-thoughtful-title"></label>
+        <label class="wide-field">Description <textarea data-field="description" rows="2" placeholder="A short description (optional)"></textarea></label>
+      </div>
+    </section>
+
+    <section class="composition" aria-labelledby="sections-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Structured content</p>
+          <h2 id="sections-heading">Sections</h2>
+        </div>
+        <span class="section-count" data-section-count>0 sections</span>
+      </div>
+      <div class="section-list" data-section-list aria-live="polite"></div>
+      <div class="add-section" data-add-section>
+        <span>Add a section</span>
+        <button type="button" data-action="add-section" data-kind="text">+ Text</button>
+        <button type="button" data-action="add-section" data-kind="image">+ Image placeholder</button>
+      </div>
+    </section>
+
+    <footer class="editor-footer">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span data-editor-status>Unsaved browser-local document</span>
+      <span class="footer-note">Saving and publishing are separate operations and are not available in this shell.</span>
+    </footer>
+  </main>
+  <script src="/admin/editor-model.js"></script>
+  <script src="/admin/editor.js"></script>
+</body>
+</html>

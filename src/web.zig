@@ -9,3 +9,4 @@ pub const Layer = layer.Layer;
 pub const Next = layer.Next;
 pub const Pipeline = layer.Pipeline;
 pub const RequestLoggingLayer = logging.RequestLoggingLayer;
+pub const EditorHandler = @import("web/editor.zig").Handler;
