@@ -40,6 +40,34 @@ assuming those exist.
   never allow a single Zig source file to exceed 600 lines. Split cohesive
   responsibilities into neighboring modules before reaching the hard limit.
 
+## Browser editor implementation
+
+- Keep the application HTMX-oriented. Svelte is an editor-only island mounted
+  below the stable `data-editor-mount` root; it is not an SPA framework for
+  public pages, and HTMX must not swap that subtree.
+- Use Svelte 5 runes in `.svelte` components: `$props` for component inputs,
+  `$state` for local reactive state, `$derived` for computed values, and
+  `$effect` for browser effects. Do not introduce legacy `export let`, `$:`
+  reactive statements, legacy event directives, or deprecated module-script
+  syntax.
+- Keep document operations, safe local rendering, stale-preview protection,
+  and the explicit editor reducer in ordinary independently testable
+  TypeScript modules. Components dispatch reducer actions instead of mutating
+  canonical data or implementing parallel state transitions.
+- Use keyed section iteration by stable section ID. Svelte raw HTML rendering
+  is permitted only for output returned by the safe local renderer; raw editor
+  input must never be inserted into the DOM as markup.
+- The browser-local editor remains noncanonical: local previews and future
+  recovery snapshots must not send unsaved document content to the server or
+  mutate SQLite. The server renderer remains authoritative.
+- Build the editor with the tracked pnpm lockfile and the Zig-managed Node
+  build step. `build.zig` should recursively discover files under the frontend
+  source/test directories as cache inputs instead of maintaining a per-file
+  list; keep build metadata such as the manifest, lockfile, and Vite config
+  explicitly tracked. Generated bundles belong in Zig's cache output
+  directory, never in `src/` or the repository worktree; the released binary
+  embeds them and must not require Node at runtime.
+
 ## Expected layout
 
 When implementation begins, the design anticipates roughly these boundaries:

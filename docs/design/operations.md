@@ -592,7 +592,7 @@ Verso is a self-hosted publishing server built around:
 
 ```mermaid
 flowchart TB
-    editors["Editors"] --> web["Web CMS<br/>HTMX 4"]
+    editors["Editors"] --> web["Web CMS<br/>HTMX 4 + Svelte island"]
     editors --> mcp["AI MCP<br/>OAuth"]
     web --> verso["Verso application"]
     mcp --> verso
@@ -618,7 +618,7 @@ The central architectural decisions are:
 * **server-side rendering**;
 * **filesystem caching for published pages**;
 * **no public caching of mutable drafts**;
-* **HTMX 4 for the web editor**;
+* **HTMX 4 with a Svelte + TypeScript island for the browser-local web editor**;
 * **client-side live previews and server-rendered, production-equivalent
   previews of persisted drafts**;
 * **preview, save, and publish as distinct operations**;

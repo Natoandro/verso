@@ -14,17 +14,20 @@ Related: [content model](content.md), [rendering and cache](rendering.md), [iden
 
 Verso provides a browser-based editorial interface.
 
-The initial editor uses:
+The application remains HTMX-oriented, with the browser-local editing surface
+implemented as one Svelte + TypeScript island. It uses:
 
 ```text
 HTML
 +
 HTMX 4
 +
-minimal JavaScript
+Svelte + TypeScript (editor island only)
 ```
 
-A full SPA framework should not be required unless a concrete feature later justifies it.
+Svelte owns only a stable editor mount root; HTMX must not swap that subtree.
+Svelte is not used as an SPA framework for public pages, and no hydration or
+server-rendered editor state is required.
 
 The editor operates through normal Verso application services.
 

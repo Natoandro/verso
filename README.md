@@ -27,7 +27,8 @@ Verso is designed as a small, single-process application with:
 - Markdown text sections;
 - filesystem assets initially, with possible S3-compatible storage later;
 - filesystem caching for published HTML;
-- an HTMX 4 web editor with minimal JavaScript;
+- an HTMX 4-oriented web editor with a Svelte + TypeScript island limited to
+  the browser-local editing surface;
 - client-side previews with local draft autosave and explicit server-rendered,
   publication-equivalent previews of persisted drafts;
 - immutable, explicitly numbered document versions with read-only archives;
@@ -104,6 +105,11 @@ Implementation work and progress are tracked in
 Commands shown above may still expose partial behavior until their corresponding
 plan entries are complete and verified. Run `zig build test` for unit tests and
 `zig build verify` for the executable bootstrap flows.
+
+The editor frontend is bundled automatically by `zig build` using the locked
+dependencies in `web-editor/pnpm-lock.yaml`. Install them once with
+`corepack pnpm install --dir web-editor`; the released Zig binary embeds the
+generated assets and does not require Node at runtime.
 
 ## Scope
 

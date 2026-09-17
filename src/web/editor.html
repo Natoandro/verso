@@ -8,48 +8,8 @@
   <link rel="stylesheet" href="/admin/editor.css">
 </head>
 <body>
-  <main class="editor-shell" data-editor data-local-only data-model-schema-version="1">
-    <header class="editor-header">
-      <div class="editor-context">
-        <p class="eyebrow">Verso</p>
-        <p class="editor-heading">Compose document</p>
-      </div>
-      <div class="editor-header-actions">
-        <button type="button" class="icon-button" data-action="toggle-details" title="Document details" aria-label="Document details"></button>
-        <span class="local-badge">Browser-local</span>
-      </div>
-    </header>
-
-    <section class="document-article" aria-labelledby="document-title">
-      <div class="article-title-row">
-        <div class="article-title-content">
-          <h1 id="document-title" class="document-title" data-title-editor data-placeholder="Untitled document" role="textbox" aria-label="Document title"></h1>
-          <p class="article-description" data-article-description hidden></p>
-        </div>
-        <div class="title-actions" data-title-actions></div>
-      </div>
-
-      <div class="details-panel" data-details-panel hidden></div>
-
-      <div class="article-toolbar">
-        <span class="section-count" data-section-count>0 sections</span>
-      </div>
-      <div class="section-list" data-section-list aria-live="polite"></div>
-      <div class="add-section" data-add-section>
-        <span class="add-section-label">Add to article</span>
-        <button type="button" class="icon-button" data-action="add-section" data-kind="text" title="Add text" aria-label="Add text"></button>
-        <button type="button" class="icon-button" data-action="add-section" data-kind="image" title="Add image placeholder" aria-label="Add image placeholder"></button>
-      </div>
-    </section>
-
-    <footer class="editor-footer">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span data-editor-status>Unsaved browser-local document</span>
-      <span class="footer-note">Saving and publishing are separate operations and are not available in this shell.</span>
-    </footer>
-  </main>
-  <script src="/admin/editor-model.js"></script>
-  <script src="/admin/editor-renderer.js"></script>
+  <!-- Stable island mount. HTMX must not swap this subtree. -->
+  <main data-editor-mount></main>
   <script src="/admin/editor.js"></script>
 </body>
 </html>

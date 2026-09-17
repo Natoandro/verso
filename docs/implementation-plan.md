@@ -202,13 +202,14 @@ unsaved document content and no server mutation path before `IAM-003`.
 
   A browser can compose an unsaved structured document with text and
   image-section placeholders, including insertion, edit, reorder, duplication,
-  and deletion. The HTMX-oriented shell and minimal JavaScript use the shared
-  client document model.
+  and deletion. The HTMX-oriented shell uses a Svelte + TypeScript editor
+  island and the shared client document model.
 
   - [x] **Web/editor:** Build the browser-local editor shell and controls for
-    manipulating sections without sending unsaved content to the server.
-  - [x] **Client document model:** Define the shared in-memory representation
-    and deterministic operations used by the editor and preview.
+    manipulating sections without sending unsaved content to the server; keep
+    Svelte limited to a stable editor mount root.
+  - [x] **Client document model:** Define the shared typed in-memory
+    representation and deterministic operations used by the editor and preview.
   - [x] **UI tests:** Verify section lifecycle operations, ordering, placeholder
     behavior, and the absence of an unauthenticated mutation endpoint.
 

@@ -47,7 +47,14 @@ button { cursor: pointer; }
 .section-actions .icon-button { background: #fbfaf7; }
 .section-card:hover .section-actions, .section-card:focus-within .section-actions, .section-card.is-active .section-actions, .section-card:focus .section-actions { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .icon-button { display: inline-grid; width: 32px; height: 32px; place-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0; color: #74817c; background: transparent; }
-.icon-button:hover, .icon-button:focus-visible { border-color: #cbd9d2; color: #246b54; background: #f1f7f3; outline: none; }
+.icon-button-check, .icon-button-edit { color: #2f8064; }
+.icon-button-copy { color: #4b7295; }
+.icon-button-delete { color: #ad4d50; }
+.icon-button-details { color: #78658c; }
+.icon-button-image { color: #b0753f; }
+.icon-button-plus, .icon-button-text { color: #3f8b70; }
+.icon-button-up, .icon-button-down { color: #6d8490; }
+.icon-button:hover, .icon-button:focus-visible { border-color: #cbd9d2; color: inherit; background: #f1f7f3; outline: none; }
 .icon-button:focus-visible { box-shadow: 0 0 0 3px rgb(63 139 112 / 18%); }
 .icon-button:disabled { cursor: not-allowed; opacity: 0.3; }
 .icon { display: inline-flex; width: 17px; height: 17px; }

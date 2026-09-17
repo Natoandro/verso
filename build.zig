@@ -3,6 +3,22 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const frontend_bundle = b.addSystemCommand(&.{ "node", b.pathFromRoot("web-editor/build.mjs") });
+    const frontend_output = frontend_bundle.addPrefixedOutputDirectoryArg("--out-dir=", "editor-assets");
+    const frontend_config_inputs = [_][]const u8{
+        "web-editor/build.mjs",
+        "web-editor/package.json",
+        "web-editor/pnpm-lock.yaml",
+        "web-editor/tsconfig.json",
+        "web-editor/vite.config.ts",
+    };
+    for (frontend_config_inputs) |input| frontend_bundle.addFileInput(b.path(input));
+    addDirectoryFileInputs(b, frontend_bundle, "web-editor/src");
+    addDirectoryFileInputs(b, frontend_bundle, "web-editor/test");
+    const editor_assets = b.addModule("editor_assets", .{
+        .root_source_file = frontend_output.path(b, "editor_assets.zig"),
+        .target = target,
+    });
     const toml = b.dependency("toml", .{
         .target = target,
         .optimize = optimize,
@@ -32,6 +48,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "sqlite", .module = sqlite },
             .{ .name = "embedded_migrations", .module = embedded_migrations },
             .{ .name = "tmpl", .module = tmpl },
+            .{ .name = "editor_assets", .module = editor_assets },
         },
     });
 
@@ -47,6 +64,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    exe.step.dependOn(&frontend_bundle.step);
 
     b.installArtifact(exe);
     b.installDirectory(.{
@@ -402,13 +420,33 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&snippet_visibility_test.step);
     test_step.dependOn(&snippet_isolation_test.step);
     test_step.dependOn(&missing_layout_slot_test.step);
-    const editor_model_tests = b.addSystemCommand(&.{ "node", b.pathFromRoot("test/editor_model.test.js") });
-    test_step.dependOn(&editor_model_tests.step);
-    const editor_renderer_tests = b.addSystemCommand(&.{ "node", b.pathFromRoot("test/editor_renderer.test.js") });
-    test_step.dependOn(&editor_renderer_tests.step);
+    test_step.dependOn(&frontend_bundle.step);
+    const frontend_check = b.addSystemCommand(&.{ "corepack", "pnpm", "--dir", b.pathFromRoot("web-editor"), "check" });
+    test_step.dependOn(&frontend_check.step);
+    const frontend_tests = b.addSystemCommand(&.{ "corepack", "pnpm", "--dir", b.pathFromRoot("web-editor"), "test" });
+    test_step.dependOn(&frontend_tests.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });
     verify_command.addArtifactArg(exe);
     verify_step.dependOn(&verify_command.step);
+}
+
+fn addDirectoryFileInputs(b: *std.Build, run: *std.Build.Step.Run, sub_path: []const u8) void {
+    var directory = std.Io.Dir.cwd().openDir(b.graph.io, sub_path, .{ .iterate = true }) catch |err| {
+        @panic(b.fmt("unable to open frontend input directory '{s}': {t}", .{ sub_path, err }));
+    };
+    defer directory.close(b.graph.io);
+
+    var walker = directory.walk(b.allocator) catch |err| {
+        @panic(b.fmt("unable to walk frontend input directory '{s}': {t}", .{ sub_path, err }));
+    };
+    defer walker.deinit();
+
+    while (walker.next(b.graph.io) catch |err| {
+        @panic(b.fmt("unable to enumerate frontend input directory '{s}': {t}", .{ sub_path, err }));
+    }) |entry| {
+        if (entry.kind != .file) continue;
+        run.addFileInput(b.path(b.pathJoin(&.{ sub_path, entry.path })));
+    }
 }

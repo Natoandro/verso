@@ -36,7 +36,7 @@ The initial target stack is:
 Language:              Zig
 Database:              SQLite
 Public rendering:      server-side HTML
-Editorial frontend:    HTMX 4 + minimal JavaScript
+Editorial frontend:    HTMX 4 + Svelte/TypeScript editor island
 Text content:          Markdown
 Asset storage:         filesystem initially
 Later asset store:     S3-compatible storage / RustFS

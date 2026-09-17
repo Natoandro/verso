@@ -1,0 +1,2 @@
+<script lang="ts"></script>
+<svg viewBox="0 0 18 18" focusable="false"><path d="m5 8 4 4 4-4M9 12V3" /></svg>

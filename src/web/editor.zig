@@ -1,11 +1,8 @@
 const std = @import("std");
 const context = @import("context.zig");
+const editor_assets = @import("editor_assets");
 
 const editor_html = @embedFile("editor.html");
-const editor_css = @embedFile("editor.css");
-const editor_js = @embedFile("editor.js");
-const editor_model_js = @embedFile("editor_model.js");
-const editor_renderer_js = @embedFile("editor_renderer.js");
 
 pub const Handler = struct {
     pub fn handle(_: *@This(), request: *context.RequestContext, next: anytype) !void {
@@ -19,19 +16,11 @@ pub const Handler = struct {
         }
         if (std.mem.eql(u8, path, "/admin/editor.css")) {
             if (method != .GET) return respond(request, "Method not allowed\n", .method_not_allowed, "text/plain; charset=utf-8", "GET");
-            return respond(request, editor_css, .ok, "text/css; charset=utf-8", null);
+            return respond(request, editor_assets.css, .ok, "text/css; charset=utf-8", null);
         }
         if (std.mem.eql(u8, path, "/admin/editor.js")) {
             if (method != .GET) return respond(request, "Method not allowed\n", .method_not_allowed, "text/plain; charset=utf-8", "GET");
-            return respond(request, editor_js, .ok, "text/javascript; charset=utf-8", null);
-        }
-        if (std.mem.eql(u8, path, "/admin/editor-model.js")) {
-            if (method != .GET) return respond(request, "Method not allowed\n", .method_not_allowed, "text/plain; charset=utf-8", "GET");
-            return respond(request, editor_model_js, .ok, "text/javascript; charset=utf-8", null);
-        }
-        if (std.mem.eql(u8, path, "/admin/editor-renderer.js")) {
-            if (method != .GET) return respond(request, "Method not allowed\n", .method_not_allowed, "text/plain; charset=utf-8", "GET");
-            return respond(request, editor_renderer_js, .ok, "text/javascript; charset=utf-8", null);
+            return respond(request, editor_assets.javascript, .ok, "text/javascript; charset=utf-8", null);
         }
 
         return next.call(request);

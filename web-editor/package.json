@@ -1,0 +1,19 @@
+{
+  "name": "@verso/editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs --out-dir dist",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "6.2.1",
+    "@types/node": "22.15.21",
+    "svelte": "5.33.14",
+    "svelte-check": "4.1.7",
+    "typescript": "5.8.3",
+    "vite": "7.0.0",
+    "vitest": "3.1.2"
+  }
+}
