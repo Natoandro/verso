@@ -462,6 +462,12 @@ fn isNull(value: anytype) bool {
 
 fn writePrettyLevel(writer: *std.Io.Writer, value: anytype, use_color: bool) !void {
     if (stringValue(value)) |level| {
+        if (std.mem.eql(u8, level, "debug")) {
+            try writeAnsi(writer, use_color, ansi.dim);
+            try writePrettyText(writer, prettyLevel(level));
+            try writeAnsi(writer, use_color, ansi.reset);
+            return;
+        }
         try writeAnsi(writer, use_color, levelColor(level));
         try writeAnsi(writer, use_color, ansi.bold);
         try writePrettyText(writer, prettyLevel(level));
@@ -534,6 +540,7 @@ fn prettyLevel(level: []const u8) []const u8 {
     if (std.mem.eql(u8, level, "info")) return "INFO";
     if (std.mem.eql(u8, level, "warn")) return "WARN";
     if (std.mem.eql(u8, level, "error")) return "ERROR";
+    if (std.mem.eql(u8, level, "debug")) return "DEBUG";
     return level;
 }
 

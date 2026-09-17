@@ -15,6 +15,15 @@ const SignalHandlerState = if (builtin.os.tag == .linux) struct {
     previous_term: std.c.Sigaction,
 } else struct {};
 
+const ServerListeningLogRecord = struct {
+    comptime format: []const u8 = "server listening on {host}:{port}",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    host: []const u8,
+    port: u16,
+};
+
 pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Config) !void {
     shutdown_requested.store(false, .seq_cst);
 
@@ -90,7 +99,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     };
     defer listener.deinit(io);
 
-    logBestEffort(&logger, io, .{
+    logBestEffort(&logger, io, ServerListeningLogRecord{
         .level = "info",
         .event = "server.listening",
         .message = "server listening",

@@ -78,6 +78,38 @@ test "pretty formatting accepts a non-request record" {
     );
 }
 
+test "pretty formatting renders debug level consistently" {
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+
+    try writeRecord(&writer, std.testing.allocator, .pretty, 42, false, false, .{
+        .level = "debug",
+        .event = "startup",
+        .message = @as([]const u8, "diagnostic detail"),
+    });
+
+    try std.testing.expectEqualStrings(
+        "[1970-01-01T00:00:00.042Z] DEBUG diagnostic detail\n",
+        writer.buffered(),
+    );
+}
+
+test "pretty formatting mutes colored debug levels" {
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+
+    try writeRecord(&writer, std.testing.allocator, .pretty, 42, true, false, .{
+        .level = "debug",
+        .event = "startup",
+        .message = @as([]const u8, "diagnostic detail"),
+    });
+
+    try std.testing.expectEqualStrings(
+        "\x1b[2m[1970-01-01T00:00:00.042Z]\x1b[0m \x1b[2mDEBUG\x1b[0m \x1b[36m\x1b[1mdiagnostic detail\x1b[0m\n",
+        writer.buffered(),
+    );
+}
+
 test "pretty formatting colors the timestamp, level, message, and fields" {
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
