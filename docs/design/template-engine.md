@@ -287,7 +287,7 @@ The same `article_page` remains independently renderable for an HTMX fragment.
 ```zig
 const tmpl = @import("tmpl");
 
-const template = tmpl.parse(comptime source);
+const template = tmpl.parse(comptime source, .{});
 const configured = tmpl.parse(comptime source, comptime options);
 
 try template.render(writer, .{ .post = post, .user = user });

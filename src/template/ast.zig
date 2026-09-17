@@ -33,6 +33,26 @@ pub fn ForBlock(comptime capacity: usize) type {
     };
 }
 
+pub const Expr = union(enum) {
+    path: []const u8,
+    string: []const u8,
+    boolean: bool,
+    integer: i64,
+};
+
+pub const ComponentArg = struct {
+    name: []const u8,
+    value: Expr,
+};
+
+pub fn Component(comptime capacity: usize) type {
+    return struct {
+        name: []const u8,
+        args: [capacity]ComponentArg,
+        count: usize,
+    };
+}
+
 pub fn Node(comptime capacity: usize) type {
     return union(enum) {
         text: []const u8,
@@ -40,6 +60,7 @@ pub fn Node(comptime capacity: usize) type {
         raw_expression: Path(capacity),
         if_block: IfBlock(capacity),
         for_block: ForBlock(capacity),
+        component: Component(capacity),
     };
 }
 

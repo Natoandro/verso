@@ -10,7 +10,7 @@ const Context = struct {
 };
 
 comptime {
-    const template = tmpl.parse("{{#for items |item|}}{{ item.name }}{{/for}}{{ item.name }}");
+    const template = tmpl.parse("{{#for items |item|}}{{ item.name }}{{/for}}{{ item.name }}", .{});
     var buffer: [64]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     template.render(&writer, Context{ .items = .{.{ .name = "item" }} }) catch unreachable;

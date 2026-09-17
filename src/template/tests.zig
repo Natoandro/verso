@@ -30,10 +30,15 @@ const Group = struct {
     items: []const Item,
 };
 
+const ComponentPost = struct {
+    id: i32,
+    title: []const u8,
+};
+
 test "renders inline text, nested paths, scalars, and escaped strings" {
     const template = tmpl.parse("<h1>{{ post.title }}</h1>\n" ++
         "<p>{{ post.author.name }} #{{ post.count }} {{ post.rating }} {{ post.published }} {{ post.status }}</p>\n" ++
-        "<div>{{ post.body_html }}</div><div>{{{ post.body_html }}}</div>\n");
+        "<div>{{ post.body_html }}</div><div>{{{ post.body_html }}}</div>\n", .{});
     const author = Author{ .name = "Ada & <Grace> '" };
     const post = Post{
         .title = "Markup \"demo\"",
@@ -55,7 +60,7 @@ test "renders inline text, nested paths, scalars, and escaped strings" {
 }
 
 test "renders an embedded template source" {
-    const template = tmpl.parse(@embedFile("fixtures/basic.html"));
+    const template = tmpl.parse(@embedFile("fixtures/basic.html"), .{});
     var buffer: [128]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     try template.render(&writer, .{ .title = "Embedded & safe" });
@@ -63,14 +68,14 @@ test "renders an embedded template source" {
 }
 
 test "streams writer failures" {
-    const template = tmpl.parse("{{ title }}");
+    const template = tmpl.parse("{{ title }}", .{});
     var buffer: [2]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     try std.testing.expectError(error.WriteFailed, template.render(&writer, .{ .title = "too long" }));
 }
 
 test "renders boolean branches and comments" {
-    const template = tmpl.parse("before{{! ignored }}{{#if enabled}}yes{{#else}}no{{/if}}after");
+    const template = tmpl.parse("before{{! ignored }}{{#if enabled}}yes{{#else}}no{{/if}}after", .{});
     var buffer: [64]u8 = undefined;
 
     var writer = std.Io.Writer.fixed(&buffer);
@@ -83,7 +88,7 @@ test "renders boolean branches and comments" {
 }
 
 test "renders optional captures and else branches" {
-    const template = tmpl.parse("{{#if current_user |user|}}Hello {{ user.name }}{{#else}}Guest{{/if}}");
+    const template = tmpl.parse("{{#if current_user |user|}}Hello {{ user.name }}{{#else}}Guest{{/if}}", .{});
     const present = User{ .name = "Ada" };
     var buffer: [64]u8 = undefined;
 
@@ -103,9 +108,40 @@ test "renders nested array and slice loops" {
         .{ .name = "one", .items = &first_items },
         .{ .name = "two", .items = &second_items },
     };
-    const template = tmpl.parse("{{#for groups |group|}}[{{ group.name }}:{{#for group.items |item|}}{{ item.name }}{{/for}}]{{/for}}");
+    const template = tmpl.parse("{{#for groups |group|}}[{{ group.name }}:{{#for group.items |item|}}{{ item.name }}{{/for}}]{{/for}}", .{});
     var buffer: [128]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     try template.render(&writer, .{ .groups = groups });
     try std.testing.expectEqualStrings("[one:ab][two:c]", writer.buffered());
+}
+
+test "renders a registered component with named path and literal arguments" {
+    const card = tmpl.parse(
+        "<article data-id=\"{{ id }}\"><h2>{{ title }}</h2><p>{{ active }}</p><span>{{ count }}</span><small>{{ label }}</small></article>",
+        .{ .parameters = .{ .id = {}, .title = {}, .active = {}, .count = {}, .label = {} } },
+    );
+    const page = tmpl.parse(
+        "{{> card id=post.id title=post.title active=true count=3 label=\"featured post\"}}",
+        .{ .components = .{ .card = card } },
+    );
+    var buffer: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try page.render(&writer, .{ .post = ComponentPost{ .id = 7, .title = "Components" } });
+    try std.testing.expectEqualStrings(
+        "<article data-id=\"7\"><h2>Components</h2><p>true</p><span>3</span><small>featured post</small></article>",
+        writer.buffered(),
+    );
+}
+
+test "renders nested registered components" {
+    const badge = tmpl.parse("<em>{{ text }}</em>", .{ .parameters = .{ .text = {} } });
+    const card = tmpl.parse(
+        "<strong>{{ name }}</strong>{{> badge text=name}}",
+        .{ .parameters = .{ .name = {} }, .components = .{ .badge = badge } },
+    );
+    const page = tmpl.parse("{{> card name=title}}", .{ .components = .{ .card = card } });
+    var buffer: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try page.render(&writer, .{ .title = "Nested" });
+    try std.testing.expectEqualStrings("<strong>Nested</strong><em>Nested</em>", writer.buffered());
 }

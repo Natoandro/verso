@@ -206,6 +206,39 @@ pub fn build(b: *std.Build) void {
         .contains = "unclosed template if block",
     };
 
+    const unknown_template_component_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/unknown_component.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    unknown_template_component_test.expect_errors = .{
+        .contains = "unknown template component 'missing'",
+    };
+
+    const missing_template_component_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/missing_component_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    missing_template_component_argument_test.expect_errors = .{
+        .contains = "missing argument 'user' for component 'card'",
+    };
+
+    const invalid_template_component_argument_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/invalid_component_argument.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    invalid_template_component_argument_test.expect_errors = .{
+        .contains = "template expression 'user.name' traverses a non-struct value of type i64",
+    };
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
@@ -222,6 +255,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&unexpected_template_closer_test.step);
     test_step.dependOn(&mismatched_template_closer_test.step);
     test_step.dependOn(&duplicate_template_else_test.step);
+    test_step.dependOn(&unknown_template_component_test.step);
+    test_step.dependOn(&missing_template_component_argument_test.step);
+    test_step.dependOn(&invalid_template_component_argument_test.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

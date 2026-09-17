@@ -53,21 +53,21 @@ when the stated outcome and every nested division are complete.
 
 ## 2. Components and Composition
 
-- [ ] **TPL-003 — Render comptime-registered components**
+- [x] **TPL-003 — Render comptime-registered components**
 
   A parsed template can register comptime-known components and invoke them with
   named path and literal arguments. Calls construct a typed child context,
   nested components work, and missing components or arguments fail compilation.
 
-  - [ ] **Registration API:** Define parse options that accept a comptime
+  - [x] **Registration API:** Define parse options that accept a comptime
     component struct with declared named parameters and resolve component names
     without a runtime registry.
-  - [ ] **Call parsing and validation:** Parse component calls and arguments;
+  - [x] **Call parsing and validation:** Parse component calls and arguments;
     validate registered names, argument names, required inputs, and detectable
     type mismatches against the child template context.
-  - [ ] **Child rendering:** Assemble the child context from resolved paths and
+  - [x] **Child rendering:** Assemble the child context from resolved paths and
     literals, then render the child template through the same writer path.
-  - [ ] **Tests:** Cover a basic component, named path and literal arguments,
+  - [x] **Tests:** Cover a basic component, named path and literal arguments,
     nested components, unknown components, missing arguments, and invalid
     argument types.
 

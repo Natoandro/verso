@@ -1,5 +1,5 @@
 const tmpl = @import("tmpl");
 
 comptime {
-    _ = tmpl.parse("{{#for items |item}}{{ item }}{{/for}}");
+    _ = tmpl.parse("{{#for items |item}}{{ item }}{{/for}}", .{});
 }

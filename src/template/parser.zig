@@ -61,6 +61,12 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
             continue;
         }
 
+        if (token[0] == '>') {
+            appendNode(&state.parsed, .{ .component = parseComponent(token[1..], source.len) });
+            state.cursor = close + close_token.len;
+            continue;
+        }
+
         if (token[0] == '#') {
             const header = std.mem.trim(u8, token[1..], " \t\r\n");
             if (startsKeyword(header, "if")) {
@@ -165,7 +171,7 @@ fn find(comptime source: []const u8, start: usize, comptime needle: []const u8) 
     return null;
 }
 
-fn parsePath(comptime expression: []const u8, comptime capacity: usize) ast.Path(capacity) {
+pub fn parsePath(comptime expression: []const u8, comptime capacity: usize) ast.Path(capacity) {
     const trimmed = std.mem.trim(u8, expression, " \t\r\n");
     if (trimmed.len == 0) @compileError("template interpolation cannot be empty");
 
@@ -254,6 +260,92 @@ fn parseOptionalCaptureHeader(comptime rest: []const u8, comptime capacity: usiz
         @compileError(std.fmt.comptimePrint("{s} directive has malformed capture syntax", .{directive}));
     }
     return .{ .condition = parsePath(condition, capacity), .capture = capture };
+}
+
+fn parseComponent(comptime value: []const u8, comptime capacity: usize) ast.Component(capacity) {
+    comptime var component: ast.Component(capacity) = .{
+        .name = undefined,
+        .args = undefined,
+        .count = 0,
+    };
+    comptime var cursor: usize = 0;
+    skipWhitespace(value, &cursor);
+
+    const name_start = cursor;
+    while (cursor < value.len and !isWhitespace(value[cursor])) : (cursor += 1) {}
+    const name = value[name_start..cursor];
+    if (!isIdentifier(name)) @compileError("component calls require a valid component name");
+    component.name = name;
+
+    while (true) {
+        skipWhitespace(value, &cursor);
+        if (cursor == value.len) break;
+
+        const argument_start = cursor;
+        while (cursor < value.len and !isWhitespace(value[cursor]) and value[cursor] != '=') : (cursor += 1) {}
+        const argument_name = value[argument_start..cursor];
+        if (!isIdentifier(argument_name)) @compileError("component calls require valid argument names");
+        skipWhitespace(value, &cursor);
+        if (cursor == value.len or value[cursor] != '=') {
+            @compileError("component arguments require '='");
+        }
+        cursor += 1;
+        skipWhitespace(value, &cursor);
+        if (cursor == value.len) @compileError("component arguments require a value");
+
+        const expression_start = cursor;
+        if (value[cursor] == '"' or value[cursor] == '\'') {
+            const quote = value[cursor];
+            cursor += 1;
+            while (cursor < value.len and value[cursor] != quote) : (cursor += 1) {}
+            if (cursor == value.len) @compileError("unclosed component string literal");
+            cursor += 1;
+        } else {
+            while (cursor < value.len and !isWhitespace(value[cursor])) : (cursor += 1) {}
+        }
+        const expression_text = value[expression_start..cursor];
+        component.args[component.count] = .{
+            .name = argument_name,
+            .value = parseComponentExpr(expression_text, capacity),
+        };
+        component.count += 1;
+    }
+    return component;
+}
+
+fn parseComponentExpr(comptime value: []const u8, comptime capacity: usize) ast.Expr {
+    if (value.len >= 2 and (value[0] == '"' or value[0] == '\'') and value[value.len - 1] == value[0]) {
+        if (std.mem.indexOfScalar(u8, value[1 .. value.len - 1], '\\') != null) {
+            @compileError("component string literal escapes are not supported");
+        }
+        return .{ .string = value[1 .. value.len - 1] };
+    }
+    if (std.mem.eql(u8, value, "true")) return .{ .boolean = true };
+    if (std.mem.eql(u8, value, "false")) return .{ .boolean = false };
+    if (isIntegerLiteral(value)) {
+        const integer = std.fmt.parseInt(i64, value, 10) catch
+            @compileError("component integer literal is out of range");
+        return .{ .integer = integer };
+    }
+    _ = parsePath(value, capacity);
+    return .{ .path = value };
+}
+
+fn skipWhitespace(value: []const u8, cursor: *usize) void {
+    while (cursor.* < value.len and isWhitespace(value[cursor.*])) : (cursor.* += 1) {}
+}
+
+fn isIntegerLiteral(value: []const u8) bool {
+    if (value.len == 0) return false;
+    var start: usize = 0;
+    if (value[0] == '-') {
+        if (value.len == 1) return false;
+        start = 1;
+    }
+    for (value[start..]) |character| {
+        if (character < '0' or character > '9') return false;
+    }
+    return true;
 }
 
 fn startsKeyword(value: []const u8, keyword: []const u8) bool {
