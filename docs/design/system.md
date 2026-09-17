@@ -258,7 +258,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     state["Browser unsaved state"] --> renderer["Client-side renderer"]
-    renderer --> pane["Local preview pane"]
+    renderer --> inline["Inline local section previews"]
     renderer -. no mutation .-> sqlite[("SQLite")]
 ```
 

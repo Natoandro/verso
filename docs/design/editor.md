@@ -46,6 +46,22 @@ flowchart TB
 
 The editor represents documents as ordered sections.
 
+Each section has two browser-local presentation modes:
+
+* `edit`, where its fields and section controls are visible;
+* `preview`, where the validated section is replaced by its rendered view and
+  an `Edit` action is available.
+
+New sections start in `edit` mode. The editor explicitly validates a section
+with a `Done` or `Preview` action before switching it to `preview` mode. A
+failed validation keeps the section in `edit` mode and displays an inline
+error. Returning to `edit` mode never changes the canonical document because
+the entire workflow is still browser-local.
+
+The same two-mode treatment applies to displayed document metadata such as the
+title, slug, and description. Reordering, duplication, and deletion controls
+remain available in the section header in either mode.
+
 Example:
 
 ```text
@@ -53,10 +69,12 @@ Example:
 │ Article title                    │
 ├──────────────────────────────────┤
 │ ≡ Text                           │
-│   [Markdown editor............]  │
+│   rendered Markdown              │
+│   [Edit]                        │
 ├──────────────────────────────────┤
 │ ≡ Image                          │
-│   [diagram.png]                  │
+│   image placeholder + caption    │
+│   [Edit]                         │
 ├──────────────────────────────────┤
 │ ≡ Interactive                    │
 │   Monte Carlo Area               │
@@ -83,21 +101,26 @@ changing the source version.
 
 ---
 
-## 3. Live Side Preview
+## 3. Inline Local Preview
 
-The editor should support an optional live preview pane. Unsaved state is
-rendered only in the browser by the client-side renderer; the browser does not
-send unsaved document content to a Verso preview endpoint.
+The editor does not need a separate side preview pane. Unsaved state is
+rendered inline, section by section, by the browser client-side renderer; the
+browser does not send unsaved document content to a Verso preview endpoint.
 
 Example:
 
 ```text
-┌────────────────────────────┬────────────────────────────┐
-│ Editor                     │ Preview                    │
-│                            │                            │
-│ Text / sections            │ Local provisional render  │
-│                            │                            │
-└────────────────────────────┴────────────────────────────┘
+┌──────────────────────────────────┐
+│ Article title                    │
+├──────────────────────────────────┤
+│ Text · preview                   │
+│ Rendered Markdown                │
+│                         [Edit]   │
+├──────────────────────────────────┤
+│ Image · edit                     │
+│ [asset] [alt text] [caption]     │
+│                       [Preview]  │
+└──────────────────────────────────┘
 ```
 
 The Verso server remains authoritative for publication-equivalent output. A
@@ -116,7 +139,7 @@ flowchart LR
 
 The client-side renderer should use the same document model and compatible
 Markdown and section semantics as the server. Features requiring document
-context are unavailable in an unsaved live preview; after an explicit save,
+context are unavailable in an unsaved inline preview; after an explicit save,
 the editor may request a server preview of that persisted draft.
 
 The initial browser-local subset renders headings, paragraphs, line breaks,
@@ -139,7 +162,9 @@ sanitization as a publication security boundary.
 Client-side preview never mutates SQLite and never sends the current unsaved
 document state to Verso. The browser may persist a recovery snapshot without
 turning the preview into a Verso draft. Browser persistence and server
-persistence are separate operations.
+persistence are separate operations. Switching a section or metadata field
+between `edit` and `preview` is presentation state only; it is not a save,
+validation of canonical state, or publication operation.
 
 Conceptually:
 
@@ -244,7 +269,7 @@ The local recovery path and client-side renderer share the same current draft:
 flowchart TB
     draft["Current editor state"] --> preview["Client-side preview renderer"]
     draft --> autosave["Debounced local autosave"]
-    preview --> pane["Preview pane"]
+    preview --> inline["Inline provisional views"]
     autosave --> storage[("IndexedDB / localStorage")]
     storage --> recovery["Restore / merge on next open"]
 ```
@@ -271,12 +296,12 @@ layout selection
 editor UI state
 ```
 
-The client-side preview is the only live preview of unsaved content. It may
-render a changed section rather than the entire document where local semantics
-permit, but must rerender document-wide context when numbering, citations,
-footnotes, cross-references, or the table of contents can change. The editor
-must clearly label this output as provisional. A server-rendered explicit
-preview becomes available after saving the draft.
+The client-side preview is the only live preview of unsaved content. It renders
+the currently validated section inline where local semantics permit, and must
+rerender document-wide context when numbering, citations, footnotes,
+cross-references, or the table of contents can change. The editor must clearly
+label each rendered view as provisional. A server-rendered explicit preview
+becomes available after saving the draft.
 
 Verso should avoid unrelated, competing Markdown rendering rules in the
 browser and server. A shared grammar, generated compatibility layer, or
