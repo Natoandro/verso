@@ -254,22 +254,22 @@ unsaved document content and no server mutation path before `IAM-003`.
 
 ## 3. Web routing and static delivery
 
-- [ ] **WEB-001 — Compile and validate route patterns**
+- [x] **WEB-001 — Compile and validate route patterns**
 
   Route declarations use a small Go-like method/path pattern language that is
   parsed at comptime. Literal segments and single-segment parameters are the
   initial matcher scope; trailing wildcards are specified and enabled only
   after their path-normalization and security semantics are complete.
 
-  - [ ] **Pattern grammar:** Define the initial method, literal-segment,
+  - [x] **Pattern grammar:** Define the initial method, literal-segment,
     `{name}`, and reserved `{name...}` syntax plus malformed-pattern
     diagnostics.
-  - [ ] **Comptime compiler:** Generate a compact matcher representation,
+  - [x] **Comptime compiler:** Generate a compact matcher representation,
     reject duplicate parameters and invalid wildcard placement, and reject
     ambiguous equal-specificity declarations.
-  - [ ] **Request semantics:** Define query exclusion, target normalization,
+  - [x] **Request semantics:** Define query exclusion, target normalization,
     percent-decoding, encoded separators, and request-local capture lifetime.
-  - [ ] **Tests:** Cover valid patterns, compile failures, specificity,
+  - [x] **Tests:** Cover valid patterns, compile failures, specificity,
     ambiguity, malformed targets, query strings, and trailing-slash rules.
 
 - [ ] **WEB-002 — Compose routing layers**

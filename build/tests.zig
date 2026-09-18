@@ -3,6 +3,7 @@ const application = @import("application.zig");
 const project = @import("modules.zig");
 
 const CompileFailure = struct {
+    directory: []const u8 = "src/template/compile_failures",
     source: []const u8,
     message: []const u8,
 };
@@ -36,6 +37,10 @@ const compile_failures = [_]CompileFailure{
     .{ .source = "snippet_visibility.zig", .message = "unknown template component 'inner'" },
     .{ .source = "snippet_isolation.zig", .message = ":?:?: error: unknown field 'title' in template expression 'title' on render.EmptyContext" },
     .{ .source = "missing_layout_slot.zig", .message = "unknown template component 'footer'" },
+    .{ .directory = "src", .source = "malformed_route_compile_failure.zig", .message = ":?:?: error: malformed route pattern 'GET /articles/{id': malformed parameter" },
+    .{ .directory = "src", .source = "duplicate_route_parameter_compile_failure.zig", .message = ":?:?: error: duplicate route parameter 'id' in pattern 'GET /articles/{id}/{id}'" },
+    .{ .directory = "src", .source = "wildcard_route_compile_failure.zig", .message = ":?:?: error: trailing wildcard is reserved and not enabled in route pattern 'GET /assets/{path...}'" },
+    .{ .directory = "src", .source = "ambiguous_routes_compile_failure.zig", .message = ":?:?: error: ambiguous route declarations 'GET /articles/{id}' and 'GET /articles/{slug}'" },
 };
 
 pub fn add(
@@ -56,7 +61,7 @@ pub fn add(
     for (compile_failures) |failure| {
         const compile_test = b.addTest(.{
             .root_module = b.createModule(.{
-                .root_source_file = b.path(b.pathJoin(&.{ "src/template/compile_failures", failure.source })),
+                .root_source_file = b.path(b.pathJoin(&.{ failure.directory, failure.source })),
                 .target = target,
                 .imports = &.{.{ .name = "tmpl", .module = modules.tmpl }},
             }),
