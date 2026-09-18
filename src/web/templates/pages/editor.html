@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  {{> head page_title=page_title }}
+  <body>
+    <main class="editor-shell" id="editor" data-editor data-document-id="{{ document_id }}">
+      <header class="editor-header">
+        <div class="editor-context">
+          <p class="eyebrow">Verso</p>
+          <p class="editor-heading">Compose document</p>
+        </div>
+        <div class="editor-header-actions">
+          <a class="quiet-button" href="/admin/editor">All drafts</a>
+          <a class="quiet-button" href="/admin/editor?document={{ document_id }}&details={{ details_toggle }}">{{ details_label }}</a>
+        </div>
+      </header>
+
+      {{#if has_notice}}
+        <div class="notice {{#if notice_is_error}}notice-error{{#else}}notice-success{{/if}}" role="status">{{ notice }}</div>
+      {{/if}}
+
+      <section class="document-article" aria-labelledby="document-title">
+        <div class="article-title-row">
+          <div class="article-title-content">
+            <form method="post" action="/admin/editor/document" hx-post="/admin/editor/document" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="document_id" value="{{ document_id }}">
+              <input type="hidden" name="version_id" value="{{ version_id }}">
+              <input id="document-revision" type="hidden" name="expected_revision" value="{{ revision }}">
+              <textarea id="document-title" class="document-title document-title-editor" name="title" rows="1" aria-label="Document title" required>{{ title }}</textarea>
+              <div class="details-panel" {{#if details_open}}{{#else}}hidden{{/if}}>
+                <div class="details-grid">
+                  <input name="slug" value="{{ slug }}" aria-label="URL slug" placeholder="URL slug" required>
+                  <textarea name="description" rows="2" aria-label="Short description" placeholder="Short description">{{ description }}</textarea>
+                </div>
+              </div>
+              <button class="save-button" type="submit">Save draft</button>
+            </form>
+            {{#if has_description}}<p class="article-description">{{ description }}</p>{{/if}}
+          </div>
+        </div>
+
+        <div class="article-toolbar"><span class="section-count">{{ section_count }} section{{#if has_multiple}}s{{/if}}</span></div>
+        <div class="section-list" aria-live="polite">
+          {{#if has_sections}}
+            {{#for sections |section|}}
+              {{> section_card section=section csrf_token=csrf_token document_id=document_id version_id=version_id revision=revision details_value=details_value oob="" }}
+            {{/for}}
+          {{#else}}
+            <p class="empty-state">Your article is empty. Add text or an image placeholder to begin.</p>
+          {{/if}}
+        </div>
+
+        <div class="add-section">
+          <span class="add-section-label">Add to article</span>
+          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="operation" value="insert-text">
+            <input type="hidden" name="document_id" value="{{ document_id }}">
+            <input type="hidden" name="version_id" value="{{ version_id }}">
+            <input type="hidden" name="expected_revision" value="{{ revision }}">
+            <button class="icon-button icon-button-text" type="submit" aria-label="Add text" title="Add text">＋</button>
+          </form>
+          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="operation" value="insert-image">
+            <input type="hidden" name="document_id" value="{{ document_id }}">
+            <input type="hidden" name="version_id" value="{{ version_id }}">
+            <input type="hidden" name="expected_revision" value="{{ revision }}">
+            <button class="icon-button icon-button-image" type="submit" aria-label="Add image placeholder" title="Add image placeholder">▧</button>
+          </form>
+        </div>
+      </section>
+
+      <footer class="editor-footer">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="editor-revision-label">Saved draft · revision {{ revision }}</span>
+        <span class="footer-note">Preview and publish remain separate operations.</span>
+      </footer>
+    </main>
+  </body>
+</html>

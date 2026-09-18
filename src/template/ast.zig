@@ -3,6 +3,10 @@ pub const Segment = struct {
     len: usize,
 };
 
+// Keep per-node storage bounded independently from the source length. This
+// avoids quadratic comptime AST types for larger application templates.
+pub const max_path_segments = 32;
+
 pub fn Path(comptime capacity: usize) type {
     return struct {
         source: []const u8,
@@ -11,9 +15,9 @@ pub fn Path(comptime capacity: usize) type {
     };
 }
 
-pub fn IfBlock(comptime capacity: usize) type {
+pub fn IfBlock(comptime _: usize) type {
     return struct {
-        condition: Path(capacity),
+        condition: Path(max_path_segments),
         capture: ?[]const u8,
         body_start: usize,
         body_end: usize,
@@ -23,9 +27,9 @@ pub fn IfBlock(comptime capacity: usize) type {
     };
 }
 
-pub fn ForBlock(comptime capacity: usize) type {
+pub fn ForBlock(comptime _: usize) type {
     return struct {
-        iterable: Path(capacity),
+        iterable: Path(max_path_segments),
         capture: []const u8,
         body_start: usize,
         body_end: usize,
@@ -45,19 +49,19 @@ pub const ComponentArg = struct {
     value: Expr,
 };
 
-pub fn Component(comptime capacity: usize) type {
+pub fn Component(comptime _: usize) type {
     return struct {
         name: []const u8,
-        args: [capacity]ComponentArg,
+        args: [max_path_segments]ComponentArg,
         count: usize,
         local_decl: ?usize,
     };
 }
 
-pub fn Snippet(comptime capacity: usize) type {
+pub fn Snippet(comptime _: usize) type {
     return struct {
         name: []const u8,
-        parameters: [capacity][]const u8,
+        parameters: [max_path_segments][]const u8,
         parameter_count: usize,
         body_start: usize,
         body_end: usize,
@@ -68,8 +72,8 @@ pub fn Snippet(comptime capacity: usize) type {
 pub fn Node(comptime capacity: usize) type {
     return union(enum) {
         text: []const u8,
-        expression: Path(capacity),
-        raw_expression: Path(capacity),
+        expression: Path(max_path_segments),
+        raw_expression: Path(max_path_segments),
         if_block: IfBlock(capacity),
         for_block: ForBlock(capacity),
         component: Component(capacity),

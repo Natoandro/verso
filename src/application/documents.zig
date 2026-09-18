@@ -18,6 +18,8 @@ pub const LoadedDraft = struct {
     }
 };
 
+pub const DraftSummary = storage.DraftSummary;
+
 pub const Service = struct {
     allocator: std.mem.Allocator,
     store: *storage.Store,
@@ -99,6 +101,17 @@ pub const Service = struct {
                 .sections = sections,
             },
         };
+    }
+
+    pub fn listDrafts(self: *Service, actor: Actor, allocator: std.mem.Allocator) ![]DraftSummary {
+        try authorizeDraftRead(actor);
+        return self.store.listDrafts(allocator);
+    }
+
+    pub fn mutableVersionForDocument(self: *Service, actor: Actor, document_id: i64) !i64 {
+        try authorizeDraftRead(actor);
+        if (document_id <= 0) return error.InvalidDocumentId;
+        return self.store.mutableVersionForDocument(document_id);
     }
 
     pub fn insertSection(

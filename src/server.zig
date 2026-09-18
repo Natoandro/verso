@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const config_types = @import("config.zig");
 const application_identity = @import("application/identity.zig");
+const application_documents = @import("application/documents.zig");
 const identity_management = @import("application/identity_management.zig");
 const identity_queries = @import("storage/identity_queries.zig");
 const bootstrap = @import("application/bootstrap.zig");
@@ -93,6 +94,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     }
 
     var identity_store = @import("storage/identity.zig").Store.init(database_connection.sqliteHandle());
+    var document_store = @import("storage/documents.zig").Store.init(database_connection.sqliteHandle());
     var identity_query_store = identity_queries.Store.init(database_connection.sqliteHandle());
     var identity_service = application_identity.Service.initForInterface(
         io,
@@ -105,6 +107,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         &identity_query_store,
         &identity_service,
     );
+    var document_service = application_documents.Service.init(allocator, &document_store);
 
     var base_url_buffer: [1024]u8 = undefined;
     const base_url = app_config.effectiveBaseUrl(&base_url_buffer) catch |startup_error| {
@@ -156,6 +159,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .config = &app_config,
         .logger = &logger,
         .identity_service = &identity_service,
+        .document_service = &document_service,
         .identity_management_service = &identity_management_service,
         .origin_policy = .{
             .public_origin = public_origin,

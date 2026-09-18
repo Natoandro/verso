@@ -35,12 +35,19 @@ pub const SessionGuard = struct {
             return redirectToLogin(request);
         };
         if (auth_security.isUnsafeMethod(request.request.head.method)) {
-            const csrf = headerValue(request, "x-csrf-token") orelse {
+            // HTMX sends the token as a header. Plain HTML form fallback is
+            // checked by the protected mutation handler after it reads the
+            // hidden csrf_token field; editor mutations do so before calling
+            // an application service.
+            if (headerValue(request, "x-csrf-token")) |csrf| {
+                request.server.identity_service.validateCsrf(token, csrf) catch {
+                    return respondText(request, "CSRF validation failed\n", .forbidden);
+                };
+            } else if (request.request.head.content_type == null or
+                !std.ascii.eqlIgnoreCase(request.request.head.content_type.?, "application/x-www-form-urlencoded"))
+            {
                 return respondText(request, "CSRF validation failed\n", .forbidden);
-            };
-            request.server.identity_service.validateCsrf(token, csrf) catch {
-                return respondText(request, "CSRF validation failed\n", .forbidden);
-            };
+            }
         }
         request.authenticated_user_id = session.user_id;
         return next.call(request);

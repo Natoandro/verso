@@ -47,6 +47,7 @@ pub fn parse(comptime value: []const u8, comptime capacity: usize) ast.Component
             }
         }
         const expression_text = value[expression_start..cursor];
+        if (component.count == component.args.len) @compileError("component calls exceed the maximum argument count");
         component.args[component.count] = .{
             .name = argument_name,
             .value = parseExpr(expression_text, capacity),

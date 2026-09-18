@@ -1,0 +1,62 @@
+@media (max-width: 900px) {
+  .section-actions {
+    top: 8px;
+    right: 0;
+    left: auto;
+    flex-direction: row;
+    transform: translateY(-3px);
+  }
+  .section-card:focus-within {
+    padding-top: 52px;
+  }
+}
+@media (max-width: 680px) {
+  .editor-shell {
+    padding: 20px 16px 28px;
+  }
+  .editor-header {
+    align-items: flex-start;
+    margin-bottom: 48px;
+  }
+  .editor-context {
+    display: block;
+  }
+  .editor-heading {
+    margin-top: 5px;
+  }
+  .document-title {
+    font-size: clamp(2.4rem, 13vw, 4rem);
+  }
+  .article-title-row {
+    margin-bottom: 38px;
+  }
+  .details-grid, .image-fields {
+    grid-template-columns: 1fr;
+  }
+  .footer-note {
+    display: none;
+  }
+  .admin-page {
+    padding: 28px 16px 44px;
+  }
+  .admin-page-header {
+    display: block;
+  }
+  .admin-page-header .admin-link {
+    display: inline-block;
+    margin-top: 20px;
+  }
+  .admin-create-card form {
+    grid-template-columns: 1fr;
+  }
+  .admin-document-list li {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-actions, .document-title {
+    transition: none;
+  }
+}

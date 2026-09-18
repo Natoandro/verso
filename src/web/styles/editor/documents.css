@@ -1,0 +1,100 @@
+.admin-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 42px 32px 64px;
+}
+.admin-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 42px;
+}
+.admin-page h1 {
+  margin: 8px 0 0;
+  color: #1f2d33;
+  font-size: clamp(2.3rem, 6vw, 4.6rem);
+  letter-spacing: -.06em;
+  line-height: 1;
+}
+.admin-page h2 {
+  margin: 0;
+  color: #2b393f;
+  font-size: 1.15rem;
+  letter-spacing: -.02em;
+}
+.admin-lede {
+  margin: 14px 0 0;
+  color: #687773;
+}
+.admin-link {
+  color: #246b54;
+  font-size: .82rem;
+  font-weight: 700;
+  text-decoration-thickness: .08em;
+  text-underline-offset: .15em;
+}
+.admin-create-card, .admin-document-list {
+  border-top: 1px solid #dfe7e2;
+  padding: 22px 0;
+}
+.admin-create-card form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 16px;
+}
+.admin-create-card label {
+  display: grid;
+  gap: 6px;
+  color: #687773;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.admin-create-card input {
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid #cfd8d4;
+  padding: 8px 0;
+  color: #25333a;
+  background: transparent;
+  outline: none;
+}
+.admin-create-card input:focus {
+  border-color: #3f8b70;
+  box-shadow: 0 2px 0 #3f8b70;
+}
+.admin-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.admin-state {
+  color: #78837f;
+  font-size: .9rem;
+}
+.admin-document-list ul {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-document-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-top: 1px solid #e7ebe8;
+  padding: 16px 0;
+}
+.admin-document-list li div {
+  display: grid;
+  gap: 5px;
+}
+.admin-document-list li span {
+  color: #78837f;
+  font-size: .78rem;
+}

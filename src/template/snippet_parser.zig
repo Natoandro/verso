@@ -135,6 +135,7 @@ pub fn parseHeader(comptime value: []const u8, comptime capacity: usize) Header(
                 ));
             }
         }
+        if (header.parameter_count == header.parameters.len) @compileError("snippet declarations exceed the maximum parameter count");
         header.parameters[header.parameter_count] = parameter;
         header.parameter_count += 1;
         if (item_end == list.len) break;

@@ -42,6 +42,25 @@ pub const DraftRecord = struct {
     }
 };
 
+pub const DraftSummary = struct {
+    document_id: i64,
+    version_id: i64,
+    version_number: i64,
+    revision_number: i64,
+    document_type: []const u8,
+    title: []const u8,
+    slug: []const u8,
+    updated_at: []const u8,
+
+    pub fn deinit(self: *DraftSummary, allocator: std.mem.Allocator) void {
+        allocator.free(self.document_type);
+        allocator.free(self.title);
+        allocator.free(self.slug);
+        allocator.free(self.updated_at);
+        self.* = undefined;
+    }
+};
+
 pub const Store = struct {
     database: *sqlite.Db,
 
@@ -267,6 +286,29 @@ pub const Store = struct {
         defer statement.deinit();
         record.sections = try statement.all(SectionRecord, allocator, .{}, .{version_id});
         return record;
+    }
+
+    pub fn listDrafts(self: *Store, allocator: std.mem.Allocator) ![]DraftSummary {
+        var statement = try self.database.prepareWithDiags(
+            \\SELECT d.id AS document_id, v.id AS version_id,
+            \\       v.version_number, v.revision_number,
+            \\       d.type AS document_type, v.title, v.slug, v.updated_at
+            \\FROM documents d
+            \\JOIN document_versions v ON v.document_id = d.id
+            \\WHERE v.state IN ('draft', 'review')
+            \\ORDER BY v.updated_at DESC, v.id DESC
+        , .{});
+        defer statement.deinit();
+        return statement.all(DraftSummary, allocator, .{}, .{});
+    }
+
+    pub fn mutableVersionForDocument(self: *Store, document_id: i64) !i64 {
+        return (try self.database.one(
+            i64,
+            "SELECT id FROM document_versions WHERE document_id = ? AND state IN ('draft', 'review')",
+            .{},
+            .{document_id},
+        )) orelse error.DraftNotFound;
     }
 };
 

@@ -21,6 +21,7 @@ pub fn parsePath(comptime expression: []const u8, comptime capacity: usize) ast.
         if (left >= right or !isIdentifier(trimmed[left + segment_start .. right + segment_start])) {
             @compileError("template paths require valid field identifiers");
         }
+        if (path.count == capacity) @compileError("template paths exceed the maximum segment count");
         path.segments[path.count] = .{
             .start = left + segment_start,
             .len = right - left,

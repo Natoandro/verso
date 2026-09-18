@@ -96,7 +96,7 @@ fn bindParameters(
     const argument = call.args[bindings[index]];
     switch (argument.value) {
         .path => |path_source| {
-            const path = comptime parser.parsePath(path_source, path_source.len);
+            const path = comptime parser.parsePath(path_source, @import("ast.zig").max_path_segments);
             try bindValue(writer, child, parameters, call, bindings, index, parent, scope, expression.resolvePath(path, parent));
         },
         .string => |value| try bindValue(writer, child, parameters, call, bindings, index, parent, scope, value),

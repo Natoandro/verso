@@ -18,6 +18,20 @@ pub const Values = struct {
     scope_type: ?[]const u8 = null,
     scope_id: ?[]const u8 = null,
     expected_revision: ?[]const u8 = null,
+    document_id: ?[]const u8 = null,
+    version_id: ?[]const u8 = null,
+    section_id: ?[]const u8 = null,
+    position: ?[]const u8 = null,
+    operation: ?[]const u8 = null,
+    kind: ?[]const u8 = null,
+    title: ?[]const u8 = null,
+    description: ?[]const u8 = null,
+    language: ?[]const u8 = null,
+    markdown: ?[]const u8 = null,
+    asset: ?[]const u8 = null,
+    alt: ?[]const u8 = null,
+    caption: ?[]const u8 = null,
+    display: ?[]const u8 = null,
 
     pub fn deinit(self: *Values, allocator: std.mem.Allocator) void {
         allocator.free(self.body);

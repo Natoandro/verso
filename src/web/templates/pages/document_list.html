@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  {{> head page_title=page_title }}
+  <body>
+    <main class="admin-page" id="document-list" data-document-list>
+      <header class="admin-page-header">
+        <div>
+          <p class="eyebrow">Verso</p>
+          <h1>Documents</h1>
+          <p class="admin-lede">Drafts assigned to your editorial account.</p>
+        </div>
+        <a class="admin-link" href="/admin/password">Account settings</a>
+      </header>
+
+      {{#if has_notice}}
+        <div class="notice {{#if notice_is_error}}notice-error{{#else}}notice-success{{/if}}" role="status">
+          {{ notice }}
+        </div>
+      {{/if}}
+
+      <section class="admin-create-card" aria-labelledby="create-draft-heading">
+        <h2 id="create-draft-heading">Create a draft</h2>
+        <form
+          method="post"
+          action="/admin/editor/create"
+          hx-post="/admin/editor/create"
+          hx-target="#document-list"
+          hx-swap="outerHTML"
+          hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label>
+            Title
+            <input name="title" autocomplete="off" required>
+          </label>
+          <label>
+            URL slug
+            <input name="slug" autocomplete="off" required>
+          </label>
+          <button type="submit">Create draft</button>
+        </form>
+      </section>
+
+      <section class="admin-document-list" aria-labelledby="document-list-heading">
+        <div class="admin-section-heading">
+          <h2 id="document-list-heading">Your drafts</h2>
+          <a class="quiet-button" href="/admin/editor">Refresh</a>
+        </div>
+        {{#if has_documents}}
+          <ul>
+            {{#for documents |item|}}
+              <li>
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <span>/{{ item.slug }} · revision {{ item.revision }}</span>
+                </div>
+                <a class="admin-link" href="/admin/editor?document={{ item.document_id }}">Open draft</a>
+              </li>
+            {{/for}}
+          </ul>
+        {{#else}}
+          <p class="admin-state">No editable drafts yet.</p>
+        {{/if}}
+      </section>
+    </main>
+  </body>
+</html>

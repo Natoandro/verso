@@ -57,7 +57,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
         if (token.len == 0) @compileError("template directive cannot be empty");
 
         if (raw) {
-            appendNode(&state.parsed, .{ .raw_expression = parsePath(token, source.len) });
+            appendNode(&state.parsed, .{ .raw_expression = parsePath(token, ast.max_path_segments) });
             state.cursor = close + close_token.len;
             continue;
         }
@@ -68,7 +68,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
         }
 
         if (token[0] == '>') {
-            appendNode(&state.parsed, .{ .component = components.parse(token[1..], source.len) });
+            appendNode(&state.parsed, .{ .component = components.parse(token[1..], ast.max_path_segments) });
             state.cursor = close + close_token.len;
             continue;
         }
@@ -128,7 +128,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
                 continue;
             }
             if (startsKeyword(header, "snippet")) {
-                const parsed_header = snippets.parseHeader(header[7..], source.len);
+                const parsed_header = snippets.parseHeader(header[7..], ast.max_path_segments);
                 const node_index = state.parsed.count;
                 appendNode(&state.parsed, .{ .snippet_declaration = .{
                     .name = parsed_header.name,
@@ -175,7 +175,7 @@ fn parseSequence(state: anytype, comptime stop: Stop) SequenceEnd {
             @compileError("unknown template block closer");
         }
 
-        appendNode(&state.parsed, .{ .expression = parsePath(token, source.len) });
+        appendNode(&state.parsed, .{ .expression = parsePath(token, ast.max_path_segments) });
         state.cursor = close + close_token.len;
     }
 
@@ -203,16 +203,16 @@ fn find(comptime source: []const u8, start: usize, comptime needle: []const u8) 
     return null;
 }
 
-fn IfHeader(comptime capacity: usize) type {
+fn IfHeader(comptime _: usize) type {
     return struct {
-        condition: ast.Path(capacity),
+        condition: ast.Path(ast.max_path_segments),
         capture: ?[]const u8,
     };
 }
 
-fn ForHeader(comptime capacity: usize) type {
+fn ForHeader(comptime _: usize) type {
     return struct {
-        iterable: ast.Path(capacity),
+        iterable: ast.Path(ast.max_path_segments),
         capture: []const u8,
     };
 }
@@ -241,12 +241,12 @@ fn parseForHeader(comptime value: []const u8, comptime capacity: usize) ForHeade
     if (iterable.len == 0 or capture.len == 0 or !path_parser.isIdentifier(capture)) {
         @compileError("for directive has malformed capture syntax");
     }
-    return .{ .iterable = parsePath(iterable, capacity), .capture = capture };
+    return .{ .iterable = parsePath(iterable, ast.max_path_segments), .capture = capture };
 }
 
 fn parseOptionalCaptureHeader(comptime rest: []const u8, comptime capacity: usize, comptime directive: []const u8) IfHeader(capacity) {
     const first = std.mem.indexOfScalar(u8, rest, '|') orelse
-        return .{ .condition = parsePath(rest, capacity), .capture = null };
+        return .{ .condition = parsePath(rest, ast.max_path_segments), .capture = null };
     const second_relative = std.mem.indexOfScalar(u8, rest[first + 1 ..], '|') orelse
         @compileError(std.fmt.comptimePrint("{s} directive has malformed capture syntax", .{directive}));
     const second = first + 1 + second_relative;
@@ -261,7 +261,7 @@ fn parseOptionalCaptureHeader(comptime rest: []const u8, comptime capacity: usiz
     if (condition.len == 0 or capture.len == 0 or !path_parser.isIdentifier(capture)) {
         @compileError(std.fmt.comptimePrint("{s} directive has malformed capture syntax", .{directive}));
     }
-    return .{ .condition = parsePath(condition, capacity), .capture = capture };
+    return .{ .condition = parsePath(condition, ast.max_path_segments), .capture = capture };
 }
 
 fn startsKeyword(value: []const u8, keyword: []const u8) bool {
