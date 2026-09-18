@@ -18,6 +18,12 @@ button { cursor: pointer; }
 .editor-heading { margin: 0; color: #53615f; font-size: 0.94rem; font-weight: 650; letter-spacing: -0.01em; }
 .editor-header-actions { display: flex; align-items: center; gap: 12px; }
 .local-badge { border: 1px solid #d6e4dc; border-radius: 999px; padding: 6px 10px; color: #32725d; background: #f0f7f3; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+.recovery-panel { display: grid; gap: 10px; max-width: 760px; margin: -28px auto 48px; border: 1px solid #e3c98c; border-radius: 10px; padding: 15px 17px; color: #614d25; background: #fff9e9; font-size: 0.86rem; line-height: 1.45; }
+.recovery-panel p { margin: 3px 0 0; color: #806d45; }
+.recovery-candidate { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #eeddb2; padding-top: 9px; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.recovery-actions button { border: 1px solid #d9bf7e; border-radius: 6px; padding: 5px 8px; color: #614d25; background: #fffdf6; font-size: 0.76rem; }
+.recovery-actions button:hover, .recovery-actions button:focus-visible { border-color: #a8873f; background: #fff4ce; outline: none; }
 
 .document-article { max-width: 760px; margin: 0 auto; }
 .article-title-row { position: relative; display: flex; align-items: flex-start; gap: 24px; margin-bottom: 52px; }
@@ -107,6 +113,7 @@ button { cursor: pointer; }
   .editor-context { display: block; }
   .editor-heading { margin-top: 5px; }
   .local-badge { padding: 5px 8px; font-size: 0.68rem; }
+  .recovery-candidate { align-items: flex-start; flex-direction: column; gap: 8px; }
   .document-title { font-size: clamp(2.4rem, 13vw, 4rem); }
   .article-title-row { margin-bottom: 38px; }
   .details-grid, .image-fields { grid-template-columns: 1fr; }

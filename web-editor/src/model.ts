@@ -21,6 +21,9 @@ export type SectionInput = Partial<TextSection> & { kind: "text" } | Partial<Ima
 export type EditorDocument = {
   schemaVersion: number;
   clientDraftId: string;
+  serverDocumentId?: string;
+  baseServerVersion?: number;
+  workingRevision?: number;
   documentType: string;
   title: string;
   slug: string;
@@ -62,9 +65,11 @@ function sectionIndex(document: EditorDocument, id: string): number {
   return index;
 }
 
-function normalizeSection(section: SectionInput, idFactory: IdFactory): Section {
+function normalizeSection(section: SectionInput, idFactory: IdFactory, usedIds?: Set<string>): Section {
   if (!section || (section.kind !== "text" && section.kind !== "image")) throw new TypeError("Invalid section kind");
-  const id = section.id || idFactory();
+  let id = section.id || idFactory();
+  while (usedIds?.has(id)) id = idFactory();
+  usedIds?.add(id);
   if (section.kind === "text") return { id, kind: "text", markdown: typeof section.markdown === "string" ? section.markdown : "" };
   return {
     id,
@@ -77,14 +82,18 @@ function normalizeSection(section: SectionInput, idFactory: IdFactory): Section 
 }
 
 export function createDocument(options: DocumentOptions = {}, idFactory: IdFactory = defaultId): EditorDocument {
+  const usedSectionIds = new Set<string>();
   return {
     schemaVersion,
     clientDraftId: options.clientDraftId || idFactory(),
+    ...(options.serverDocumentId ? { serverDocumentId: options.serverDocumentId } : {}),
+    ...(typeof options.baseServerVersion === "number" ? { baseServerVersion: options.baseServerVersion } : {}),
+    ...(typeof options.workingRevision === "number" ? { workingRevision: options.workingRevision } : {}),
     documentType: options.documentType || "article",
     title: options.title || "",
     slug: options.slug || "",
     description: options.description || "",
-    sections: (options.sections || []).map((section) => normalizeSection(section, idFactory)),
+    sections: (options.sections || []).map((section) => normalizeSection(section, idFactory, usedSectionIds)),
   };
 }
 
@@ -92,7 +101,8 @@ export function insertSection(document: EditorDocument, index: number, section: 
   requireDocument(document);
   requireIndex(document, index, true);
   const result = copyDocument(document);
-  result.sections.splice(index, 0, normalizeSection(section, idFactory));
+  const usedSectionIds = new Set(result.sections.map((candidate) => candidate.id));
+  result.sections.splice(index, 0, normalizeSection(section, idFactory, usedSectionIds));
   return result;
 }
 

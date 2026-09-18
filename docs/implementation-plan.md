@@ -229,19 +229,28 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [x] **Security tests:** Cover raw HTML, unsafe URLs, malformed input, and
     out-of-order asynchronous preview results.
 
-- [ ] **ED-003 — Recover browser-local drafts**
+- [x] **ED-003 — Recover browser-local drafts**
 
   Browser-local recovery stores namespaced structured snapshots in IndexedDB
-  (with a limited fallback), restores only after an explicit user choice, and
-  reports storage failures without blocking editing. Snapshots are isolated by
-  site and owner scope and are never transmitted as preview data.
+  (with a limited fallback), gives new unsaved documents a stable
+  draft-scoped editor URL, automatically resumes the matching local draft on
+  reload, and reports storage failures without blocking editing. Snapshots are
+  isolated by site and owner scope and are never transmitted as preview data.
+  Recovery that is not tied to the current draft URL, crosses an identity
+  boundary, or conflicts with a persisted server draft requires an explicit
+  restore, merge, or discard choice.
 
-  - [ ] **Web/editor:** Add recovery prompts and explicit restore/discard
-    controls without conflating local snapshots with saved drafts.
-  - [ ] **Browser storage:** Implement namespaced IndexedDB persistence and a
-    bounded fallback with site and owner isolation.
-  - [ ] **UI/security tests:** Verify consent-gated restoration, storage-error
-    handling, isolation, and that snapshots never become preview requests.
+  - [x] **Web/editor:** Add stable draft-scoped editor URLs for new local
+    drafts, auto-resume the matching local snapshot on reload, and add recovery
+    prompts plus explicit restore/discard controls for ambiguous or conflicting
+    snapshots without conflating local snapshots with saved drafts.
+  - [x] **Browser storage:** Implement namespaced IndexedDB persistence and a
+    bounded fallback keyed by site namespace, owner scope, and stable local
+    draft ID.
+  - [x] **UI/security tests:** Verify route-scoped automatic reload recovery,
+    consent-gated restoration for non-current or conflicting snapshots,
+    storage-error handling, isolation, and that snapshots never become preview
+    requests.
 
 ## 3. Safe server rendering and public routes
 

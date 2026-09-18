@@ -34,3 +34,11 @@ test("invalid positions and unknown sections are rejected", () => {
   expect(() => moveSection(document, "missing", 0)).toThrow(Error);
   expect(() => deleteSection(document, "missing")).toThrow(Error);
 });
+
+test("section insertion never creates a duplicate keyed id", () => {
+  let calls = 0;
+  const nextId = () => `section-${++calls}`;
+  const document = createDocument({ clientDraftId: "draft", sections: [{ kind: "text", id: "section-1" }] }, nextId);
+  const next = insertSection(document, 1, { kind: "text" }, nextId);
+  expect(next.sections.map((section) => section.id)).toEqual(["section-1", "section-2"]);
+});
