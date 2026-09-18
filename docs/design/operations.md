@@ -221,6 +221,10 @@ base_url = "https://example.org"
 host = "127.0.0.1"
 port = 8080
 
+[security]
+# Comma-separated peer addresses allowed to supply forwarded headers.
+trusted_proxy_addresses = ""
+
 [database]
 url = "./data/verso.db"
 
@@ -376,6 +380,7 @@ The current environment-variable allowlist is:
 | `VERSO_SITE_BASE_URL` | `site.base_url` |
 | `VERSO_SERVER_HOST` | `server.host` |
 | `VERSO_SERVER_PORT` | `server.port` |
+| `VERSO_SECURITY_TRUSTED_PROXY_ADDRESSES` | `security.trusted_proxy_addresses` |
 | `VERSO_DATABASE_URL` | `database.url` |
 | `VERSO_MIGRATIONS_PATH` | `migrations.path` |
 | `VERSO_MIGRATIONS_RUN_ON_STARTUP` | `migrations.run_on_startup` |

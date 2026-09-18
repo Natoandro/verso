@@ -3,6 +3,8 @@ pub const layer = @import("web/layer.zig");
 pub const logging = @import("web/logging.zig");
 pub const router = @import("web/router.zig");
 pub const static_content = @import("web/static.zig");
+pub const auth = @import("web/auth.zig");
+pub const admin = @import("web/admin.zig");
 
 pub const Context = context.Context;
 pub const RequestContext = context.RequestContext;
@@ -24,3 +26,8 @@ pub const RouteTable = router.RouteTable;
 pub const routes = router.routes;
 pub const compileRoute = router.compile;
 pub const EditorHandler = @import("web/editor.zig").Handler;
+pub const AuthHandler = auth.Handler;
+pub const SessionGuard = auth.SessionGuard;
+pub const ProtectedEditorHandler = admin.ProtectedEditorHandler;
+pub const originFromBaseUrl = admin.originFromBaseUrl;
+pub const parseTrustedProxyAddresses = admin.parseTrustedProxyAddresses;

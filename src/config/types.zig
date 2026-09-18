@@ -20,6 +20,7 @@ pub const ConfigError = error{
     InvalidFeatureConfiguration,
     InvalidEditorConfiguration,
     InvalidMcpConfiguration,
+    InvalidSecurityConfiguration,
     InvalidEnvironmentValue,
 };
 
@@ -40,6 +41,7 @@ pub const Config = struct {
     logging: Logging = .{},
     site: Site = .{},
     server: Server = .{},
+    security: Security = .{},
     database: Database = .{},
     migrations: Migrations = .{},
     public_static_root: ?[]const u8 = null,
@@ -67,6 +69,11 @@ pub const Config = struct {
     pub const Server = struct {
         host: []const u8 = "127.0.0.1",
         port: u16 = 8080,
+    };
+
+    pub const Security = struct {
+        /// Comma-separated peer addresses allowed to supply forwarded headers.
+        trusted_proxy_addresses: []const u8 = "",
     };
 
     pub const Migrations = struct {
@@ -129,6 +136,19 @@ pub const Config = struct {
         if (!validation.isSafeText(self.site.name)) return error.InvalidSiteName;
         if (!validation.isValidServerHost(self.server.host)) return error.InvalidServerHost;
         if (self.server.port == 0) return error.InvalidServerHost;
+        if (self.security.trusted_proxy_addresses.len != 0 and
+            !validation.isSafeText(self.security.trusted_proxy_addresses))
+        {
+            return error.InvalidSecurityConfiguration;
+        }
+        var proxy_addresses = std.mem.splitScalar(u8, self.security.trusted_proxy_addresses, ',');
+        while (proxy_addresses.next()) |address| {
+            if (self.security.trusted_proxy_addresses.len != 0 and
+                (address.len == 0 or !validation.isSafeToken(address)))
+            {
+                return error.InvalidSecurityConfiguration;
+            }
+        }
 
         if (self.site.base_url) |base_url| {
             if (!validation.isValidBaseUrl(base_url)) return error.InvalidBaseUrl;

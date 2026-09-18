@@ -1,4 +1,6 @@
 const std = @import("std");
+const application_identity = @import("../application/identity.zig");
+const auth_security = @import("../auth/security.zig");
 const config = @import("../config.zig");
 const logging = @import("../logging.zig");
 
@@ -7,6 +9,8 @@ pub const ServerContext = struct {
     allocator: std.mem.Allocator,
     config: *const config.Config,
     logger: *logging.Logger,
+    identity_service: *application_identity.Service,
+    origin_policy: auth_security.OriginPolicy,
 };
 
 pub const RouteCapture = struct {
@@ -22,7 +26,9 @@ pub const RequestContext = struct {
     stream: *const std.Io.net.Stream,
     request: *std.http.Server.Request,
     started_at: std.Io.Timestamp,
+    remote_address: []const u8 = "",
     response_status: ?u16 = null,
+    authenticated_user_id: ?i64 = null,
     route_capture_entries: [max_route_captures]RouteCapture = undefined,
     route_capture_count: usize = 0,
     route_capture_storage: [route_capture_storage_size]u8 = undefined,
@@ -33,12 +39,14 @@ pub const RequestContext = struct {
         stream: *const std.Io.net.Stream,
         request: *std.http.Server.Request,
         started_at: std.Io.Timestamp,
+        remote_address: []const u8,
     ) RequestContext {
         return .{
             .server = server,
             .stream = stream,
             .request = request,
             .started_at = started_at,
+            .remote_address = remote_address,
         };
     }
 

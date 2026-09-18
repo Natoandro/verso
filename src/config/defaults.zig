@@ -20,6 +20,10 @@ pub const text =
     \\host = "127.0.0.1"
     \\port = 8080
     \\
+    \\[security]
+    \\# Comma-separated peer addresses allowed to supply forwarded headers.
+    \\trusted_proxy_addresses = ""
+    \\
     \\[database]
     \\url = "./data/verso.db"
     \\

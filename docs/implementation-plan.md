@@ -418,17 +418,30 @@ unsaved document content and no server mutation path before `IAM-003`.
   origin handling, and proxy-header trust rules are verified end to end.
 
   - [x] **Auth:** Implement owner bootstrap, session lifecycle, secure cookie
-    attributes, CSRF tokens, origin checks, and explicit proxy trust rules.
+    attributes, CSRF tokens, origin checks, and explicit forwarded-origin trust
+    rules. Proxies never authenticate users or supply identity subjects.
   - [x] **Application:** Centralize session and identity use cases so web
     handlers do not implement their own authentication decisions.
-  - [ ] **Web/admin:** Add login and logout flows with protected route
-    boundaries and safe failure responses.
-  - [ ] **Security tests:** Verify the complete session flow, CSRF failures,
-    origin handling, cookie flags, and proxy-header behavior.
+  - [x] **Web/admin boundary:** Mount protected editorial routes, enforce
+    origin and CSRF checks, provide secure cookie handling, and fail closed
+    while no native provider is configured.
+  - [ ] **IAM-001a — Add local password authentication:** Add a native local
+    login path that stores only a memory-hard password hash, bootstraps the
+    initial owner password, returns generic credential failures, rate-limits
+    repeated failures, rotates sessions after login, and provides authenticated
+    password change and recovery flows.
+  - [ ] **IAM-001b — Add Verso-owned OIDC integration:** Implement the
+    authorization-code flow with PKCE inside Verso, including exact redirect
+    URI validation, state and nonce checks, issuer and audience validation,
+    signed discovery/JWKS verification, explicit account linking, and mapping
+    to the shared local user/session service. Do not accept proxy identity
+    headers as an alternative implementation.
+  - [ ] **Security tests:** Verify the complete native-auth session flow, CSRF
+    failures, origin handling, cookie flags, and provider behavior.
 
-  The Auth and Application divisions are transport-neutral and complete. The
-  remaining Web/admin and end-to-end security-test divisions are intentionally
-  deferred until the WEB routing and serving work is available.
+  Transport-neutral session and application services are complete. Web login is
+  intentionally deferred until the native providers below are implemented;
+  proxy identity headers are not accepted.
 
 - [ ] **IAM-002 — Manage authors and scoped assignments**
 

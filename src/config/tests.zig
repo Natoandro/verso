@@ -157,6 +157,26 @@ test "production requires an explicit public base URL" {
     try std.testing.expectError(error.InvalidBaseUrl, loopback.value.validate());
 }
 
+test "security configuration requires explicit proxy address tokens" {
+    var parsed_config = try types.Config.parse(
+        std.testing.allocator,
+        "[security]\ntrusted_proxy_addresses = '192.0.2.10,192.0.2.11'\n",
+    );
+    defer parsed_config.deinit();
+    try parsed_config.value.validate();
+    try std.testing.expectEqualStrings(
+        "192.0.2.10,192.0.2.11",
+        parsed_config.value.security.trusted_proxy_addresses,
+    );
+
+    var invalid = try types.Config.parse(
+        std.testing.allocator,
+        "[security]\ntrusted_proxy_addresses = '192.0.2.10, 192.0.2.11'\n",
+    );
+    defer invalid.deinit();
+    try std.testing.expectError(error.InvalidSecurityConfiguration, invalid.value.validate());
+}
+
 test "unsupported UI logo variants are rejected after parsing" {
     var parsed_config = try types.Config.parse(std.testing.allocator, "[ui]\nicon = '/assets/icon.svg'\n");
     defer parsed_config.deinit();

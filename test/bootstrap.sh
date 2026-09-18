@@ -85,17 +85,16 @@ run_server() {
     }
     [ "$response" = "Verso is running" ] || fail "unexpected HTTP response: $response"
 
-    editor_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor") || fail "editor shell was not served"
-    printf '%s\n' "$editor_response" | grep -F 'data-editor-mount' >/dev/null || fail "editor mount was not served"
-    printf '%s\n' "$editor_response" | grep -F '/admin/editor.js' >/dev/null || fail "editor bundle was not linked"
-    editor_bundle_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor.js") || fail "editor bundle was not served"
-    printf '%s\n' "$editor_bundle_response" | grep -F 'data-local-only' >/dev/null || fail "editor bundle was not browser-local"
-    printf '%s\n' "$editor_bundle_response" | grep -F 'details-grid' >/dev/null || fail "editor metadata controls were not bundled"
-    editor_styles_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor.css") || fail "editor stylesheet was not served"
-    printf '%s\n' "$editor_styles_response" | grep -F '.editor-shell' >/dev/null || fail "editor stylesheet was incomplete"
+    login_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/login") || fail "login page was not served"
+    printf '%s\n' "$login_response" | grep -F 'not configured yet' >/dev/null || fail "login page was incomplete"
+    editor_headers=$(curl --silent --dump-header - --output /dev/null "http://127.0.0.1:$port/admin/editor") || fail "protected editor request failed"
+    printf '%s\n' "$editor_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "editor route was not protected"
+    printf '%s\n' "$editor_headers" | grep -F 'location: /admin/login' >/dev/null || fail "editor did not redirect to login"
+    login_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+        -H "Origin: http://127.0.0.1:$port" -X POST "http://127.0.0.1:$port/admin/login")
+    [ "$login_status" = "501" ] || fail "unconfigured login did not fail closed"
     editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
-    [ "$editor_post_status" = "404" ] || fail "editor method did not preserve the fallback response"
-    grep -F 'Not Found' "$case_directory/editor-post.body" >/dev/null || fail "editor method did not preserve the fallback body"
+    [ "$editor_post_status" = "403" ] || fail "editor method did not enforce origin protection"
 
     case "$shutdown_signal" in
         INT) kill -INT "$server_pid" ;;

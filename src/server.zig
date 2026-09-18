@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const config_types = @import("config.zig");
+const application_identity = @import("application/identity.zig");
 const bootstrap = @import("application/bootstrap.zig");
 const logging = @import("logging.zig");
 const migration_directory = @import("storage/migration_directory.zig");
@@ -89,6 +90,31 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         };
     }
 
+    var identity_store = @import("storage/identity.zig").Store.init(database_connection.sqliteHandle());
+    var identity_service = application_identity.Service.initForInterface(
+        io,
+        &identity_store,
+        .web,
+    );
+
+    var base_url_buffer: [1024]u8 = undefined;
+    const base_url = app_config.effectiveBaseUrl(&base_url_buffer) catch |startup_error| {
+        logStartupFailure(&logger, io, "base_url", startup_error);
+        return startup_error;
+    };
+    const public_origin = web.originFromBaseUrl(base_url) catch |startup_error| {
+        logStartupFailure(&logger, io, "base_url", startup_error);
+        return startup_error;
+    };
+    var trusted_proxy_storage: [16][]const u8 = undefined;
+    const trusted_proxy_addresses = web.parseTrustedProxyAddresses(
+        app_config.security.trusted_proxy_addresses,
+        &trusted_proxy_storage,
+    ) catch |startup_error| {
+        logStartupFailure(&logger, io, "security", startup_error);
+        return startup_error;
+    };
+
     var listen_address = resolveListenAddress(io, app_config.server.host, app_config.server.port) catch |startup_error| {
         logStartupFailure(&logger, io, "address", startup_error);
         return startup_error;
@@ -120,18 +146,30 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .allocator = allocator,
         .config = &app_config,
         .logger = &logger,
+        .identity_service = &identity_service,
+        .origin_policy = .{
+            .public_origin = public_origin,
+            .trusted_proxy_addresses = trusted_proxy_addresses,
+        },
     };
     var editor_router = web.EditorHandler.router();
-    var editor_mount = web.Mount.initWithFallback(
+    var auth_router = web.AuthHandler.router();
+    var session_guard = web.SessionGuard{};
+    var protected_editor = web.ProtectedEditorHandler{
+        .guard = &session_guard,
+        .router = &editor_router,
+        .fallback = web.Layer.initFn(NotFoundHandler.handle),
+    };
+    var admin_mount = web.Mount.initWithFallback(
         "/admin",
-        .init(&editor_router),
-        web.Layer.initFn(NotFoundHandler.handle),
+        .init(&auth_router),
+        .init(&protected_editor),
     );
     var status_router = web.routes(.{.{ "GET /", StatusHandler.handle }}).router();
     var request_logging = web.RequestLoggingLayer{};
     const layers = [_]web.Layer{
         .init(&request_logging),
-        .init(&editor_mount),
+        .init(&admin_mount),
         .init(&status_router),
         web.Layer.initFn(NotFoundHandler.handle),
     };
@@ -194,7 +232,22 @@ fn handleHttpConnection(
         return;
     };
 
-    var http_request = web.RequestContext.init(server_context, &connection, &request_head, started_at);
+    var remote_address_buffer: [64]u8 = undefined;
+    var remote_address_writer = std.Io.Writer.fixed(&remote_address_buffer);
+    connection.socket.address.format(&remote_address_writer) catch return;
+    const formatted_remote_address = remote_address_writer.buffered();
+    const remote_address = formatted_remote_address[0 .. std.mem.lastIndexOfScalar(
+        u8,
+        formatted_remote_address,
+        ':',
+    ) orelse formatted_remote_address.len];
+    var http_request = web.RequestContext.init(
+        server_context,
+        &connection,
+        &request_head,
+        started_at,
+        remote_address,
+    );
     pipeline.handle(&http_request) catch |request_error| {
         if (request_error == error.Canceled) return error.Canceled;
         return;
