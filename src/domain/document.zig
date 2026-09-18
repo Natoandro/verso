@@ -1,4 +1,5 @@
 const std = @import("std");
+const sections = @import("sections.zig");
 
 pub const DocumentType = enum {
     article,
@@ -38,17 +39,81 @@ pub const Draft = struct {
     state: DraftState,
 };
 
+pub const DraftSection = struct {
+    id: ?i64 = null,
+    payload: sections.Payload,
+};
+
+pub const SaveDraft = struct {
+    document_id: i64,
+    version_id: i64,
+    expected_revision: u64,
+    document_type: DocumentType,
+    title: []const u8,
+    slug: []const u8,
+    description: ?[]const u8 = null,
+    language: []const u8 = "en",
+    sections: []const DraftSection,
+};
+
+pub const DraftDocument = struct {
+    document_id: i64,
+    version_id: i64,
+    version_number: u32,
+    revision_number: u64,
+    document_type: DocumentType,
+    title: []const u8,
+    slug: []const u8,
+    description: ?[]const u8,
+    language: []const u8,
+    sections: []DraftSection,
+};
+
+pub const SaveResult = struct {
+    version_id: i64,
+    revision_number: u64,
+};
+
 pub fn validateCreateDraft(request: CreateDraft) !void {
     if (request.document_id) |document_id| {
         if (document_id <= 0) return error.InvalidDocumentId;
     }
-    if (!isNonEmptyText(request.title)) return error.InvalidTitle;
-    if (!isValidSlug(request.slug)) return error.InvalidSlug;
-    if (!isNonEmptyToken(request.language)) return error.InvalidLanguage;
-    if (request.description) |description| {
-        if (std.mem.indexOfScalar(u8, description, 0) != null) return error.InvalidDescription;
-    }
+    try validateMetadata(request.document_type, request.title, request.slug, request.description, request.language);
     if (std.mem.indexOfScalar(u8, request.markdown, 0) != null) return error.InvalidMarkdown;
+}
+
+pub fn validateSaveDraft(request: SaveDraft) !void {
+    if (request.document_id <= 0) return error.InvalidDocumentId;
+    if (request.version_id <= 0) return error.InvalidVersionId;
+    try validateMetadata(request.document_type, request.title, request.slug, request.description, request.language);
+
+    for (request.sections, 0..) |section, index| {
+        if (section.id) |section_id| {
+            if (section_id <= 0) return error.InvalidSectionId;
+            for (request.sections[0..index]) |previous| {
+                if (previous.id) |previous_id| {
+                    if (previous_id == section_id) return error.DuplicateSectionId;
+                }
+            }
+        }
+        try sections.validatePayload(section.payload);
+    }
+}
+
+fn validateMetadata(
+    document_type: DocumentType,
+    title: []const u8,
+    slug: []const u8,
+    description: ?[]const u8,
+    language: []const u8,
+) !void {
+    _ = document_type;
+    if (!isNonEmptyText(title)) return error.InvalidTitle;
+    if (!isValidSlug(slug)) return error.InvalidSlug;
+    if (!isNonEmptyToken(language)) return error.InvalidLanguage;
+    if (description) |value| {
+        if (std.mem.indexOfScalar(u8, value, 0) != null) return error.InvalidDescription;
+    }
 }
 
 fn isNonEmptyText(value: []const u8) bool {

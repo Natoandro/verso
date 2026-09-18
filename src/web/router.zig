@@ -225,9 +225,21 @@ fn validateDeclarations(comptime declarations: anytype) void {
 }
 
 fn sameScore(left: Route, right: Route) bool {
-    return left.literal_segment_count == right.literal_segment_count and
-        left.segment_count == right.segment_count and
-        left.slash_required == right.slash_required;
+    if (left.literal_segment_count != right.literal_segment_count or
+        left.segment_count != right.segment_count or
+        left.slash_required != right.slash_required)
+    {
+        return false;
+    }
+
+    for (left.segments[0..left.segment_count], right.segments[0..right.segment_count]) |left_segment, right_segment| {
+        if (left_segment.kind == .literal and right_segment.kind == .literal and
+            !std.mem.eql(u8, left_segment.text, right_segment.text))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn patternsOverlap(left: Route, right: Route) bool {

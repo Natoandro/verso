@@ -219,10 +219,36 @@ migration task.
   - [ ] **CLI:** Verify valid metadata changes, rejected malformed values, and
     the inability to edit the logical type or bypass configured collections.
 
+- [x] **DOC-006 — Persist and load complete draft documents**
+
+  The document application layer can save and load a complete mutable draft
+  through SQLite without depending on the web editor or IAM. A save persists
+  the draft's version metadata and ordered typed sections atomically, checks
+  the expected revision, and returns a stale-write failure without partial
+  changes. A load round-trips the complete draft aggregate for later editor,
+  preview, MCP, and publication use cases. This ticket adds no public route
+  and no unauthenticated server mutation path; its verification surface is a
+  local application-service or CLI/integration fixture using an explicit
+  trusted bootstrap actor. Authorization policy is deliberately wired in by
+  `IAM-003` and later interfaces.
+
+  - [x] **Application:** Add the shared draft save/load use cases, keeping
+    validation, transaction boundaries, and optimistic-concurrency behavior
+    in the application/domain layers without embedding web or IAM concerns.
+  - [x] **SQLite storage:** Implement atomic aggregate writes and reads for
+    document metadata, the active draft version, and all ordered typed
+    sections while preserving foreign-key, uniqueness, and revision
+    constraints.
+  - [x] **CLI/integration:** Verify create-or-load, complete round-trip,
+    repeated saves, stale-save rejection, rollback on failure, and the absence
+    of any public or unauthenticated mutation route.
+
 ## 2. Web editor, local preview, and local recovery
 
 This section is intentionally browser-local. It has no endpoint that accepts
-unsaved document content and no server mutation path before `IAM-003`.
+unsaved document content and no server mutation path before `IAM-003`. The
+later `ED-004` slice is the protected frontend integration that follows the
+backend authorization boundary delivered by `IAM-003`.
 
 - [x] **ED-001 — Compose an unsaved structured document**
 
@@ -277,6 +303,29 @@ unsaved document content and no server mutation path before `IAM-003`.
     consent-gated restoration for non-current or conflicting snapshots,
     storage-error handling, isolation, and that snapshots never become preview
     requests.
+
+- [ ] **ED-004 — Wire the protected admin document workflow**
+
+  After `IAM-003` exposes the protected editorial boundary, the browser can
+  list authorized documents under `/admin`, create or open a draft, enter the
+  editor, save the complete document, and explicitly reconcile browser-local
+  recovery with the persisted server draft. The client tracks the server
+  document/version/revision identities and presents stale-save conflicts
+  without overwriting newer work. Svelte remains an editor island; it does not
+  implement authorization or bypass the shared application services.
+
+  - [ ] **Admin/document UI:** Add the protected document index, create/open
+    actions, editor links, loading states, empty states, and save/recovery
+    controls.
+  - [ ] **Persistence transport:** Implement the typed client transport for
+    the protected list, create, load, and save operations, including server
+    identity and expected-revision fields.
+  - [ ] **Editor integration:** Hydrate the existing reducer from persisted
+    drafts, send explicit saves, update revision state only after success, and
+    offer restore, merge, or discard choices for local recovery conflicts.
+  - [ ] **UI/integration tests:** Verify authorized data rendering through the
+    protected boundary, save success, stale conflict handling, recovery
+    reconciliation, and that public routes never receive draft data.
 
 ## 3. Web routing and static delivery
 
@@ -491,19 +540,22 @@ unsaved document content and no server mutation path before `IAM-003`.
 
 - [ ] **IAM-003 — Edit assigned drafts in the web editor**
 
-  An authorized editor can create, open, and save an assigned draft in the web
-  editor; unauthorized and stale requests fail safely. Local recovery can
-  explicitly reconcile with the persisted draft, while published and archived
-  versions remain read-only.
+  The backend enforces assignment-scoped authorization for creating, listing,
+  opening, and saving drafts through protected application/API boundaries.
+  Unauthorized and stale requests fail safely, while published and archived
+  versions remain read-only. This ticket adds the IAM and backend boundary
+  around the persistence and revision services delivered by the DOC tickets;
+  frontend pages and editor wiring belong to `ED-004`.
 
   - [ ] **Auth:** Enforce editor assignment scope and read-only boundaries for
     published and archived versions.
-  - [ ] **Application:** Connect web editor operations to the shared draft and
-    revision services with authorization and optimistic-concurrency checks.
-  - [ ] **Web/admin:** Add create, open, save, and explicit local-recovery
-    reconciliation flows for assigned drafts.
-  - [ ] **Editor integration tests:** Verify authorized success, unauthorized
-    denial, stale-write safety, and read-only published/archive behavior.
+  - [ ] **Application/API:** Connect protected list, create, open, and save
+    operations to the shared draft and revision services with authorization
+    and optimistic-concurrency checks; keep handlers free of direct SQLite
+    access and duplicate policy logic.
+  - [ ] **Backend integration tests:** Verify authorized success, unauthorized
+    denial, stale-write safety, read-only published/archive behavior, and that
+    public routes cannot resolve drafts.
 
 - [ ] **IAM-004 — Preview a persisted draft privately**
 

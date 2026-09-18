@@ -35,6 +35,7 @@ test {
     _ = @import("application/documents.zig");
     _ = @import("application/identity.zig");
     _ = @import("application/identity_management.zig");
+    _ = @import("application/documents_test.zig");
     _ = @import("storage/documents.zig");
     _ = @import("storage/identity.zig");
     _ = @import("storage/identity_queries.zig");
