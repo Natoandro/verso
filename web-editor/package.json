@@ -2,6 +2,7 @@
   "name": "@verso/editor",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.15.0",
   "scripts": {
     "build": "node build.mjs --out-dir dist",
     "check": "svelte-check --tsconfig ./tsconfig.json",
