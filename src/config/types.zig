@@ -3,6 +3,8 @@ const toml = @import("toml");
 const defaults = @import("defaults.zig");
 const logging = @import("../logging.zig");
 const validation = @import("validation.zig");
+const auth_identity = @import("../auth/identity.zig");
+const auth_password = @import("../auth/password.zig");
 
 pub const ConfigError = error{
     InvalidSiteName,
@@ -21,6 +23,7 @@ pub const ConfigError = error{
     InvalidEditorConfiguration,
     InvalidMcpConfiguration,
     InvalidSecurityConfiguration,
+    InvalidAuthConfiguration,
     InvalidEnvironmentValue,
 };
 
@@ -42,6 +45,7 @@ pub const Config = struct {
     site: Site = .{},
     server: Server = .{},
     security: Security = .{},
+    auth: Auth = .{},
     database: Database = .{},
     migrations: Migrations = .{},
     public_static_root: ?[]const u8 = null,
@@ -73,6 +77,53 @@ pub const Config = struct {
     pub const Security = struct {
         /// Comma-separated peer addresses allowed to supply forwarded headers.
         trusted_proxy_addresses: []const u8 = "",
+    };
+
+    pub const Auth = struct {
+        bootstrap: Bootstrap = .{},
+    };
+
+    pub const Bootstrap = struct {
+        display_name: ?[]const u8 = null,
+        email: ?[]const u8 = null,
+        subject: ?[]const u8 = null,
+        login: ?[]const u8 = null,
+        password_hash: ?[]const u8 = null,
+
+        pub fn isConfigured(self: Bootstrap) bool {
+            return self.display_name != null or self.email != null or
+                self.subject != null or self.login != null or self.password_hash != null;
+        }
+
+        pub fn validate(self: Bootstrap) ConfigError!void {
+            if (!self.isConfigured()) return;
+            const display_name = self.display_name orelse return error.InvalidAuthConfiguration;
+            auth_identity.validateDisplayName(display_name) catch return error.InvalidAuthConfiguration;
+            if (self.email) |email| {
+                auth_identity.validateEmail(email) catch return error.InvalidAuthConfiguration;
+            }
+            if (self.subject) |subject| {
+                auth_identity.validateBootstrapOwner(.{
+                    .subject = subject,
+                    .display_name = display_name,
+                    .email = self.email,
+                }) catch return error.InvalidAuthConfiguration;
+            }
+
+            if ((self.login == null) != (self.password_hash == null)) {
+                return error.InvalidAuthConfiguration;
+            }
+            if (self.login) |login| {
+                auth_password.validateLogin(login) catch return error.InvalidAuthConfiguration;
+            }
+            if (self.password_hash) |password_hash| {
+                auth_password.validateEncodedHash(password_hash) catch return error.InvalidAuthConfiguration;
+            } else {
+                // Email-only bootstrap is reserved for the future OIDC provider
+                // configuration and must not silently create a local account.
+                return error.InvalidAuthConfiguration;
+            }
+        }
     };
 
     pub const Migrations = struct {
@@ -188,6 +239,7 @@ pub const Config = struct {
         if (self.features.interactive_sections) {
             return error.InvalidFeatureConfiguration;
         }
+        try self.auth.bootstrap.validate();
     }
 
     pub fn effectiveLoggingFormat(self: Config, stderr_is_tty: bool) logging.ResolvedFormat {

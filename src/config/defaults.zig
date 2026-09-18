@@ -24,6 +24,9 @@ pub const text =
     \\# Comma-separated peer addresses allowed to supply forwarded headers.
     \\trusted_proxy_addresses = ""
     \\
+    \\# Initial owner bootstrap is intentionally omitted from generated defaults.
+    \\# Configure [auth.bootstrap] only for an explicit empty-database setup.
+    \\
     \\[database]
     \\url = "./data/verso.db"
     \\

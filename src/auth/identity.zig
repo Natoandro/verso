@@ -104,11 +104,15 @@ pub fn roleGrants(role: Role, capability: Capability) bool {
 pub fn validateBootstrapOwner(owner: BootstrapOwner) !void {
     try validateOpaqueText(owner.subject, 512, error.InvalidSubject);
     try validateDisplayName(owner.display_name);
-    if (owner.email) |email| try validateOpaqueText(email, 320, error.InvalidEmail);
+    if (owner.email) |email| try validateEmail(email);
 }
 
 pub fn validateDisplayName(display_name: []const u8) !void {
     try validateOpaqueText(display_name, 256, error.InvalidDisplayName);
+}
+
+pub fn validateEmail(email: []const u8) !void {
+    try validateOpaqueText(email, 320, error.InvalidEmail);
 }
 
 fn validateOpaqueText(value: []const u8, max_len: usize, invalid_error: anyerror) !void {

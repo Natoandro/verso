@@ -235,17 +235,33 @@ test "migration help exposes only migration inputs" {
     try std.testing.expect(std.mem.indexOf(u8, document_help, "--migrations-run-on-startup") != null);
 }
 
+test "unset CLI options do not override configuration values" {
+    const Args = struct {
+        config: ?[]const u8 = null,
+        @"migrations-run-on-startup": ?bool = null,
+    };
+    const unset = overrides(Args{});
+    try std.testing.expectEqual(@as(?bool, null), unset.migrations_run_on_startup);
+
+    const set = overrides(Args{ .@"migrations-run-on-startup" = true });
+    try std.testing.expectEqual(@as(?bool, true), set.migrations_run_on_startup);
+}
+
 pub fn overrides(args: anytype) verso.config.CliOverrides {
     var result: verso.config.CliOverrides = .{};
     inline for (@typeInfo(verso.config.CliOverrides).@"struct".fields) |field| {
         if (comptime std.mem.eql(u8, field.name, "config_path")) {
             if (@hasField(@TypeOf(args), "config")) {
-                @field(result, field.name) = @field(args, "config");
+                if (@field(args, "config")) |value| {
+                    @field(result, field.name) = value;
+                }
             }
         } else {
             const argument_name = comptime kebabName(field.name);
             if (@hasField(@TypeOf(args), argument_name[0..])) {
-                @field(result, field.name) = @field(args, argument_name[0..]);
+                if (@field(args, argument_name[0..])) |value| {
+                    @field(result, field.name) = value;
+                }
             }
         }
     }

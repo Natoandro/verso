@@ -28,7 +28,7 @@ contributor
 
 Roles are convenience groupings around permissions.
 
-### 1.1 First-user provisioning (planned)
+### 1.1 First-user provisioning
 
 The initial owner is provisioned only while the database contains no row in
 `users` and no pending initial-owner claim. The check is against the existence
@@ -39,7 +39,7 @@ closes the web, script, and configuration bootstrap paths until it is consumed
 or explicitly recovered through an offline/operator procedure; it must not be
 recovered through a public browser route.
 
-The planned first-user flow supports three entry points at the same time:
+The first-user flow supports three local entry points at the same time:
 
 1. **Web registration.** When an unauthenticated request reaches the login
    boundary while no user exists, the login page redirects to a one-time
@@ -61,11 +61,11 @@ The planned first-user flow supports three entry points at the same time:
    opt-in; a partial record is a configuration error rather than a reason to
    silently create an incomplete account.
 
-These are adapters, not separate identity systems. Local web registration,
+These are adapters, not separate identity systems. The implemented local web registration,
 the CLI, and complete configuration records call one application operation,
-which starts a write transaction, rechecks that no user or pending claim
-exists, creates the owner role and any local credential, records an audit
-event, and commits atomically. SQLite serialization makes concurrent web,
+which starts a write transaction, rechecks that no user exists, creates the
+owner role and any local credential, records an audit event, and commits
+atomically. SQLite serialization makes concurrent web,
 script, and startup attempts safe: the first successful transaction wins.
 If configuration provisioning is complete, it gets the first opportunity
 before the HTTP listener starts; operators should still configure only one
@@ -94,8 +94,8 @@ issuer-plus-subject identity pair. An arbitrary email from a browser, an
 unverified OIDC claim, a different issuer, or a different email must not claim
 the account.
 
-The claim and its single-row setup lock require an explicit schema/migration
-decision in `IAM-000`. OIDC identities must be stored and constrained as
+The claim and its single-row setup lock remain an OIDC follow-up in `IAM-000`.
+OIDC identities must be stored and constrained as
 issuer-plus-subject pairs; a bare provider subject is not globally unique.
 
 Successful local provisioning or pending-claim activation grants the `owner`

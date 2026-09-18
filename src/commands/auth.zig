@@ -11,7 +11,8 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
     const params = comptime clap.parseParamsComptime(
         \\-h, --help                 Display this help and exit.
         \\    --login <LOGIN>        Local owner login identifier.
-        \\    --subject <SUBJECT>    Initial owner identity subject.
+        \\    --password-hash <HASH> Argon2id owner password hash.
+        \\    --subject <SUBJECT>    Optional initial owner identity subject.
         \\    --display-name <NAME>  Initial owner display name.
         \\    --email <EMAIL>        Optional owner email address.
         \\<command>                Auth command: bootstrap-owner.
@@ -20,6 +21,7 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
     const parsers = .{
         .command = parseAuthCommand,
         .LOGIN = clap.parsers.string,
+        .HASH = clap.parsers.string,
         .SUBJECT = clap.parsers.string,
         .NAME = clap.parsers.string,
         .EMAIL = clap.parsers.string,
@@ -50,10 +52,13 @@ fn parseAuthCommand(command_name: []const u8) error{InvalidCommand}!AuthCommand 
 
 fn bootstrapOwner(init: std.process.Init, args: anytype) !void {
     const login = @field(args, "login") orelse return error.InvalidArguments;
-    const subject = @field(args, "subject") orelse return error.InvalidArguments;
     const display_name = @field(args, "display-name") orelse return error.InvalidArguments;
-    const password = init.environ_map.get("VERSO_BOOTSTRAP_PASSWORD") orelse
-        return error.MissingBootstrapPassword;
+    const subject = @field(args, "subject");
+    const password_hash = @field(args, "password-hash") orelse init.environ_map.get("VERSO_BOOTSTRAP_PASSWORD_HASH");
+    const password_text = if (password_hash == null)
+        init.environ_map.get("VERSO_BOOTSTRAP_PASSWORD") orelse return error.MissingBootstrapPassword
+    else
+        null;
 
     var parsed_config = verso.config.loadFile(
         init.io,
@@ -95,11 +100,15 @@ fn bootstrapOwner(init: std.process.Init, args: anytype) !void {
         &identity_store,
         .cli,
     );
-    const owner_id = try identity_service.bootstrapLocalOwner(.{
+    const owner_id = if (password_hash) |hash| try identity_service.bootstrapLocalOwnerHash(.{
         .subject = subject,
         .display_name = display_name,
         .email = @field(args, "email"),
-    }, login, password);
+    }, login, hash) else try identity_service.bootstrapLocalOwnerPassword(.{
+        .subject = subject,
+        .display_name = display_name,
+        .email = @field(args, "email"),
+    }, login, password_text.?);
 
     var output_buffer: [128]u8 = undefined;
     var output_writer = std.Io.File.stdout().writer(init.io, &output_buffer);

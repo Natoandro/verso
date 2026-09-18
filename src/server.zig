@@ -135,6 +135,20 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         &identity_store,
         .web,
     );
+    const bootstrap_config = app_config.auth.bootstrap;
+    if (bootstrap_config.isConfigured()) {
+        _ = identity_service.bootstrapLocalOwnerHash(.{
+            .subject = bootstrap_config.subject,
+            .display_name = bootstrap_config.display_name.?,
+            .email = bootstrap_config.email,
+        }, bootstrap_config.login.?, bootstrap_config.password_hash.?) catch |bootstrap_error| switch (bootstrap_error) {
+            error.OwnerAlreadyExists => {},
+            else => {
+                logStartupFailure(&logger, io, "initial_owner", bootstrap_error);
+                return bootstrap_error;
+            },
+        };
+    }
     var identity_management_service = identity_management.Service.init(
         allocator,
         &identity_query_store,

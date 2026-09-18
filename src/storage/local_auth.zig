@@ -1,6 +1,5 @@
 const std = @import("std");
 const sqlite = @import("sqlite");
-const auth_identity = @import("../auth/identity.zig");
 const password = @import("../auth/password.zig");
 
 pub const Credential = struct {
@@ -19,52 +18,6 @@ pub const Store = struct {
 
     pub fn init(database: *sqlite.Db) Store {
         return .{ .database = database };
-    }
-
-    pub fn bootstrapOwner(
-        self: *Store,
-        owner: auth_identity.BootstrapOwner,
-        login: []const u8,
-        password_hash: []const u8,
-    ) !i64 {
-        try password.validateEncodedHash(password_hash);
-        try self.database.execMulti("BEGIN IMMEDIATE;", .{});
-        errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
-
-        if (try self.database.one(i64, "SELECT 1 FROM users LIMIT 1", .{}, .{}) != null) {
-            return error.OwnerAlreadyExists;
-        }
-        if (owner.email) |email| {
-            try self.database.exec(
-                "INSERT INTO users (subject, display_name, email) VALUES (?, ?, ?)",
-                .{},
-                .{ owner.subject, owner.display_name, email },
-            );
-        } else {
-            try self.database.exec(
-                "INSERT INTO users (subject, display_name) VALUES (?, ?)",
-                .{},
-                .{ owner.subject, owner.display_name },
-            );
-        }
-        const user_id = self.database.getLastInsertRowID();
-        try self.database.exec(
-            "INSERT INTO local_password_credentials (user_id, login, password_hash) VALUES (?, ?, ?)",
-            .{},
-            .{ user_id, login, password_hash },
-        );
-        try self.database.exec(
-            "INSERT INTO user_roles (user_id, role) VALUES (?, 'owner')",
-            .{},
-            .{user_id},
-        );
-        try self.database.exec(
-            "INSERT INTO audit_log (action, interface, details) VALUES ('owner.bootstrap', 'system', '{}')",
-            .{},
-            .{},
-        );
-        try self.database.execMulti("COMMIT;", .{});
-        return user_id;
     }
 
     pub fn credentialForLogin(

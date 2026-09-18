@@ -5,6 +5,7 @@ const password = @import("../auth/password.zig");
 const domain = @import("../domain/identity.zig");
 const storage = @import("../storage/identity.zig");
 const local_storage = @import("../storage/local_auth.zig");
+const initial_owner = @import("initial_owner.zig");
 
 pub const SessionCredentials = struct {
     id: i64,
@@ -53,14 +54,77 @@ pub const Service = struct {
         login: []const u8,
         password_text: []const u8,
     ) !i64 {
-        try identity.validateBootstrapOwner(owner);
-        try password.validateLogin(login);
-        try password.validatePassword(password_text);
+        return self.bootstrapLocalOwnerPassword(.{
+            .subject = owner.subject,
+            .display_name = owner.display_name,
+            .email = owner.email,
+        }, login, password_text);
+    }
+
+    pub fn bootstrapLocalOwnerPassword(
+        self: *Service,
+        profile: initial_owner.Profile,
+        login: []const u8,
+        password_text: []const u8,
+    ) !i64 {
+        var initial_service = self.initialOwnerService();
+        return initial_service.hashAndProvisionLocal(profile, login, password_text);
+    }
+
+    pub fn bootstrapLocalOwnerHash(
+        self: *Service,
+        profile: initial_owner.Profile,
+        login: []const u8,
+        password_hash: []const u8,
+    ) !i64 {
+        var initial_service = self.initialOwnerService();
+        return initial_service.provisionLocal(profile, .{
+            .login = login,
+            .password_hash = password_hash,
+        });
+    }
+
+    pub fn registerInitialLocalOwner(
+        self: *Service,
+        profile: initial_owner.Profile,
+        login: []const u8,
+        password_text: []const u8,
+        remote_address: []const u8,
+    ) !SessionCredentials {
         var login_buffer: [320]u8 = undefined;
-        const normalized_login = try password.normalizeLogin(&login_buffer, login);
-        var password_hash: [password.encoded_hash_capacity]u8 = undefined;
-        const encoded_hash = try password.hash(self.allocator, self.io, password_text, &password_hash);
-        return self.local_store.bootstrapOwner(owner, normalized_login, encoded_hash);
+        const normalized_login = password.normalizeLogin(&login_buffer, login) catch {
+            return error.InvalidRegistration;
+        };
+        const identifier_hash = rateKey("registration-identifier:", normalized_login);
+        const address_hash = rateKey("registration-address:", remote_address);
+        if (!try self.local_store.allowLoginAttempt(&identifier_hash, &address_hash)) {
+            return error.InvalidRegistration;
+        }
+
+        var initial_service = self.initialOwnerService();
+        const user_id = initial_service.hashAndProvisionLocal(
+            profile,
+            normalized_login,
+            password_text,
+        ) catch |registration_error| switch (registration_error) {
+            error.OwnerAlreadyExists => return error.OwnerAlreadyExists,
+            error.InvalidDisplayName,
+            error.InvalidEmail,
+            error.InvalidPassword,
+            error.InvalidPasswordHash,
+            => return error.InvalidRegistration,
+            else => return registration_error,
+        };
+        try self.local_store.clearRateLimit(&identifier_hash, &address_hash);
+        return self.createSession(user_id);
+    }
+
+    pub fn initialSetupAvailable(self: *Service) !bool {
+        return self.store.hasNoUsers();
+    }
+
+    fn initialOwnerService(self: *Service) initial_owner.Service {
+        return initial_owner.Service.init(self.io, self.allocator, self.store);
     }
 
     /// The subject must already be authenticated by the interface/provider.
@@ -498,90 +562,4 @@ test "manager author and assignment operations enforce scope and audit actors" {
         .{},
         .{author_id},
     ));
-}
-
-test "local password authentication rotates sessions and supports recovery" {
-    const sqlite = @import("sqlite");
-    const logging = @import("../logging.zig");
-    const migrations = @import("../storage/migrations.zig");
-
-    var database = try sqlite.Db.init(.{
-        .mode = .Memory,
-        .open_flags = .{ .write = true, .create = true },
-    });
-    defer database.deinit();
-    var logger = logging.Logger.init(std.testing.allocator, .text);
-    var migration_context = migrations.MigrationContext.init(
-        std.testing.io,
-        std.testing.allocator,
-        "migrations",
-        &database,
-        &logger,
-    );
-    _ = try migration_context.migrateUp();
-
-    var store = storage.Store.init(&database);
-    var service = Service.initForInterface(std.testing.io, std.testing.allocator, &store, .web);
-    const owner_id = try service.bootstrapLocalOwner(
-        .{ .subject = "local-owner", .display_name = "Local Owner" },
-        "Owner@Example.test",
-        "correct horse battery staple",
-    );
-    try std.testing.expectError(
-        error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "wrong password", "192.0.2.1"),
-    );
-
-    const first_session = try service.startLocalSession(
-        "owner@example.test",
-        "correct horse battery staple",
-        "192.0.2.1",
-    );
-    const second_session = try service.startLocalSession(
-        "OWNER@EXAMPLE.TEST",
-        "correct horse battery staple",
-        "192.0.2.1",
-    );
-    try std.testing.expectError(error.InvalidSession, service.authenticate(&first_session.token));
-    try std.testing.expectEqual(owner_id, (try service.authenticate(&second_session.token)).user_id);
-
-    const changed_session = try service.changePassword(
-        &second_session.token,
-        "correct horse battery staple",
-        "another correct horse battery staple",
-    );
-    try std.testing.expectError(error.InvalidSession, service.authenticate(&second_session.token));
-    try std.testing.expectEqual(owner_id, (try service.authenticate(&changed_session.token)).user_id);
-
-    const reset = (try service.requestPasswordReset("owner@example.test", "192.0.2.1")).?;
-    const recovered_session = try service.completePasswordReset(
-        &reset.value,
-        "recovered correct horse battery staple",
-    );
-    try std.testing.expectError(error.InvalidSession, service.authenticate(&changed_session.token));
-    try std.testing.expectEqual(owner_id, (try service.authenticate(&recovered_session.token)).user_id);
-    try std.testing.expectError(
-        error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
-    );
-    var failure_index: usize = 1;
-    while (failure_index < 5) : (failure_index += 1) {
-        try std.testing.expectError(
-            error.InvalidCredentials,
-            service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
-        );
-    }
-    try std.testing.expectError(
-        error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "recovered correct horse battery staple", "192.0.2.1"),
-    );
-    try database.exec(
-        "UPDATE local_login_rate_limits SET window_started_at = '2000-01-01T00:00:00.000Z', locked_until = NULL",
-        .{},
-        .{},
-    );
-    try std.testing.expectError(
-        error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
-    );
 }

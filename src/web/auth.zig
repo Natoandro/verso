@@ -14,6 +14,7 @@ const Error = anyerror;
 
 pub const session_cookie_name = "__Host-verso_session";
 pub const csrf_cookie_name = "__Host-verso_csrf";
+const setup_csrf_cookie_name = "__Host-verso_setup_csrf";
 
 pub const Handler = struct {
     pub fn routes() []const route.Route {
@@ -57,6 +58,8 @@ pub const SessionGuard = struct {
 const routes_table = route.routes(.{
     .{ "GET /admin/login", getLogin },
     .{ "POST /admin/login", postLogin },
+    .{ "GET /admin/register", getRegister },
+    .{ "POST /admin/register", postRegister },
     .{ "POST /admin/logout", postLogout },
     .{ "GET /admin/password", getPassword },
     .{ "POST /admin/password", postPassword },
@@ -68,6 +71,10 @@ const routes_table = route.routes(.{
 
 fn getLogin(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
+    const setup_available = request.server.identity_service.initialSetupAvailable() catch {
+        return respondText(request, "Authentication unavailable\n", .internal_server_error);
+    };
+    if (setup_available) return redirectToRegistration(request);
     if (cookieValue(request, session_cookie_name)) |token| {
         if (request.server.identity_service.authenticate(token)) |session| {
             request.authenticated_user_id = session.user_id;
@@ -78,6 +85,48 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
     return respond(request, login_html, "text/html; charset=utf-8", &[_]std.http.Header{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
+}
+
+fn getRegister(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    const setup_available = request.server.identity_service.initialSetupAvailable() catch {
+        return respondText(request, "Authentication unavailable\n", .internal_server_error);
+    };
+    if (!setup_available) return redirectToLogin(request);
+    var token = try auth_crypto.newSecret(request.server.io);
+    var html_buffer: [4096]u8 = undefined;
+    const html = try std.fmt.bufPrint(&html_buffer, register_html_template, .{&token});
+    var cookie_buffer: [192]u8 = undefined;
+    const cookie = try formatCookie(&cookie_buffer, setup_csrf_cookie_name, &token, false);
+    return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
+        .{ .name = "cache-control", .value = "no-store" },
+        .{ .name = "set-cookie", .value = cookie },
+    }, .ok);
+}
+
+fn postRegister(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    if (!try request.server.identity_service.initialSetupAvailable()) return redirectToLogin(request);
+    const setup_cookie = cookieValue(request, setup_csrf_cookie_name);
+    var values = form.read(request) catch {
+        return respondText(request, "Invalid registration\n", .bad_request);
+    };
+    defer values.deinit(request.server.allocator);
+    if (!try requireSetupCsrf(setup_cookie, values.csrf_token, request)) return;
+    const display_name = values.display_name orelse return respondText(request, "Invalid registration\n", .bad_request);
+    const login = values.login orelse return respondText(request, "Invalid registration\n", .bad_request);
+    const password_text = values.password orelse return respondText(request, "Invalid registration\n", .bad_request);
+    const credentials = request.server.identity_service.registerInitialLocalOwner(
+        .{ .display_name = display_name, .email = values.email },
+        login,
+        password_text,
+        request.remote_address,
+    ) catch |registration_error| switch (registration_error) {
+        error.OwnerAlreadyExists => return redirectToLogin(request),
+        error.InvalidRegistration => return respondText(request, "Invalid registration\n", .bad_request),
+        else => return respondText(request, "Registration failed\n", .internal_server_error),
+    };
+    return establishSession(request, credentials, "/admin/editor");
 }
 
 fn postLogin(request: *RequestContext, _: Next) Error!void {
@@ -221,6 +270,22 @@ pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]c
     return true;
 }
 
+fn requireSetupCsrf(cookie: ?[]const u8, form_token: ?[]const u8, request: *RequestContext) Error!bool {
+    const cookie_value = cookie orelse {
+        try respondText(request, "CSRF validation failed\n", .forbidden);
+        return false;
+    };
+    const token = form_token orelse {
+        try respondText(request, "CSRF validation failed\n", .forbidden);
+        return false;
+    };
+    if (!auth_crypto.constantTimeEqual(cookie_value, token)) {
+        try respondText(request, "CSRF validation failed\n", .forbidden);
+        return false;
+    }
+    return true;
+}
+
 fn establishSession(
     request: *RequestContext,
     credentials: application_identity.SessionCredentials,
@@ -272,6 +337,12 @@ fn clearSession(request: *RequestContext) Error!void {
 
 pub fn redirectToLogin(request: *RequestContext) Error!void {
     return redirect(request, "/admin/login", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    });
+}
+
+pub fn redirectToRegistration(request: *RequestContext) Error!void {
+    return redirect(request, "/admin/register", &.{
         .{ .name = "cache-control", .value = "no-store" },
     });
 }
@@ -372,6 +443,21 @@ const login_html =
     \\</main></body></html>
 ;
 
+const register_html_template =
+    \\<!doctype html>
+    \\<html lang="en"><head><meta charset="utf-8"><title>Create owner account</title></head>
+    \\<body><main><h1>Create the owner account</h1>
+    \\<p>This one-time registration is available because no user exists yet.</p>
+    \\<form method="post" action="/admin/register">
+    \\<input type="hidden" name="csrf_token" value="{s}">
+    \\<label>Display name <input name="display_name" autocomplete="name" required></label>
+    \\<label>Email <input type="email" name="email" autocomplete="email"></label>
+    \\<label>Login <input name="login" autocomplete="username" required></label>
+    \\<label>Password <input type="password" name="password" autocomplete="new-password" required></label>
+    \\<button type="submit">Create owner account</button></form>
+    \\</main></body></html>
+;
+
 const recovery_html =
     \\<!doctype html>
     \\<html lang="en"><head><meta charset="utf-8"><title>Password recovery</title></head>
@@ -420,6 +506,8 @@ test "admin authentication routes separate login and logout methods" {
     const routes = Handler.routes();
     try std.testing.expectEqual(@as(?usize, 0), route.resolve(routes, .GET, "/admin/login"));
     try std.testing.expectEqual(@as(?usize, 1), route.resolve(routes, .POST, "/admin/login"));
-    try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .POST, "/admin/logout"));
+    try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .GET, "/admin/register"));
+    try std.testing.expectEqual(@as(?usize, 3), route.resolve(routes, .POST, "/admin/register"));
+    try std.testing.expectEqual(@as(?usize, 4), route.resolve(routes, .POST, "/admin/logout"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .GET, "/admin/logout"));
 }

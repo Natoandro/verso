@@ -369,8 +369,8 @@ configuration files.
 
 ### Initial user provisioning
 
-The first-user configuration is an explicit, planned bootstrap surface rather
-than a general user-management configuration. Its intended shape is:
+The first-user configuration is an explicit bootstrap surface rather than a
+general user-management configuration. Its local-password shape is:
 
 ```toml
 [auth.bootstrap]
@@ -381,12 +381,10 @@ email = "owner@example.org"
 # password_hash = "$argon2id$v=19$..."  # required for local password login
 ```
 
-The exact field names and validation belong to `IAM-000`. The record may be
-provided by `verso.toml` or by corresponding `VERSO_AUTH_BOOTSTRAP_*`
+The record may be provided by `verso.toml` or by corresponding `VERSO_AUTH_BOOTSTRAP_*`
 environment variables, but not by ordinary `serve` CLI overrides. A complete
-record is applied during startup only when the database has no user row and no
-pending initial-owner claim. A partial record always fails validation; after a
-user or pending claim exists, a complete record is an idempotent no-op and
+local record is applied during startup only when the database has no user row.
+A partial record always fails validation; after a user exists, a complete record is an idempotent no-op and
 cannot mutate identity state. Secrets should use environment or an equivalent
 secret-injection mechanism rather than a tracked TOML file, and password
 hashes must be redacted from config dumps, diagnostics, and logs.
@@ -396,8 +394,9 @@ paths may omit `subject`, `login`, and `password_hash` and provide an OIDC
 email target instead. This creates a pending, non-authenticating owner claim
 that is completed only by a verified callback from that exact issuer whose
 normalized email exactly matches the configured target; the email value alone
-is never proof of identity. The pending claim locks initialization, so another
-web, script, or configuration bootstrap cannot race or replace it.
+is never proof of identity. The pending-claim design is reserved for the OIDC
+follow-up; it will lock initialization so another web, script, or configuration
+bootstrap cannot race or replace it.
 
 Environment overrides are optional. Configuration precedence, from lowest to
 highest, is built-in defaults, the optional `verso.toml`, environment variables,

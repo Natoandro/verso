@@ -471,43 +471,44 @@ deferred alternatives documented in
   attempts are rejected or become an idempotent no-op according to the
   adapter contract, without changing state.
 
-  - [ ] **Domain and configuration contract:** Define the initial-owner input
-    shared by all adapters: display name, email, provider subject, local
-    login, and Argon2id password hash. Define the empty-database gate,
-    already-initialized result, complete-versus-partial configuration rules,
-    and the pending/unbound owner state used for OIDC email-only bootstrap.
-    Define a singleton `initial_owner_claim` representation and its migration;
-    it locks setup without creating an authenticating user. Define OIDC
-    identity keys as immutable issuer-plus-subject pairs, not bare subjects.
-  - [ ] **Application and SQLite:** Implement one atomic provisioning use
+  - [x] **Domain and configuration contract:** Define the local initial-owner input
+    shared by all local adapters: display name, email, optional provider
+    subject, local login, and Argon2id password hash. Define the
+    empty-database gate, already-initialized result, and
+    complete-versus-partial configuration rules. OIDC email-only bootstrap,
+    the singleton `initial_owner_claim` representation, and issuer-plus-subject
+    identity keys remain part of the OIDC follow-up.
+  - [x] **Application and SQLite:** Implement one atomic local provisioning use
     case with an immediate SQLite write transaction, a second empty-database
-    and pending-claim check inside the transaction, owner-role assignment,
-    optional local credential storage, audit logging, and safe
-    failure/rollback behavior. Add the explicit migration for the singleton
-    pending claim and issuer-plus-subject identity constraint. Existing CLI
+    check inside the transaction, owner-role assignment,
+    local credential storage, audit logging, and safe failure/rollback behavior.
+    The pending-claim migration and issuer-plus-subject identity constraint are
+    deferred with OIDC. Existing CLI
     bootstrap code must converge on this service rather than retaining a
     parallel storage path.
-  - [ ] **Web setup flow:** Make the unauthenticated login boundary redirect
-    to a no-user registration page only when no user row or pending claim
+  - [x] **Web setup flow:** Make the unauthenticated login boundary redirect
+    to a no-user registration page only when no user row
     exists. Add origin, CSRF/rate-limit, validation, and session-establishment
     handling for the one-time POST; after initialization, registration must
     redirect to login and must not become public signup.
-  - [ ] **CLI/config adapters and OIDC handoff:** Expand the script command
+  - [x] **CLI/config adapters:** Expand the script command
     to accept the shared fields without exposing plaintext passwords in
     argv/logs. Apply a complete config/env record before the listener starts,
-    with no ordinary `serve` CLI override. When OIDC is configured, allow
-    script/config email-only provisioning only as a pending claim that can be
-    activated by a verified callback from the exact configured issuer when the
-    normalized email exactly matches the configured target. Verify first-wins
-    behavior across all three adapters, claim activation, restart behavior,
-    audit records, redaction, and rejection after initialization. Web maps an
-    already-initialized result to login, CLI exits non-zero, and configuration
-    startup treats it as an idempotent no-op.
+    with no ordinary `serve` CLI override. OIDC email-only handoff remains
+    deferred until the OIDC provider exists. Verify local first-wins behavior
+    across all three adapters, restart behavior, audit records, redaction, and
+    rejection after initialization. Web maps an already-initialized result to
+    login, CLI exits non-zero, and configuration startup treats it as an
+    idempotent no-op.
 
-  The current local CLI owner bootstrap and web login are partial foundations;
-  this slice owns their first-run convergence. OIDC account linking remains
-  part of `IAM-001b`, but its verified-email handoff must be specified here so
-  email-only bootstrap cannot create an unauthenticated owner.
+  - [ ] **Cross-adapter verification:** Add CLI/config integration coverage for
+    first-wins races, restart idempotence, rollback, audit records, secret
+    redaction, and the future OIDC pending-claim activation path.
+
+  The local CLI owner bootstrap, configuration bootstrap, and web registration
+  now converge on the same first-run provisioning boundary. OIDC account
+  linking and email-only pending claims remain part of `IAM-001b`; until then,
+  local configuration requires the login and password hash fields.
 
 - [ ] **IAM-001 — Establish secure web sessions**
 

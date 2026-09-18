@@ -6,6 +6,7 @@ pub const application = struct {
     pub const bootstrap = @import("application/bootstrap.zig");
     pub const documents = @import("application/documents.zig");
     pub const identity = @import("application/identity.zig");
+    pub const initial_owner = @import("application/initial_owner.zig");
     pub const identity_management = @import("application/identity_management.zig");
 };
 pub const domain = struct {
@@ -34,6 +35,8 @@ test {
     _ = @import("domain/sections.zig");
     _ = @import("application/documents.zig");
     _ = @import("application/identity.zig");
+    _ = @import("application/identity_local_test.zig");
+    _ = @import("application/initial_owner.zig");
     _ = @import("application/identity_management.zig");
     _ = @import("application/documents_test.zig");
     _ = @import("storage/documents.zig");

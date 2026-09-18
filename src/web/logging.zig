@@ -4,13 +4,19 @@ const layer = @import("layer.zig");
 
 pub const RequestLoggingLayer = struct {
     pub fn handle(_: *@This(), request: *context.RequestContext, next: layer.Next) layer.Error!void {
+        const method = @tagName(request.request.head.method);
+        const protocol = @tagName(request.request.head.version);
+        var target_storage: [4096]u8 = undefined;
+        const target_length = @min(request.request.head.target.len, target_storage.len);
+        @memcpy(target_storage[0..target_length], request.request.head.target[0..target_length]);
+        const target = target_storage[0..target_length];
         next.call(request) catch |request_error| {
             if (request_error == error.Canceled) return error.Canceled;
-            try logFailedRequest(request, @errorName(request_error));
+            try logFailedRequest(request, method, target, protocol, @errorName(request_error));
             return request_error;
         };
 
-        try logCompletedRequest(request);
+        try logCompletedRequest(request, method, target, protocol);
     }
 };
 
@@ -150,7 +156,12 @@ const FailedRequestLogRecord = struct {
     error_name: []const u8,
 };
 
-fn logCompletedRequest(request: *context.RequestContext) std.Io.Cancelable!void {
+fn logCompletedRequest(
+    request: *context.RequestContext,
+    method: []const u8,
+    target: []const u8,
+    protocol: []const u8,
+) std.Io.Cancelable!void {
     const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
     const duration = request.started_at.durationTo(finished_at);
@@ -159,15 +170,21 @@ fn logCompletedRequest(request: *context.RequestContext) std.Io.Cancelable!void 
         .level = "info",
         .event = "http.request",
         .message = "HTTP request completed",
-        .method = @tagName(request.request.head.method),
-        .target = sanitizedTarget(request.request.head.target, &target_buffer),
-        .protocol = @tagName(request.request.head.version),
+        .method = method,
+        .target = sanitizedTarget(target, &target_buffer),
+        .protocol = protocol,
         .status = request.response_status,
         .duration_ms = .{ .milliseconds = durationMilliseconds(duration) },
     }) catch {};
 }
 
-fn logFailedRequest(request: *context.RequestContext, error_name: []const u8) std.Io.Cancelable!void {
+fn logFailedRequest(
+    request: *context.RequestContext,
+    method: []const u8,
+    target: []const u8,
+    protocol: []const u8,
+    error_name: []const u8,
+) std.Io.Cancelable!void {
     const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
     const duration = request.started_at.durationTo(finished_at);
@@ -176,9 +193,9 @@ fn logFailedRequest(request: *context.RequestContext, error_name: []const u8) st
         .level = "warn",
         .event = "http.request",
         .message = "HTTP request failed",
-        .method = @tagName(request.request.head.method),
-        .target = sanitizedTarget(request.request.head.target, &target_buffer),
-        .protocol = @tagName(request.request.head.version),
+        .method = method,
+        .target = sanitizedTarget(target, &target_buffer),
+        .protocol = protocol,
         .status = request.response_status,
         .duration_ms = .{ .milliseconds = durationMilliseconds(duration) },
         .error_name = error_name,

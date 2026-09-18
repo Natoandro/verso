@@ -5,6 +5,14 @@ const domain = @import("../domain/identity.zig");
 pub const Store = struct {
     database: *sqlite.Db,
 
+    pub const InitialLocalOwner = struct {
+        subject: []const u8,
+        display_name: []const u8,
+        email: ?[]const u8,
+        login: []const u8,
+        password_hash: []const u8,
+    };
+
     pub fn init(database: *sqlite.Db) Store {
         return .{ .database = database };
     }
@@ -43,6 +51,51 @@ pub const Store = struct {
         );
         try self.database.execMulti("COMMIT;", .{});
         return user_id;
+    }
+
+    pub fn createInitialLocalOwner(self: *Store, owner: InitialLocalOwner) !i64 {
+        try self.database.execMulti("BEGIN IMMEDIATE;", .{});
+        errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
+
+        if (try self.database.one(i64, "SELECT 1 FROM users LIMIT 1", .{}, .{}) != null) {
+            return error.OwnerAlreadyExists;
+        }
+
+        if (owner.email) |email| {
+            try self.database.exec(
+                "INSERT INTO users (subject, display_name, email) VALUES (?, ?, ?)",
+                .{},
+                .{ owner.subject, owner.display_name, email },
+            );
+        } else {
+            try self.database.exec(
+                "INSERT INTO users (subject, display_name) VALUES (?, ?)",
+                .{},
+                .{ owner.subject, owner.display_name },
+            );
+        }
+        const user_id = self.database.getLastInsertRowID();
+        try self.database.exec(
+            "INSERT INTO local_password_credentials (user_id, login, password_hash) VALUES (?, ?, ?)",
+            .{},
+            .{ user_id, owner.login, owner.password_hash },
+        );
+        try self.database.exec(
+            "INSERT INTO user_roles (user_id, role) VALUES (?, 'owner')",
+            .{},
+            .{user_id},
+        );
+        try self.database.exec(
+            "INSERT INTO audit_log (action, interface, details) VALUES ('owner.bootstrap', 'system', '{}')",
+            .{},
+            .{},
+        );
+        try self.database.execMulti("COMMIT;", .{});
+        return user_id;
+    }
+
+    pub fn hasNoUsers(self: *Store) !bool {
+        return (try self.database.one(i64, "SELECT 1 FROM users LIMIT 1", .{}, .{})) == null;
     }
 
     pub fn userIdForSubject(self: *Store, subject: []const u8) !?i64 {

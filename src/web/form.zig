@@ -12,6 +12,7 @@ pub const Values = struct {
     token: ?[]const u8 = null,
     csrf_token: ?[]const u8 = null,
     display_name: ?[]const u8 = null,
+    email: ?[]const u8 = null,
     slug: ?[]const u8 = null,
     biography: ?[]const u8 = null,
     editor_user_id: ?[]const u8 = null,

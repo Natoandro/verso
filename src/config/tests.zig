@@ -1,5 +1,6 @@
 const std = @import("std");
 const loading = @import("load.zig");
+const schema = @import("schema.zig");
 const types = @import("types.zig");
 
 test "parses and validates a complete configuration" {
@@ -71,6 +72,41 @@ test "default configuration output is valid TOML" {
     try std.testing.expectEqualStrings("Verso", parsed_config.value.site.name);
     try std.testing.expectEqual(types.LoggingFormat.auto, parsed_config.value.logging.format);
     try std.testing.expectEqual(true, parsed_config.value.logging.omit_null_fields);
+}
+
+test "empty configuration retains startup migration defaults" {
+    var parsed_config = try types.Config.parse(std.testing.allocator, "");
+    defer parsed_config.deinit();
+    try std.testing.expect(parsed_config.value.migrations.run_on_startup);
+}
+
+test "initial owner bootstrap configuration requires a complete local credential" {
+    const valid_source = "[auth.bootstrap]\ndisplay_name = 'Site Owner'\nemail = 'owner@example.test'\nlogin = 'owner@example.test'\npassword_hash = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA'\n";
+    var parsed_config = try types.Config.parse(std.testing.allocator, valid_source);
+    defer parsed_config.deinit();
+    try parsed_config.value.validate();
+    try std.testing.expect(parsed_config.value.auth.bootstrap.isConfigured());
+    try std.testing.expectEqualStrings("Site Owner", parsed_config.value.auth.bootstrap.display_name.?);
+
+    const incomplete_source = "[auth.bootstrap]\ndisplay_name = 'Site Owner'\nlogin = 'owner@example.test'\n";
+    var incomplete = try types.Config.parse(std.testing.allocator, incomplete_source);
+    defer incomplete.deinit();
+    try std.testing.expectError(error.InvalidAuthConfiguration, incomplete.value.validate());
+}
+
+test "initial owner bootstrap environment fields are reflected without CLI exposure" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_AUTH_BOOTSTRAP_DISPLAY_NAME", "Environment Owner");
+    try environ.put("VERSO_AUTH_BOOTSTRAP_LOGIN", "owner@example.test");
+    try environ.put("VERSO_AUTH_BOOTSTRAP_PASSWORD_HASH", "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA");
+    var parsed_config = try loading.load(std.testing.allocator, .{ .envs = &environ });
+    defer parsed_config.deinit();
+    try std.testing.expectEqualStrings(
+        "Environment Owner",
+        parsed_config.value.auth.bootstrap.display_name.?,
+    );
+    try std.testing.expectEqual(@as(usize, 23), schema.serve_cli_metadata.len);
 }
 
 test "public static root is separate from canonical storage paths" {

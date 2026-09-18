@@ -52,11 +52,11 @@ run_server() {
     stdout_file=$3
     stderr_file=$4
     shutdown_signal=$5
+    check_initial_setup=${6:-false}
 
     (
         cd "$case_directory"
-        exec env \
-            -i \
+        exec env -i \
             "PATH=${PATH:-/usr/bin:/bin}" \
             VERSO_SERVER_PORT="$port" \
             VERSO_MIGRATIONS_PATH="$migrations_directory" \
@@ -85,16 +85,53 @@ run_server() {
     }
     [ "$response" = "Verso is running" ] || fail "unexpected HTTP response: $response"
 
-    login_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/login") || fail "login page was not served"
-    printf '%s\n' "$login_response" | grep -F 'name="login"' >/dev/null || fail "login page was incomplete"
-    editor_headers=$(curl --silent --dump-header - --output /dev/null "http://127.0.0.1:$port/admin/editor") || fail "protected editor request failed"
-    printf '%s\n' "$editor_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "editor route was not protected"
-    printf '%s\n' "$editor_headers" | grep -F 'location: /admin/login' >/dev/null || fail "editor did not redirect to login"
-    login_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-        -H "Origin: http://127.0.0.1:$port" -X POST "http://127.0.0.1:$port/admin/login")
-    [ "$login_status" = "401" ] || fail "invalid local login did not fail generically"
-    editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
-    [ "$editor_post_status" = "403" ] || fail "editor method did not enforce origin protection"
+    if [ "$check_initial_setup" = true ]; then
+        login_body_file="$case_directory/login.body"
+        login_headers=$(curl --silent --dump-header - --output "$login_body_file" "http://127.0.0.1:$port/admin/login") || fail "login route was not served"
+        printf '%s\n' "$login_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "empty database did not redirect to registration"
+        printf '%s\n' "$login_headers" | grep -F 'location: /admin/register' >/dev/null || fail "login did not redirect to registration"
+        register_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/register") || fail "registration page was not served"
+        printf '%s\n' "$register_response" | grep -F 'name="display_name"' >/dev/null || fail "registration page was incomplete"
+        register_csrf_token=$(printf '%s\n' "$register_response" | sed -n 's/.*name="csrf_token" value="\([0-9a-f]*\)".*/\1/p')
+        [ "${#register_csrf_token}" -eq 64 ] || fail "registration page did not include a CSRF token"
+        register_headers=$(curl --silent --dump-header - --output /dev/null \
+            -H "Cookie: __Host-verso_setup_csrf=$register_csrf_token" \
+            -H "Origin: http://127.0.0.1:$port" \
+            --data "csrf_token=$register_csrf_token&display_name=Site+Owner&email=owner%40example.test&login=owner%40example.test&password=correct+horse+battery+staple" \
+            "http://127.0.0.1:$port/admin/register") || {
+            sed -n '1,180p' "$stderr_file" >&2 || true
+            fail "initial registration request failed"
+        }
+        printf '%s\n' "$register_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "registration did not redirect"
+        printf '%s\n' "$register_headers" | grep -F 'location: /admin/editor' >/dev/null || fail "registration did not establish owner session"
+        login_response=$(curl --silent "http://127.0.0.1:$port/admin/login" 2>"$case_directory/login-request.err") || {
+            sed -n '1,120p' "$case_directory/login-request.err" >&2 || true
+            sed -n '1,160p' "$stderr_file" >&2 || true
+            fail "login page was not served after registration"
+        }
+        printf '%s\n' "$login_response" | grep -F 'name="login"' >/dev/null || fail "login page was incomplete"
+        duplicate_register_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: http://127.0.0.1:$port" \
+            --data 'display_name=Second+Owner&login=second%40example.test&password=correct+horse+battery+staple' \
+            "http://127.0.0.1:$port/admin/register")
+        [ "$duplicate_register_status" = "303" ] || fail "registration remained open after owner creation"
+        editor_headers=$(curl --silent --dump-header - --output /dev/null "http://127.0.0.1:$port/admin/editor") || fail "protected editor request failed"
+        printf '%s\n' "$editor_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "editor route was not protected"
+        printf '%s\n' "$editor_headers" | grep -F 'location: /admin/login' >/dev/null || fail "editor did not redirect to login"
+        login_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: http://127.0.0.1:$port" \
+            --data 'login=unknown%40example.test&password=wrong-password' \
+            "http://127.0.0.1:$port/admin/login") || {
+            sed -n '1,180p' "$stderr_file" >&2 || true
+            fail "invalid local login request failed"
+        }
+        if [ "$login_status" != "401" ]; then
+            sed -n '1,180p' "$stderr_file" >&2 || true
+            fail "invalid local login did not fail generically (status $login_status)"
+        fi
+        editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
+        [ "$editor_post_status" = "403" ] || fail "editor method did not enforce origin protection"
+    fi
 
     case "$shutdown_signal" in
         INT) kill -INT "$server_pid" ;;
@@ -135,7 +172,8 @@ run_server \
     "$(free_port)" \
     "$default_directory/stdout.log" \
     "$default_directory/stderr.log" \
-    TERM
+    TERM \
+    true
 test -f "$default_directory/data/verso.db" || fail "default server did not create database"
 test -d "$default_directory/data/assets" || fail "default server did not create asset directory"
 test -d "$default_directory/data/cache" || fail "default server did not create cache directory"
