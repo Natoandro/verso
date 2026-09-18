@@ -1,6 +1,7 @@
 const std = @import("std");
 const auth_crypto = @import("../auth/crypto.zig");
 const identity = @import("../auth/identity.zig");
+const domain = @import("../domain/identity.zig");
 const storage = @import("../storage/identity.zig");
 
 pub const SessionCredentials = struct {
@@ -14,10 +15,16 @@ pub const SessionIdentity = struct {
 };
 
 pub const Service = struct {
+    io: std.Io,
     store: *storage.Store,
+    audit_interface: domain.AuditInterface,
 
-    pub fn init(store: *storage.Store) Service {
-        return .{ .store = store };
+    pub fn initForInterface(
+        io: std.Io,
+        store: *storage.Store,
+        audit_interface: domain.AuditInterface,
+    ) Service {
+        return .{ .io = io, .store = store, .audit_interface = audit_interface };
     }
 
     pub fn bootstrapOwner(self: *Service, owner: identity.BootstrapOwner) !i64 {
@@ -29,8 +36,8 @@ pub const Service = struct {
     /// This service only maps that assertion to a local user and session.
     pub fn startSessionForVerifiedSubject(self: *Service, subject: []const u8) !SessionCredentials {
         const user_id = (try self.store.userIdForSubject(subject)) orelse return error.InvalidCredentials;
-        const token = auth_crypto.newSecret();
-        const csrf_token = auth_crypto.newSecret();
+        const token = try auth_crypto.newSecret(self.io);
+        const csrf_token = try auth_crypto.newSecret(self.io);
         const token_hash = auth_crypto.hashSecret(&token);
         const csrf_secret_hash = auth_crypto.hashSecret(&csrf_token);
         const session_id = try self.store.createSession(
@@ -73,6 +80,66 @@ pub const Service = struct {
         }
         return error.Forbidden;
     }
+
+    pub fn createAuthor(self: *Service, token: []const u8, request: domain.CreateAuthor) !i64 {
+        try domain.validateCreateAuthor(request);
+        const actor_user_id = try self.authorize(token, .author_manage);
+        return self.store.createAuthor(request, actor_user_id, self.audit_interface);
+    }
+
+    pub fn updateAuthor(self: *Service, token: []const u8, request: domain.UpdateAuthor) !void {
+        try domain.validateUpdateAuthor(request);
+        const actor_user_id = try self.authorize(token, .author_manage);
+        try self.store.updateAuthor(request, actor_user_id, self.audit_interface);
+    }
+
+    pub fn setVersionAuthors(self: *Service, token: []const u8, request: domain.SetVersionAuthors) !void {
+        try domain.validateSetVersionAuthors(request);
+        const actor_user_id = try self.authorize(token, .author_manage);
+        try self.store.setVersionAuthors(request, actor_user_id, self.audit_interface);
+    }
+
+    pub fn createAssignment(self: *Service, token: []const u8, request: domain.CreateAssignment) !i64 {
+        try domain.validateCreateAssignment(request);
+        const actor_user_id = try self.authorize(token, .document_assign_editor);
+        return self.store.createAssignment(request, actor_user_id, self.audit_interface);
+    }
+
+    pub fn revokeAssignment(self: *Service, token: []const u8, request: domain.RevokeAssignment) !i64 {
+        try domain.validateRevokeAssignment(request);
+        const actor_user_id = try self.authorize(token, .document_assign_editor);
+        return self.store.revokeAssignment(request, actor_user_id, self.audit_interface);
+    }
+
+    pub fn requireAuthorAccess(self: *Service, token: []const u8, author_id: i64) !void {
+        const session = try self.authenticate(token);
+        if (try self.store.userHasRole(session.user_id, .owner)) return;
+        if (try self.store.userHasRole(session.user_id, .manager)) return;
+        try self.requireCapability(token, .document_read_assigned);
+        if (!try self.store.hasAuthorAssignment(session.user_id, author_id)) return error.Forbidden;
+    }
+
+    pub fn requireDocumentAccess(self: *Service, token: []const u8, document_id: i64) !void {
+        const session = try self.authenticate(token);
+        if (try self.store.userHasRole(session.user_id, .owner)) return;
+        if (try self.store.userHasRole(session.user_id, .manager)) return;
+        try self.requireCapability(token, .document_read_assigned);
+        if (!try self.store.hasDocumentAssignment(session.user_id, document_id)) return error.Forbidden;
+    }
+
+    pub fn requireVersionAccess(self: *Service, token: []const u8, version_id: i64) !void {
+        const session = try self.authenticate(token);
+        if (try self.store.userHasRole(session.user_id, .owner)) return;
+        if (try self.store.userHasRole(session.user_id, .manager)) return;
+        try self.requireCapability(token, .document_read_assigned);
+        if (!try self.store.hasVersionAssignment(session.user_id, version_id)) return error.Forbidden;
+    }
+
+    fn authorize(self: *Service, token: []const u8, capability: identity.Capability) !i64 {
+        const session = try self.authenticate(token);
+        try self.requireCapability(token, capability);
+        return session.user_id;
+    }
 };
 
 test "owner bootstrap, session lifecycle, CSRF, and capability checks share the service" {
@@ -96,7 +163,7 @@ test "owner bootstrap, session lifecycle, CSRF, and capability checks share the 
     _ = try migration_context.migrateUp();
 
     var store = storage.Store.init(&database);
-    var service = Service.init(&store);
+    var service = Service.initForInterface(std.testing.io, &store, .cli);
     const owner_id = try service.bootstrapOwner(.{
         .subject = "provider|owner",
         .display_name = "Initial Owner",
@@ -143,7 +210,7 @@ test "disabled, unknown, and expired identities cannot create sessions" {
     _ = try migration_context.migrateUp();
 
     var store = storage.Store.init(&database);
-    var service = Service.init(&store);
+    var service = Service.initForInterface(std.testing.io, &store, .cli);
     _ = try service.bootstrapOwner(.{ .subject = "owner", .display_name = "Owner" });
     try std.testing.expectError(error.InvalidCredentials, service.startSessionForVerifiedSubject("missing"));
     const expired = try service.startSessionForVerifiedSubject("owner");
@@ -155,4 +222,137 @@ test "disabled, unknown, and expired identities cannot create sessions" {
     try std.testing.expectError(error.InvalidSession, service.authenticate(&expired.token));
     try database.exec("UPDATE users SET state = 'disabled' WHERE subject = 'owner'", .{}, .{});
     try std.testing.expectError(error.InvalidCredentials, service.startSessionForVerifiedSubject("owner"));
+}
+
+test "manager author and assignment operations enforce scope and audit actors" {
+    const sqlite = @import("sqlite");
+    const logging = @import("../logging.zig");
+    const migrations = @import("../storage/migrations.zig");
+
+    var database = try sqlite.Db.init(.{
+        .mode = .Memory,
+        .open_flags = .{ .write = true, .create = true },
+    });
+    defer database.deinit();
+    var logger = logging.Logger.init(std.testing.allocator, .text);
+    var migration_context = migrations.MigrationContext.init(
+        std.testing.io,
+        std.testing.allocator,
+        "migrations",
+        &database,
+        &logger,
+    );
+    _ = try migration_context.migrateUp();
+
+    var store = storage.Store.init(&database);
+    var service = Service.initForInterface(std.testing.io, &store, .cli);
+    const owner_id = try service.bootstrapOwner(.{ .subject = "owner", .display_name = "Owner" });
+    const owner_session = try service.startSessionForVerifiedSubject("owner");
+    try database.exec(
+        "INSERT INTO users (subject, display_name) VALUES ('editor', 'Editor')",
+        .{},
+        .{},
+    );
+    const editor_id = database.getLastInsertRowID();
+    try database.exec("INSERT INTO user_roles (user_id, role) VALUES (?, 'editor')", .{}, .{editor_id});
+    try database.exec("INSERT INTO documents (type, created_by) VALUES ('article', ?)", .{}, .{owner_id});
+    const document_id = database.getLastInsertRowID();
+
+    const author_id = try service.createAuthor(&owner_session.token, .{
+        .display_name = "Ada Lovelace",
+        .slug = "ada-lovelace",
+        .biography = "Mathematician",
+    });
+    try service.updateAuthor(&owner_session.token, .{
+        .author_id = author_id,
+        .display_name = "Ada Byron Lovelace",
+        .slug = "ada-lovelace",
+        .biography = "Mathematician and writer",
+    });
+    try database.exec(
+        "INSERT INTO document_versions " ++
+            "(document_id, version_number, state, slug, title, language, created_by) " ++
+            "VALUES (?, 1, 'draft', 'draft', 'Draft', 'en', ?)",
+        .{},
+        .{ document_id, owner_id },
+    );
+    const version_id = database.getLastInsertRowID();
+    const author_ids = [_]i64{author_id};
+    try service.setVersionAuthors(&owner_session.token, .{
+        .version_id = version_id,
+        .author_ids = &author_ids,
+        .expected_revision = 0,
+    });
+    const author_assignment = try service.createAssignment(&owner_session.token, .{
+        .editor_user_id = editor_id,
+        .scope = .{ .author = author_id },
+    });
+    try std.testing.expectError(
+        error.ActiveAssignmentExists,
+        service.createAssignment(&owner_session.token, .{
+            .editor_user_id = editor_id,
+            .scope = .{ .author = author_id },
+        }),
+    );
+    try service.requireAuthorAccess(&owner_session.token, author_id);
+    const editor_session = try service.startSessionForVerifiedSubject("editor");
+    try std.testing.expectError(
+        error.Forbidden,
+        service.createAuthor(&editor_session.token, .{
+            .display_name = "Unauthorized",
+            .slug = "unauthorized",
+        }),
+    );
+    try std.testing.expectError(
+        error.Forbidden,
+        service.createAssignment(&editor_session.token, .{
+            .editor_user_id = editor_id,
+            .scope = .{ .author = author_id },
+        }),
+    );
+    try service.requireAuthorAccess(&editor_session.token, author_id);
+    try service.requireVersionAccess(&editor_session.token, version_id);
+
+    const document_assignment = try service.createAssignment(&owner_session.token, .{
+        .editor_user_id = editor_id,
+        .scope = .{ .document = document_id },
+    });
+    try service.requireVersionAccess(&editor_session.token, version_id);
+    try std.testing.expectError(
+        error.StaleAssignment,
+        service.revokeAssignment(&owner_session.token, .{
+            .assignment_id = author_assignment,
+            .expected_revision = 1,
+        }),
+    );
+    try std.testing.expectEqual(@as(i64, 1), try service.revokeAssignment(&owner_session.token, .{
+        .assignment_id = author_assignment,
+        .expected_revision = 0,
+    }));
+    try std.testing.expectError(
+        error.Forbidden,
+        service.requireAuthorAccess(&editor_session.token, author_id),
+    );
+    try service.requireDocumentAccess(&editor_session.token, document_id);
+    _ = try service.revokeAssignment(&owner_session.token, .{
+        .assignment_id = document_assignment,
+        .expected_revision = 0,
+    });
+    try std.testing.expectError(
+        error.Forbidden,
+        service.requireVersionAccess(&editor_session.token, version_id),
+    );
+
+    try std.testing.expectEqual(@as(?i64, 7), try database.one(
+        i64,
+        "SELECT count(*) FROM audit_log WHERE actor_user_id = ?",
+        .{},
+        .{owner_id},
+    ));
+    try std.testing.expectEqual(@as(?i64, 4), try database.one(
+        i64,
+        "SELECT count(*) FROM audit_log WHERE acted_for_author_id = ?",
+        .{},
+        .{author_id},
+    ));
 }

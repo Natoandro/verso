@@ -79,6 +79,12 @@ metadata never grants edit access by itself. Creating or changing a document's
 author list requires `author:manage`; an editor may create or update content
 for an author only through a manager-created assignment.
 
+Author and assignment mutations are application operations. Author-scoped and
+document-scoped assignments are mutually exclusive records, active duplicates
+are rejected, revocation checks the expected assignment revision, and each
+committed mutation appends an audit row with the authenticated actor and the
+affected author or document.
+
 OAuth scopes and application permissions are cumulative restrictions: a tool
 operation succeeds only when its required scope and required application
 capability both allow the specific resource. For example, `content:write` does

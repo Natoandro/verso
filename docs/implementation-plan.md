@@ -437,14 +437,18 @@ unsaved document content and no server mutation path before `IAM-003`.
   checks are centralized in application services, and audit records capture
   both the actor and acted-for author.
 
-  - [ ] **Domain:** Model authors, grants, scopes, capabilities, and the actor
+  - [x] **Domain:** Model authors, grants, scopes, capabilities, and the actor
     versus acted-for-author distinction.
-  - [ ] **Application:** Implement manager-only author and assignment use cases
+  - [x] **Application:** Implement manager-only author and assignment use cases
     with centralized capability checks.
-  - [ ] **SQLite storage:** Persist authors, scoped grants, and audit records
+  - [x] **SQLite storage:** Persist authors, scoped grants, and audit records
     with constraints that prevent ambiguous assignments.
   - [ ] **Web/admin:** Provide protected management screens and verify denied
     operations do not reveal or mutate unauthorized data.
+
+  The Domain, Application, and SQLite divisions are transport-neutral and
+  complete. Web/admin management remains deferred until the WEB routing and
+  serving work is available.
 
 - [ ] **IAM-003 — Edit assigned drafts in the web editor**
 

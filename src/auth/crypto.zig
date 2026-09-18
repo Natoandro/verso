@@ -3,9 +3,9 @@ const std = @import("std");
 pub const secret_bytes = 32;
 pub const encoded_secret_length = secret_bytes * 2;
 
-pub fn newSecret() [encoded_secret_length]u8 {
+pub fn newSecret(io: std.Io) ![encoded_secret_length]u8 {
     var bytes: [secret_bytes]u8 = undefined;
-    std.crypto.random.bytes(&bytes);
+    try io.randomSecure(&bytes);
     return std.fmt.bytesToHex(bytes, .lower);
 }
 
@@ -35,4 +35,6 @@ test "secret hashing is stable and comparisons are constant-shape" {
     try std.testing.expect(constantTimeEqual(&first, &second));
     try std.testing.expect(!constantTimeEqual(&first, &different));
     try std.testing.expect(!constantTimeEqual(&first, "short"));
+    const generated = try newSecret(std.testing.io);
+    try std.testing.expect(!std.mem.eql(u8, &generated, &first));
 }
