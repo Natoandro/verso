@@ -39,6 +39,9 @@ jobs:
         with:
           version: 0.16.0
 
+      - name: Prepare Zig cache
+        run: mkdir -p "$ZIG_GLOBAL_CACHE_DIR/tmp"
+
       - name: Run unit and compile-failure tests
         run: zig build test --summary all
 
