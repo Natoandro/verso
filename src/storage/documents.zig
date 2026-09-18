@@ -53,9 +53,10 @@ pub const Store = struct {
         }
 
         try self.database.exec(
-            "INSERT INTO document_versions " ++
-                "(document_id, version_number, state, slug, title, description, language) " ++
-                "VALUES (?, 1, 'draft', ?, ?, ?, ?)",
+            \\INSERT INTO document_versions
+            \\    (document_id, version_number, state, slug, title, description, language)
+            \\    VALUES (?, 1, 'draft', ?, ?, ?, ?)
+        ,
             .{},
             .{ document_id, request.slug, request.title, request.description, request.language },
         );

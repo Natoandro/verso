@@ -61,8 +61,9 @@ pub const Store = struct {
         csrf_secret_hash: []const u8,
     ) !i64 {
         try self.database.exec(
-            "INSERT INTO web_sessions (token_hash, csrf_secret_hash, user_id, expires_at) " ++
-                "VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+8 hours'))",
+            \\INSERT INTO web_sessions (token_hash, csrf_secret_hash, user_id, expires_at)
+            \\    VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+8 hours'))
+        ,
             .{},
             .{ token_hash, csrf_secret_hash, user_id },
         );
@@ -72,12 +73,12 @@ pub const Store = struct {
     pub fn activeSessionUserId(self: *Store, token_hash: []const u8) !?i64 {
         const user_id = try self.database.one(
             i64,
-            "" ++
-                "SELECT session.user_id FROM web_sessions AS session " ++
-                "JOIN users AS user ON user.id = session.user_id " ++
-                "WHERE session.token_hash = ? AND session.revoked_at IS NULL " ++
-                "AND session.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " ++
-                "AND user.state = 'active'",
+            \\SELECT session.user_id FROM web_sessions AS session
+            \\    JOIN users AS user ON user.id = session.user_id
+            \\    WHERE session.token_hash = ? AND session.revoked_at IS NULL
+            \\    AND session.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            \\    AND user.state = 'active'
+        ,
             .{},
             .{token_hash},
         );
@@ -99,13 +100,13 @@ pub const Store = struct {
     ) !bool {
         return (try self.database.one(
             i64,
-            "" ++
-                "SELECT 1 FROM web_sessions AS session " ++
-                "JOIN users AS user ON user.id = session.user_id " ++
-                "WHERE session.token_hash = ? AND session.csrf_secret_hash = ? " ++
-                "AND session.revoked_at IS NULL " ++
-                "AND session.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " ++
-                "AND user.state = 'active'",
+            \\SELECT 1 FROM web_sessions AS session
+            \\    JOIN users AS user ON user.id = session.user_id
+            \\    WHERE session.token_hash = ? AND session.csrf_secret_hash = ?
+            \\    AND session.revoked_at IS NULL
+            \\    AND session.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            \\    AND user.state = 'active'
+        ,
             .{},
             .{ token_hash, csrf_secret_hash },
         )) != null;
@@ -113,8 +114,9 @@ pub const Store = struct {
 
     pub fn revokeSession(self: *Store, token_hash: []const u8) !void {
         try self.database.exec(
-            "UPDATE web_sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " ++
-                "WHERE token_hash = ? AND revoked_at IS NULL",
+            \\UPDATE web_sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            \\    WHERE token_hash = ? AND revoked_at IS NULL
+        ,
             .{},
             .{token_hash},
         );
@@ -184,8 +186,9 @@ pub const Store = struct {
             .{request.author_id},
         ) == null) return error.AuthorNotFound;
         try self.database.exec(
-            "UPDATE authors SET display_name = ?, slug = ?, biography = ?, " ++
-                "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+            \\UPDATE authors SET display_name = ?, slug = ?, biography = ?,
+            \\    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
+        ,
             .{},
             .{ request.display_name, request.slug, request.biography, request.author_id },
         );
@@ -238,8 +241,9 @@ pub const Store = struct {
             );
         }
         try self.database.exec(
-            "UPDATE document_versions SET revision_number = revision_number + 1, " ++
-                "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_by = ? WHERE id = ?",
+            \\UPDATE document_versions SET revision_number = revision_number + 1,
+            \\    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_by = ? WHERE id = ?
+        ,
             .{},
             .{ actor_user_id, request.version_id },
         );
@@ -265,10 +269,10 @@ pub const Store = struct {
 
         if (try self.database.one(
             i64,
-            "" ++
-                "SELECT 1 FROM users AS editor JOIN user_roles AS role " ++
-                "ON role.user_id = editor.id AND role.role = 'editor' " ++
-                "WHERE editor.id = ? AND editor.state = 'active'",
+            \\SELECT 1 FROM users AS editor JOIN user_roles AS role
+            \\    ON role.user_id = editor.id AND role.role = 'editor'
+            \\    WHERE editor.id = ? AND editor.state = 'active'
+        ,
             .{},
             .{request.editor_user_id},
         ) == null) return error.TargetNotEditor;
@@ -365,9 +369,11 @@ pub const Store = struct {
             .{request.assignment_id},
         );
         try self.database.exec(
-            "UPDATE editor_assignments SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), " ++
-                "revoked_by = ?, revision_number = revision_number + 1 " ++
-                "WHERE id = ? AND revision_number = ? AND revoked_at IS NULL",
+            \\UPDATE editor_assignments
+            \\    SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+            \\        revoked_by = ?, revision_number = revision_number + 1
+            \\    WHERE id = ? AND revision_number = ? AND revoked_at IS NULL
+        ,
             .{},
             .{ actor_user_id, request.assignment_id, request.expected_revision },
         );
@@ -401,13 +407,13 @@ pub const Store = struct {
     pub fn hasVersionAssignment(self: *Store, editor_user_id: i64, version_id: i64) !bool {
         return (try self.database.one(
             i64,
-            "" ++
-                "SELECT 1 FROM editor_assignments AS assignment " ++
-                "JOIN document_versions AS version ON version.id = ? " ++
-                "WHERE assignment.editor_user_id = ? AND assignment.revoked_at IS NULL " ++
-                "AND (assignment.document_id = version.document_id OR assignment.author_id IN (" ++
-                "SELECT version_author.author_id FROM version_authors AS version_author " ++
-                "WHERE version_author.version_id = version.id))",
+            \\SELECT 1 FROM editor_assignments AS assignment
+            \\    JOIN document_versions AS version ON version.id = ?
+            \\    WHERE assignment.editor_user_id = ? AND assignment.revoked_at IS NULL
+            \\    AND (assignment.document_id = version.document_id OR assignment.author_id IN (
+            \\        SELECT version_author.author_id FROM version_authors AS version_author
+            \\        WHERE version_author.version_id = version.id))
+        ,
             .{},
             .{ version_id, editor_user_id },
         )) != null;
@@ -460,8 +466,9 @@ pub const Store = struct {
         version_id: i64,
     ) !void {
         try self.database.exec(
-            "INSERT INTO audit_log (action, interface, actor_user_id, document_id, version_id, details) " ++
-                "VALUES (?, ?, ?, ?, ?, '{}')",
+            \\INSERT INTO audit_log (action, interface, actor_user_id, document_id, version_id, details)
+            \\    VALUES (?, ?, ?, ?, ?, '{}')
+        ,
             .{},
             .{ action, @tagName(audit_interface), actor_user_id, document_id, version_id },
         );
@@ -470,9 +477,9 @@ pub const Store = struct {
     fn actorCanManage(self: *Store, actor_user_id: i64) !bool {
         return (try self.database.one(
             i64,
-            "" ++
-                "SELECT 1 FROM users AS actor JOIN user_roles AS role ON role.user_id = actor.id " ++
-                "WHERE actor.id = ? AND actor.state = 'active' AND role.role IN ('owner', 'manager')",
+            \\SELECT 1 FROM users AS actor JOIN user_roles AS role ON role.user_id = actor.id
+            \\    WHERE actor.id = ? AND actor.state = 'active' AND role.role IN ('owner', 'manager')
+        ,
             .{},
             .{actor_user_id},
         )) != null;

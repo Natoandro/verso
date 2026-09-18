@@ -270,9 +270,10 @@ test "manager author and assignment operations enforce scope and audit actors" {
         .biography = "Mathematician and writer",
     });
     try database.exec(
-        "INSERT INTO document_versions " ++
-            "(document_id, version_number, state, slug, title, language, created_by) " ++
-            "VALUES (?, 1, 'draft', 'draft', 'Draft', 'en', ?)",
+        \\INSERT INTO document_versions
+        \\    (document_id, version_number, state, slug, title, language, created_by)
+        \\    VALUES (?, 1, 'draft', 'draft', 'Draft', 'en', ?)
+    ,
         .{},
         .{ document_id, owner_id },
     );

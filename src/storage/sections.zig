@@ -105,8 +105,9 @@ pub fn duplicateSection(
 
     try moveExistingPositionsForInsert(store, version_id, snapshot.section_count, target);
     try store.database.exec(
-        "INSERT INTO sections (version_id, position, kind, data) " ++
-            "SELECT version_id, ?, kind, data FROM sections WHERE id = ? AND version_id = ?",
+        \\INSERT INTO sections (version_id, position, kind, data)
+        \\    SELECT version_id, ?, kind, data FROM sections WHERE id = ? AND version_id = ?
+    ,
         .{},
         .{ target, section_id, version_id },
     );
@@ -222,8 +223,10 @@ fn moveExistingPositionsForInsert(
         .{ offset, version_id },
     );
     try store.database.exec(
-        "UPDATE sections SET position = position - ? + CASE WHEN position - ? >= ? THEN 1 ELSE 0 END " ++
-            "WHERE version_id = ? AND position >= ?",
+        \\UPDATE sections
+        \\    SET position = position - ? + CASE WHEN position - ? >= ? THEN 1 ELSE 0 END
+        \\    WHERE version_id = ? AND position >= ?
+    ,
         .{},
         .{ offset, offset, target, version_id, offset },
     );
@@ -237,11 +240,12 @@ fn normalizeAfterMove(
 ) !void {
     const offset = temporary_position_offset;
     try store.database.exec(
-        "UPDATE sections SET position = CASE " ++
-            "WHEN position = ? + ? THEN ? " ++
-            "WHEN ? < ? AND position > ? + ? AND position <= ? + ? THEN position - ? - 1 " ++
-            "WHEN ? < ? AND position >= ? + ? AND position < ? + ? THEN position - ? + 1 " ++
-            "ELSE position - ? END WHERE version_id = ?",
+        \\UPDATE sections SET position = CASE
+        \\    WHEN position = ? + ? THEN ?
+        \\    WHEN ? < ? AND position > ? + ? AND position <= ? + ? THEN position - ? - 1
+        \\    WHEN ? < ? AND position >= ? + ? AND position < ? + ? THEN position - ? + 1
+        \\    ELSE position - ? END WHERE version_id = ?
+    ,
         .{},
         .{
             offset,     current, target,
@@ -258,8 +262,10 @@ fn normalizeAfterMove(
 fn normalizeAfterDelete(store: *documents.Store, version_id: i64, current: i64) !void {
     const offset = temporary_position_offset;
     try store.database.exec(
-        "UPDATE sections SET position = position - ? - CASE WHEN position - ? > ? THEN 1 ELSE 0 END " ++
-            "WHERE version_id = ?",
+        \\UPDATE sections
+        \\    SET position = position - ? - CASE WHEN position - ? > ? THEN 1 ELSE 0 END
+        \\    WHERE version_id = ?
+    ,
         .{},
         .{ offset, offset, current, version_id },
     );

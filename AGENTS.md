@@ -15,6 +15,8 @@ assuming those exist.
   abstractions, or extension points for hypothetical future requirements.
 - Treat SQLite as the initial sole database backend, filesystem assets as the
   initial asset store, and filesystem HTML as disposable derived cache state.
+- When writing multiline SQL in Zig, use `\\` multiline string literals rather
+  than concatenating string literals with `++`.
 - Keep canonical state, derived state, recoverable local draft state, and
   ephemeral editor/preview state distinct. Cache or preview behavior must not
   be able to corrupt canonical content.
