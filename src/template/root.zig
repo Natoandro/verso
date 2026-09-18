@@ -2,6 +2,8 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const renderer = @import("render.zig");
 
+pub const escape = @import("escape.zig");
+
 const EmptyComponents = struct {};
 
 pub fn Layout(comptime source: []const u8) type {

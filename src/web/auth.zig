@@ -12,8 +12,8 @@ const Next = layer.Next;
 const Layer = layer.Layer;
 const Error = anyerror;
 
-const session_cookie_name = "__Host-verso_session";
-const csrf_cookie_name = "__Host-verso_csrf";
+pub const session_cookie_name = "__Host-verso_session";
+pub const csrf_cookie_name = "__Host-verso_csrf";
 
 pub const Handler = struct {
     pub fn routes() []const route.Route {
@@ -202,7 +202,7 @@ fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     return establishSession(request, credentials, "/admin/editor");
 }
 
-fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
+pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
     const csrf = headerValue(request, "x-csrf-token") orelse form_token orelse {
         try respondText(request, "CSRF validation failed\n", .forbidden);
         return false;
@@ -231,7 +231,7 @@ fn establishSession(
     }, .see_other);
 }
 
-fn checkRequestOrigin(request: *RequestContext) !bool {
+pub fn checkRequestOrigin(request: *RequestContext) !bool {
     const host = headerValue(request, "host") orelse {
         try respondText(request, "Bad request\n", .bad_request);
         return false;
@@ -263,7 +263,7 @@ fn clearSession(request: *RequestContext) Error!void {
     return respond(request, &.{}, "text/plain; charset=utf-8", &headers, .see_other);
 }
 
-fn redirectToLogin(request: *RequestContext) Error!void {
+pub fn redirectToLogin(request: *RequestContext) Error!void {
     return redirect(request, "/admin/login", &.{
         .{ .name = "cache-control", .value = "no-store" },
     });
@@ -285,13 +285,13 @@ fn redirect(
     return respond(request, &.{}, "text/plain; charset=utf-8", headers[0..count], .see_other);
 }
 
-fn respondText(request: *RequestContext, body: []const u8, status: std.http.Status) Error!void {
+pub fn respondText(request: *RequestContext, body: []const u8, status: std.http.Status) Error!void {
     return respond(request, body, "text/plain; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, status);
 }
 
-fn respond(
+pub fn respond(
     request: *RequestContext,
     body: []const u8,
     content_type: []const u8,
@@ -325,7 +325,7 @@ fn formatCookie(buffer: []u8, name: []const u8, value: []const u8, http_only: bo
     );
 }
 
-fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
+pub fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     var result: ?[]const u8 = null;
     var headers = request.request.iterateHeaders();
     while (headers.next()) |header| {
@@ -336,7 +336,7 @@ fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     return result;
 }
 
-fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
+pub fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     const header = headerValue(request, "cookie") orelse return null;
     var cookies = std.mem.splitScalar(u8, header, ';');
     while (cookies.next()) |part| {

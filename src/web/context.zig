@@ -1,5 +1,6 @@
 const std = @import("std");
 const application_identity = @import("../application/identity.zig");
+const identity_management = @import("../application/identity_management.zig");
 const auth_security = @import("../auth/security.zig");
 const config = @import("../config.zig");
 const logging = @import("../logging.zig");
@@ -10,6 +11,7 @@ pub const ServerContext = struct {
     config: *const config.Config,
     logger: *logging.Logger,
     identity_service: *application_identity.Service,
+    identity_management_service: *identity_management.Service,
     origin_policy: auth_security.OriginPolicy,
 };
 

@@ -27,6 +27,7 @@ pub const routes = router.routes;
 pub const compileRoute = router.compile;
 pub const EditorHandler = @import("web/editor.zig").Handler;
 pub const AuthHandler = auth.Handler;
+pub const ManagementHandler = @import("web/management.zig").Handler;
 pub const SessionGuard = auth.SessionGuard;
 pub const ProtectedEditorHandler = admin.ProtectedEditorHandler;
 pub const originFromBaseUrl = admin.originFromBaseUrl;

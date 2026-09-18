@@ -6,6 +6,7 @@ pub const application = struct {
     pub const bootstrap = @import("application/bootstrap.zig");
     pub const documents = @import("application/documents.zig");
     pub const identity = @import("application/identity.zig");
+    pub const identity_management = @import("application/identity_management.zig");
 };
 pub const domain = struct {
     pub const document = @import("domain/document.zig");
@@ -15,6 +16,7 @@ pub const domain = struct {
 pub const storage = struct {
     pub const documents = @import("storage/documents.zig");
     pub const identity = @import("storage/identity.zig");
+    pub const identity_queries = @import("storage/identity_queries.zig");
     pub const local_auth = @import("storage/local_auth.zig");
     pub const sections = @import("storage/sections.zig");
     pub const migration_directory = @import("storage/migration_directory.zig");
@@ -32,8 +34,10 @@ test {
     _ = @import("domain/sections.zig");
     _ = @import("application/documents.zig");
     _ = @import("application/identity.zig");
+    _ = @import("application/identity_management.zig");
     _ = @import("storage/documents.zig");
     _ = @import("storage/identity.zig");
+    _ = @import("storage/identity_queries.zig");
     _ = @import("storage/local_auth.zig");
     _ = @import("storage/sections.zig");
     _ = @import("logging_test.zig");

@@ -41,6 +41,11 @@ assuming those exist.
 - Keep Zig source files focused: target fewer than 400 lines per file, and
   never allow a single Zig source file to exceed 600 lines. Split cohesive
   responsibilities into neighboring modules before reaching the hard limit.
+- Prefer comptime reflection when code enumerates or dispatches over Zig struct
+  fields: use comptime field names with `@field` when callers provide literals,
+  and use `inline for` over `@typeInfo(...).@"struct".fields` for genuinely
+  runtime field names. Avoid manually maintained if/else chains or field tables
+  for reflected structs.
 
 ## Web static delivery
 

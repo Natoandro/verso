@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const config_types = @import("config.zig");
 const application_identity = @import("application/identity.zig");
+const identity_management = @import("application/identity_management.zig");
+const identity_queries = @import("storage/identity_queries.zig");
 const bootstrap = @import("application/bootstrap.zig");
 const logging = @import("logging.zig");
 const migration_directory = @import("storage/migration_directory.zig");
@@ -91,11 +93,17 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     }
 
     var identity_store = @import("storage/identity.zig").Store.init(database_connection.sqliteHandle());
+    var identity_query_store = identity_queries.Store.init(database_connection.sqliteHandle());
     var identity_service = application_identity.Service.initForInterface(
         io,
         allocator,
         &identity_store,
         .web,
+    );
+    var identity_management_service = identity_management.Service.init(
+        allocator,
+        &identity_query_store,
+        &identity_service,
     );
 
     var base_url_buffer: [1024]u8 = undefined;
@@ -148,6 +156,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .config = &app_config,
         .logger = &logger,
         .identity_service = &identity_service,
+        .identity_management_service = &identity_management_service,
         .origin_policy = .{
             .public_origin = public_origin,
             .trusted_proxy_addresses = trusted_proxy_addresses,
@@ -155,16 +164,24 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     };
     var editor_router = web.EditorHandler.router();
     var auth_router = web.AuthHandler.router();
+    var management_router = web.ManagementHandler.router();
     var session_guard = web.SessionGuard{};
     var protected_editor = web.ProtectedEditorHandler{
         .guard = &session_guard,
         .router = &editor_router,
         .fallback = web.Layer.initFn(NotFoundHandler.handle),
     };
+    var protected_admin_layers = [_]web.Layer{
+        .init(&management_router),
+        .init(&protected_editor),
+    };
+    var protected_admin = ProtectedAdmin{
+        .layers = &protected_admin_layers,
+    };
     var admin_mount = web.Mount.initWithFallback(
         "/admin",
         .init(&auth_router),
-        .init(&protected_editor),
+        .init(&protected_admin),
     );
     var status_router = web.routes(.{.{ "GET /", StatusHandler.handle }}).router();
     var request_logging = web.RequestLoggingLayer{};
@@ -287,6 +304,14 @@ const NotFoundHandler = struct {
         };
 
         http_request.response_status = @intFromEnum(std.http.Status.not_found);
+    }
+};
+
+const ProtectedAdmin = struct {
+    layers: []const web.Layer,
+
+    pub fn handle(self: *@This(), request: *web.RequestContext, _: web.Next) anyerror!void {
+        return (web.Next{ .layers = self.layers, .index = 0 }).call(request);
     }
 };
 

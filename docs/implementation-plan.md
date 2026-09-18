@@ -456,12 +456,12 @@ unsaved document content and no server mutation path before `IAM-003`.
     with centralized capability checks.
   - [x] **SQLite storage:** Persist authors, scoped grants, and audit records
     with constraints that prevent ambiguous assignments.
-  - [ ] **Web/admin:** Provide protected management screens and verify denied
+  - [x] **Web/admin:** Provide protected management screens and verify denied
     operations do not reveal or mutate unauthorized data.
 
-  The Domain, Application, and SQLite divisions are transport-neutral and
-  complete. Web/admin management remains deferred until the WEB routing and
-  serving work is available.
+  The Domain, Application, SQLite, and protected Web/admin management
+  divisions are complete. The management screen is served below the admin
+  boundary and requires manager capabilities before reading or mutating data.
 
 - [ ] **IAM-003 — Edit assigned drafts in the web editor**
 

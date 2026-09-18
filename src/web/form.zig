@@ -11,14 +11,24 @@ pub const Values = struct {
     new_password: ?[]const u8 = null,
     token: ?[]const u8 = null,
     csrf_token: ?[]const u8 = null,
+    display_name: ?[]const u8 = null,
+    slug: ?[]const u8 = null,
+    biography: ?[]const u8 = null,
+    editor_user_id: ?[]const u8 = null,
+    scope_type: ?[]const u8 = null,
+    scope_id: ?[]const u8 = null,
+    expected_revision: ?[]const u8 = null,
 
     pub fn deinit(self: *Values, allocator: std.mem.Allocator) void {
         allocator.free(self.body);
         self.* = undefined;
     }
 
-    pub fn required(self: Values, field: []const u8) ![]const u8 {
-        return if (std.mem.eql(u8, field, "login")) self.login orelse error.MissingFormField else if (std.mem.eql(u8, field, "password")) self.password orelse error.MissingFormField else if (std.mem.eql(u8, field, "current_password")) self.current_password orelse error.MissingFormField else if (std.mem.eql(u8, field, "new_password")) self.new_password orelse error.MissingFormField else if (std.mem.eql(u8, field, "token")) self.token orelse error.MissingFormField else error.UnknownFormField;
+    pub fn required(self: Values, comptime field: []const u8) ![]const u8 {
+        if (!@hasField(Values, field)) @compileError("unknown form field");
+        const value = @field(self, field);
+        if (@TypeOf(value) != ?[]const u8) @compileError("form field is not optional text");
+        return value orelse error.MissingFormField;
     }
 };
 
@@ -44,27 +54,22 @@ pub fn read(request: *context.RequestContext) !Values {
         const separator = std.mem.indexOfScalar(u8, pair, '=') orelse return error.InvalidForm;
         const key = pair[0..separator];
         const value = try decode(@constCast(pair[separator + 1 ..]));
-        if (std.mem.eql(u8, key, "login")) {
-            if (values.login != null) return error.DuplicateFormField;
-            values.login = value;
-        } else if (std.mem.eql(u8, key, "password")) {
-            if (values.password != null) return error.DuplicateFormField;
-            values.password = value;
-        } else if (std.mem.eql(u8, key, "current_password")) {
-            if (values.current_password != null) return error.DuplicateFormField;
-            values.current_password = value;
-        } else if (std.mem.eql(u8, key, "new_password")) {
-            if (values.new_password != null) return error.DuplicateFormField;
-            values.new_password = value;
-        } else if (std.mem.eql(u8, key, "token")) {
-            if (values.token != null) return error.DuplicateFormField;
-            values.token = value;
-        } else if (std.mem.eql(u8, key, "csrf_token")) {
-            if (values.csrf_token != null) return error.DuplicateFormField;
-            values.csrf_token = value;
-        }
+        try assignField(&values, key, value);
     }
     return values;
+}
+
+fn assignField(values: *Values, key: []const u8, value: []u8) !void {
+    inline for (@typeInfo(Values).@"struct".fields) |field| {
+        if (comptime @TypeOf(@field(values.*, field.name)) == ?[]const u8) {
+            if (std.mem.eql(u8, key, field.name)) {
+                const destination = &@field(values.*, field.name);
+                if (destination.* != null) return error.DuplicateFormField;
+                destination.* = value;
+                return;
+            }
+        }
+    }
 }
 
 fn decode(component: []u8) ![]u8 {
