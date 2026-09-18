@@ -25,4 +25,4 @@ jobs:
           version: 0.16.0
 
       - name: Check formatting
-        run: zig fmt --check build.zig build.zig.zon src test
+        run: zig fmt --check build.zig build.zig.zon build src test
