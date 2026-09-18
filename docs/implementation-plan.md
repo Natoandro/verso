@@ -460,25 +460,76 @@ deferred alternatives documented in
 
 ## 5. Identity, authorization, and protected editorial access
 
+- [ ] **IAM-000 — Provision the first owner through a single setup boundary**
+
+  A fresh database can be initialized through web registration, the
+  `verso auth bootstrap-owner` command, or an optional configuration/environment
+  bootstrap record. All three paths call one application service and are
+  available only while the `users` table has no rows and no pending bootstrap
+  claim exists. The first successful transaction creates the owner role,
+  optional local credential, and system audit event; concurrent or later
+  attempts are rejected or become an idempotent no-op according to the
+  adapter contract, without changing state.
+
+  - [ ] **Domain and configuration contract:** Define the initial-owner input
+    shared by all adapters: display name, email, provider subject, local
+    login, and Argon2id password hash. Define the empty-database gate,
+    already-initialized result, complete-versus-partial configuration rules,
+    and the pending/unbound owner state used for OIDC email-only bootstrap.
+    Define a singleton `initial_owner_claim` representation and its migration;
+    it locks setup without creating an authenticating user. Define OIDC
+    identity keys as immutable issuer-plus-subject pairs, not bare subjects.
+  - [ ] **Application and SQLite:** Implement one atomic provisioning use
+    case with an immediate SQLite write transaction, a second empty-database
+    and pending-claim check inside the transaction, owner-role assignment,
+    optional local credential storage, audit logging, and safe
+    failure/rollback behavior. Add the explicit migration for the singleton
+    pending claim and issuer-plus-subject identity constraint. Existing CLI
+    bootstrap code must converge on this service rather than retaining a
+    parallel storage path.
+  - [ ] **Web setup flow:** Make the unauthenticated login boundary redirect
+    to a no-user registration page only when no user row or pending claim
+    exists. Add origin, CSRF/rate-limit, validation, and session-establishment
+    handling for the one-time POST; after initialization, registration must
+    redirect to login and must not become public signup.
+  - [ ] **CLI/config adapters and OIDC handoff:** Expand the script command
+    to accept the shared fields without exposing plaintext passwords in
+    argv/logs. Apply a complete config/env record before the listener starts,
+    with no ordinary `serve` CLI override. When OIDC is configured, allow
+    script/config email-only provisioning only as a pending claim that can be
+    activated by a verified callback from the exact configured issuer when the
+    normalized email exactly matches the configured target. Verify first-wins
+    behavior across all three adapters, claim activation, restart behavior,
+    audit records, redaction, and rejection after initialization. Web maps an
+    already-initialized result to login, CLI exits non-zero, and configuration
+    startup treats it as an idempotent no-op.
+
+  The current local CLI owner bootstrap and web login are partial foundations;
+  this slice owns their first-run convergence. OIDC account linking remains
+  part of `IAM-001b`, but its verified-email handoff must be specified here so
+  email-only bootstrap cannot create an unauthenticated owner.
+
 - [ ] **IAM-001 — Establish secure web sessions**
 
-  The deployment can establish an initial owner and use secure web sessions.
-  Login/logout, secure cookie attributes, CSRF protection for unsafe requests,
-  origin handling, and proxy-header trust rules are verified end to end.
+  After `IAM-000`, the deployment can use secure web sessions for the
+  provisioned owner and subsequent users. Login/logout, secure cookie
+  attributes, CSRF protection for unsafe requests, origin handling, and
+  proxy-header trust rules are verified end to end. First-user creation is
+  specified and implemented only by `IAM-000`.
 
-  - [x] **Auth:** Implement owner bootstrap, session lifecycle, secure cookie
-    attributes, CSRF tokens, origin checks, and explicit forwarded-origin trust
-    rules. Proxies never authenticate users or supply identity subjects.
+  - [x] **Auth:** Implement the session lifecycle, secure cookie attributes,
+    CSRF tokens, origin checks, and explicit forwarded-origin trust rules.
+    Proxies never authenticate users or supply identity subjects.
   - [x] **Application:** Centralize session and identity use cases so web
     handlers do not implement their own authentication decisions.
   - [x] **Web/admin boundary:** Mount protected editorial routes, enforce
     origin and CSRF checks, provide secure cookie handling, and fail closed
     while authentication is unavailable or misconfigured.
   - [x] **IAM-001a — Add local password authentication:** Add a native local
-    login path that stores only a memory-hard password hash, bootstraps the
-    initial owner password, returns generic credential failures, rate-limits
-    repeated failures, rotates sessions after login, and provides authenticated
-    password change and recovery flows.
+    login path for provisioned users that stores only a memory-hard password
+    hash, returns generic credential failures, rate-limits repeated failures,
+    rotates sessions after login, and provides authenticated password change
+    and recovery flows.
   - [ ] **IAM-001b — Add Verso-owned OIDC integration:** Implement the
     authorization-code flow with PKCE inside Verso, including exact redirect
     URI validation, state and nonce checks, issuer and audience validation,

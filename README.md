@@ -87,6 +87,18 @@ verso serve
 `VERSO_BOOTSTRAP_PASSWORD`; recovery-token delivery is intentionally deferred
 until an email or other configured delivery channel exists.
 
+First-user setup is intentionally a single-use boundary. The planned setup
+surface also supports web registration from the empty-database login page and
+an optional `[auth.bootstrap]` configuration/environment record. These paths
+share one atomic owner-provisioning service; whichever succeeds first closes
+the setup window, and later attempts cannot create another initial user. When
+OIDC is configured, script and configuration provisioning may omit local
+credentials and use a verified-email handoff instead; an email value alone is
+never treated as authentication. See
+[`docs/design/identity-and-mcp.md`](docs/design/identity-and-mcp.md) and
+[`docs/implementation-plan.md`](docs/implementation-plan.md) for the planned
+first-user flow and its security boundary.
+
 ### Docker
 
 The local Compose setup builds the server image, persists SQLite/assets/cache in

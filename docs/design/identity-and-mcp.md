@@ -28,6 +28,82 @@ contributor
 
 Roles are convenience groupings around permissions.
 
+### 1.1 First-user provisioning (planned)
+
+The initial owner is provisioned only while the database contains no row in
+`users` and no pending initial-owner claim. The check is against the existence
+of any user row, not only active users or users with local credentials. A
+disabled user therefore closes the initial setup window. An email-only OIDC
+bootstrap claim is not yet a user, but it is a single-use setup lock and also
+closes the web, script, and configuration bootstrap paths until it is consumed
+or explicitly recovered through an offline/operator procedure; it must not be
+recovered through a public browser route.
+
+The planned first-user flow supports three entry points at the same time:
+
+1. **Web registration.** When an unauthenticated request reaches the login
+   boundary while no user exists, the login page redirects to a one-time
+   registration page. A successful local registration creates the owner and
+   immediately establishes a new web session. When OIDC is configured, the
+   page may instead start the configured OIDC authorization flow; the callback
+   must finish through the same application boundary.
+2. **Script provisioning.** `verso auth bootstrap-owner` accepts the initial
+   profile, local login, and an Argon2id password hash (or a password supplied
+   through a dedicated secret input that is hashed before storage). Plaintext
+   passwords must not be accepted as command-line arguments or written to
+   logs. The command is intended for operators who want to initialize the
+   database before starting the web server.
+3. **Configuration provisioning.** An optional bootstrap record in the
+   deployment configuration, with equivalent profile and credential fields,
+   is applied during startup before the listener is exposed. Its fields may
+   be supplied through configuration or environment variables, but are not
+   ordinary `serve` command-line overrides. A complete record is explicit
+   opt-in; a partial record is a configuration error rather than a reason to
+   silently create an incomplete account.
+
+These are adapters, not separate identity systems. Local web registration,
+the CLI, and complete configuration records call one application operation,
+which starts a write transaction, rechecks that no user or pending claim
+exists, creates the owner role and any local credential, records an audit
+event, and commits atomically. SQLite serialization makes concurrent web,
+script, and startup attempts safe: the first successful transaction wins.
+If configuration provisioning is complete, it gets the first opportunity
+before the HTTP listener starts; operators should still configure only one
+source for a predictable first-run procedure.
+
+The web registration route is available only during this empty-database
+window. After the first committed user row, it redirects to login and does
+not become a public account-signup route. The script and configuration paths
+also recheck the database at the point of mutation and fail closed once a user
+or pending claim exists. A later web request maps the already-initialized
+result to a login redirect; the CLI reports a non-zero already-initialized
+error; configuration startup treats it as an idempotent no-op. No path may
+bypass the application service by inserting directly into SQLite.
+
+When OIDC is configured for the instance, script and configuration
+provisioning may use an **email-only bootstrap**: the deployment supplies the
+display name and email while omitting the local login, password, and provider
+subject. Email is only a lookup/claim value, never authentication. The
+service must create a singleton `initial_owner_claim` record containing the
+normalized target email, display name, and exact configured issuer; it does
+not create an active user or grant any capability. The first callback from
+that exact issuer may consume the claim only when the OIDC identity has a
+verified email whose normalized value exactly matches the configured target.
+The activation transaction creates the owner and binds the immutable
+issuer-plus-subject identity pair. An arbitrary email from a browser, an
+unverified OIDC claim, a different issuer, or a different email must not claim
+the account.
+
+The claim and its single-row setup lock require an explicit schema/migration
+decision in `IAM-000`. OIDC identities must be stored and constrained as
+issuer-plus-subject pairs; a bare provider subject is not globally unique.
+
+Successful local provisioning or pending-claim activation grants the `owner`
+role and writes a system audit record. Creating a pending claim grants no role
+and cannot authenticate. Bootstrap is not a recovery or account-reset
+mechanism; claim recovery and subsequent user creation use an explicit
+operator procedure or the normal authenticated flows.
+
 ---
 
 ## 2. Authorization
@@ -168,8 +244,8 @@ authenticated password change/recovery flows. Recovery-token delivery is left
 to a future configured channel; the application does not expose tokens through
 the generic web response.
 
-Verso's OIDC integration is also implemented inside Verso rather than
-delegated to an authentication gateway. It uses the authorization-code flow with PKCE,
+Verso's planned OIDC integration will also be implemented inside Verso rather
+than delegated to an authentication gateway. It will use the authorization-code flow with PKCE,
 exact redirect URI validation, state and nonce checks, issuer and audience
 validation, signed discovery/JWKS verification, and explicit account linking.
 Both providers resolve to the same local user and session services. Login
