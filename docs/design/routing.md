@@ -153,6 +153,18 @@ value must be usable anywhere a normal `Layer` is accepted. A route handler can
 terminate the request or delegate to `next`; the router must not introduce a
 second handler protocol.
 
+Route handlers may themselves be composed from layers. The composition helper
+keeps the route handler on the shared protocol and resumes the outer `next`
+after the composed layers have delegated through one another. This makes an
+authorization layer, validation layer, and final response handler usable as a
+single route target without adding route-specific middleware semantics.
+
+An explicit namespace mount can claim a protected prefix. Once claimed, an
+unmatched method or path is terminated inside that mount, or sent to its
+explicit protected fallback, rather than falling through to a later public
+layer. Requests outside the namespace continue through the ordinary outer
+pipeline.
+
 Separate route layers are useful for distinct concerns:
 
 - authenticated admin routes;

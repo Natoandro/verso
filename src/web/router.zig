@@ -7,7 +7,6 @@ pub const RouteCapture = context.RouteCapture;
 pub const Next = layer.Next;
 pub const Layer = layer.Layer;
 pub const Error = anyerror;
-
 const max_route_segments = 32;
 const max_target_segments = 64;
 const max_decoded_segment = 4096;
@@ -43,7 +42,6 @@ pub const Route = struct {
     compiled: bool = false,
     slash_required: bool = false,
 };
-
 pub fn RouteTable(comptime count: usize) type {
     return struct {
         items: [count]Route,
@@ -55,9 +53,16 @@ pub fn RouteTable(comptime count: usize) type {
         pub fn router(self: *const @This()) Router {
             return Router.init(self.asSlice());
         }
+
+        pub fn handle(self: *@This(), request: *RequestContext, next: Next) Error!void {
+            return dispatch(self.asSlice(), request, next);
+        }
+
+        pub fn layer(self: *@This()) Layer {
+            return Layer.init(self);
+        }
     };
 }
-
 /// Compiles route declarations such as .{"GET /articles/{id}", handler}.
 /// The returned table owns the compact route representations; no pattern
 /// parsing is performed during server startup.
@@ -117,8 +122,7 @@ fn compilePatternStructure(comptime pattern: []const u8) Route {
 }
 
 fn toLayer(handler_value: anytype) Layer {
-    if (@TypeOf(handler_value) == Layer) return handler_value;
-    return Layer.initFn(handler_value);
+    return Layer.fromHandler(handler_value);
 }
 
 fn parsePath(comptime pattern: []const u8, path: []const u8, route: *Route) void {
@@ -233,16 +237,20 @@ pub const Router = struct {
     }
 
     pub fn handle(self: *Router, request: *RequestContext, next: Next) Error!void {
-        request.clearRouteCaptures();
-        const target = parseTarget(request.request.head.target) orelse return next.call(request);
-        const index = findBest(self.routes, request.request.head.method, target) orelse
-            return next.call(request);
-        defer request.clearRouteCaptures();
-
-        populateCaptures(&self.routes[index], target, request) catch |capture_error| return capture_error;
-        return self.routes[index].handler.handle(request, next);
+        return dispatch(self.routes, request, next);
     }
 };
+
+fn dispatch(routes_table: []const Route, request: *RequestContext, next: Next) Error!void {
+    request.clearRouteCaptures();
+    const target = parseTarget(request.request.head.target) orelse return next.call(request);
+    const index = findBest(routes_table, request.request.head.method, target) orelse
+        return next.call(request);
+    defer request.clearRouteCaptures();
+
+    populateCaptures(&routes_table[index], target, request) catch |capture_error| return capture_error;
+    return routes_table[index].handler.handle(request, next);
+}
 
 pub fn resolve(routes_table: []const Route, method: std.http.Method, target: []const u8) ?usize {
     const parsed_target = parseTarget(target) orelse return null;

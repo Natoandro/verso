@@ -272,7 +272,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [x] **Tests:** Cover valid patterns, compile failures, specificity,
     ambiguity, malformed targets, query strings, and trailing-slash rules.
 
-- [ ] **WEB-002 — Compose routing layers**
+- [x] **WEB-002 — Compose routing layers**
 
   Route tables implement the shared
   `Layer.handle(request: *RequestContext, next: Next)` contract.
@@ -281,14 +281,14 @@ unsaved document content and no server mutation path before `IAM-003`.
   public, authentication, MCP, asset, and not-found layers can be ordered
   explicitly without route matching granting authorization.
 
-  - [ ] **Router layer:** Build the comptime route-table layer and dispatch
+  - [x] **Router layer:** Build the comptime route-table layer and dispatch
     matched handlers through the existing composition API.
-  - [ ] **Layer ordering:** Define and verify precedence between mounted routing
+  - [x] **Layer ordering:** Define and verify precedence between mounted routing
     layers, including admin/public separation, security-boundary termination,
     and final not-found handling.
-  - [ ] **Route context:** Expose named captures as request-local ephemeral
+  - [x] **Route context:** Expose named captures as request-local ephemeral
     state without leaking them across requests or treating them as identity.
-  - [ ] **Integration tests:** Verify matched dispatch, handler delegation,
+  - [x] **Integration tests:** Verify matched dispatch, handler delegation,
     path/method fallthrough, precedence, security-boundary isolation, captures,
     and draft-route isolation.
 
