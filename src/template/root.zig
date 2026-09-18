@@ -4,6 +4,24 @@ const renderer = @import("render.zig");
 
 const EmptyComponents = struct {};
 
+pub fn Layout(comptime source: []const u8) type {
+    return struct {
+        pub fn with(comptime self: @This(), comptime slots: anytype) Template(source, .{ .components = slots }) {
+            _ = self;
+            comptime {
+                const parsed = parser.parse(source);
+                validateComponentNames(parsed, .{ .components = slots });
+            }
+            return .{};
+        }
+    };
+}
+
+pub fn layout(comptime source: []const u8) Layout(source) {
+    comptime _ = parser.parse(source);
+    return .{};
+}
+
 pub fn Template(comptime source: []const u8, comptime options: anytype) type {
     return struct {
         pub const template_options = options;

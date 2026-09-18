@@ -94,19 +94,19 @@ when the stated outcome and every nested division are complete.
     snippets in loops, nesting, lexical visibility, shadowing, external
     fallback, and all specified invalid declarations and calls.
 
-- [ ] **TPL-005 — Compose layouts and reusable fragments**
+- [x] **TPL-005 — Compose layouts and reusable fragments**
 
   Layouts are composed through the component mechanism, not inheritance. A
   composed page can render header/content/footer while a content template stays
   independently renderable as an HTMX fragment.
 
-  - [ ] **Composition API:** Define the smallest comptime `with`-style API for
+  - [x] **Composition API:** Define the smallest comptime `with`-style API for
     binding layout component slots without adding a separate inheritance model.
-  - [ ] **Context contract:** Preserve typed outer context and validate the
+  - [x] **Context contract:** Preserve typed outer context and validate the
     context each composed child requires when its renderer is instantiated.
-  - [ ] **Rendering integration:** Render layout slots via the ordinary
+  - [x] **Rendering integration:** Render layout slots via the ordinary
     component path and ensure composition creates no runtime lookup or parsing.
-  - [ ] **Tests:** Cover layout plus content, header/footer slots, reused
+  - [x] **Tests:** Cover layout plus content, header/footer slots, reused
     components, and independent fragment rendering.
 
 ## 3. Integration and Completion

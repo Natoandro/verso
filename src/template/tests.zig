@@ -146,6 +146,30 @@ test "renders nested registered components" {
     try std.testing.expectEqualStrings("<strong>Nested</strong><em>Nested</em>", writer.buffered());
 }
 
+test "composes layout slots and keeps content independently renderable" {
+    const chrome = tmpl.parse(
+        "<div class=\"chrome\">{{ text }}</div>",
+        .{ .parameters = .{ .text = {} } },
+    );
+    const content = tmpl.parse("<main>{{ title }}</main>", .{ .parameters = .{ .title = {} } });
+    const layout = tmpl.layout(
+        "{{> header text=title}}{{> content title=title}}{{> footer text=title}}",
+    );
+    const page = layout.with(.{ .header = chrome, .content = content, .footer = chrome });
+
+    var buffer: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try page.render(&writer, .{ .title = "Composed" });
+    try std.testing.expectEqualStrings(
+        "<div class=\"chrome\">Composed</div><main>Composed</main><div class=\"chrome\">Composed</div>",
+        writer.buffered(),
+    );
+
+    writer = std.Io.Writer.fixed(&buffer);
+    try content.render(&writer, .{ .title = "Fragment" });
+    try std.testing.expectEqualStrings("<main>Fragment</main>", writer.buffered());
+}
+
 test "renders local snippets with positional and named arguments" {
     const template = tmpl.parse(
         "{{> link title \"read more\"}}{{#snippet link |href, label|}}<a href=\"{{ href }}\">{{ label }}</a>{{/snippet}}",

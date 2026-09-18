@@ -360,6 +360,17 @@ pub fn build(b: *std.Build) void {
         .contains = ":?:?: error: unknown field 'title' in template expression 'title' on render.EmptyContext",
     };
 
+    const missing_layout_slot_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/template/compile_failures/missing_layout_slot.zig"),
+            .target = target,
+            .imports = &.{.{ .name = "tmpl", .module = tmpl }},
+        }),
+    });
+    missing_layout_slot_test.expect_errors = .{
+        .contains = "unknown template component 'footer'",
+    };
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
@@ -390,6 +401,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&duplicate_template_snippet_argument_test.step);
     test_step.dependOn(&snippet_visibility_test.step);
     test_step.dependOn(&snippet_isolation_test.step);
+    test_step.dependOn(&missing_layout_slot_test.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

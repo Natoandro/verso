@@ -290,14 +290,23 @@ const tmpl = @import("tmpl");
 
 const template = tmpl.parse(comptime source, .{});
 const configured = tmpl.parse(comptime source, comptime options);
+const layout = tmpl.layout(comptime layout_source);
+const page = layout.with(comptime slots);
 
 try template.render(writer, .{ .post = post, .user = user });
+try page.render(writer, .{ .post = post, .user = user });
 ```
 
 `context` is `anytype`; named and anonymous structs both work. The writer API
 is the primitive operation. An optional `renderAlloc(allocator, context)`
 convenience method must be implemented by collecting the writer renderer's
 output, not by creating a separate render path.
+
+`layout` validates the layout syntax without requiring its component slots.
+`with` accepts a comptime-known struct of named slot templates, validates every
+layout component call against those slots, and returns an ordinary renderable
+template. Slot arguments must explicitly bind the outer context values required
+by each composed child.
 
 ## 6. Validation and Representation
 
