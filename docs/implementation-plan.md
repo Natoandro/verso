@@ -252,7 +252,82 @@ unsaved document content and no server mutation path before `IAM-003`.
     storage-error handling, isolation, and that snapshots never become preview
     requests.
 
-## 3. Safe server rendering and public routes
+## 3. Web routing and static delivery
+
+- [ ] **WEB-001 — Compile and validate route patterns**
+
+  Route declarations use a small Go-like method/path pattern language that is
+  parsed at comptime. Literal segments and single-segment parameters are the
+  initial matcher scope; trailing wildcards are specified and enabled only
+  after their path-normalization and security semantics are complete.
+
+  - [ ] **Pattern grammar:** Define the initial method, literal-segment,
+    `{name}`, and reserved `{name...}` syntax plus malformed-pattern
+    diagnostics.
+  - [ ] **Comptime compiler:** Generate a compact matcher representation,
+    reject duplicate parameters and invalid wildcard placement, and reject
+    ambiguous equal-specificity declarations.
+  - [ ] **Request semantics:** Define query exclusion, target normalization,
+    percent-decoding, encoded separators, and request-local capture lifetime.
+  - [ ] **Tests:** Cover valid patterns, compile failures, specificity,
+    ambiguity, malformed targets, query strings, and trailing-slash rules.
+
+- [ ] **WEB-002 — Compose routing layers**
+
+  Route tables implement the shared
+  `Layer.handle(request: *RequestContext, next: Next)` contract.
+  Matched handlers receive the same `next` value as ordinary middleware, while
+  unknown paths and unsupported methods fall through unchanged. Separate admin,
+  public, authentication, MCP, asset, and not-found layers can be ordered
+  explicitly without route matching granting authorization.
+
+  - [ ] **Router layer:** Build the comptime route-table layer and dispatch
+    matched handlers through the existing composition API.
+  - [ ] **Layer ordering:** Define and verify precedence between mounted routing
+    layers, including admin/public separation, security-boundary termination,
+    and final not-found handling.
+  - [ ] **Route context:** Expose named captures as request-local ephemeral
+    state without leaking them across requests or treating them as identity.
+  - [ ] **Integration tests:** Verify matched dispatch, handler delegation,
+    path/method fallthrough, precedence, security-boundary isolation, captures,
+    and draft-route isolation.
+
+- [ ] **WEB-003 — Add static response handlers**
+
+  Static content is served by ordinary handlers selected by routes. Bundled
+  editor assets and built-in shells use compile-time embedded bytes; configured
+  public static files use a separate public root, while document-owned assets
+  remain behind their authorization-aware application handler.
+
+  - [ ] **Embedded static:** Implement `EmbeddedStatic` with explicit content
+    type, cache policy, response status, and shared layer composition.
+  - [ ] **Filesystem static:** Define the separate `public_static_root`
+    deployment setting and implement `FilesystemStatic` below it without
+    exposing canonical assets, databases, migrations, caches, staging, backups,
+    or secrets.
+  - [ ] **HTTP policy:** Define cache headers, ETags, `HEAD`, malformed paths,
+    and missing-file behavior without adding hidden router semantics.
+  - [ ] **Security tests:** Verify traversal, symlink, root-boundary, content
+    type, cache-policy, and non-public-asset isolation behavior.
+
+- [ ] **WEB-004 — Migrate editor route declarations**
+
+  Existing editor shell, stylesheet, and bundle routes currently use a
+  temporary runtime route table. Migrate them to the shared comptime route and
+  embedded static-handler APIs. Public, historical, index, auth, preview, and
+  MCP features register their own routes in their respective feature tickets;
+  this slice does not take ownership of those application-specific routes.
+
+  - [ ] **Editor integration:** Replace temporary editor route declarations
+    with comptime patterns and embedded static handlers.
+  - [ ] **Composition integration:** Mount the editor layer through the shared
+    pipeline while preserving method fallthrough and protected-boundary rules.
+  - [ ] **Static integration:** Verify embedded HTML, stylesheet, and bundle
+    responses use explicit content types and cache policy.
+  - [ ] **End-to-end verification:** Exercise editor and editor-asset routes,
+    unknown paths, method fallthrough, and route isolation.
+
+## 4. Safe server rendering and public routes
 
 - [ ] **RND-001 — Render published text safely**
 
@@ -334,7 +409,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Integration tests:** Verify filtering, ordering, cache-key isolation,
     and response-header behavior.
 
-## 4. Identity, authorization, and protected editorial access
+## 5. Identity, authorization, and protected editorial access
 
 - [ ] **IAM-001 — Establish secure web sessions**
 
@@ -399,7 +474,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Web/admin:** Expose the protected preview endpoint with
     `private, no-store` headers and verify it cannot mutate the draft.
 
-## 5. Publishing, history, finalization, and cache invalidation
+## 6. Publishing, history, finalization, and cache invalidation
 
 - [ ] **PUB-001 — Publish a validated draft atomically**
 
@@ -466,7 +541,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Web/admin:** Add the protected finalization action and verify that
     later lineage or visibility mutations are rejected.
 
-## 6. Asset storage, upload, and protected delivery
+## 7. Asset storage, upload, and protected delivery
 
 - [ ] **AST-001 — Upload and store safe assets**
 
@@ -531,7 +606,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Integration tests:** Verify shared-reference retention, unreferenced
     cleanup, and preservation of canonical references on failure.
 
-## 7. Remote MCP and OAuth
+## 8. Remote MCP and OAuth
 
 - [ ] **MCP-001 — Authenticate remote MCP clients**
 
@@ -581,7 +656,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Integration tests:** Verify supported operations, idempotent retries,
     expected-revision failures, and the absence of deferred operations.
 
-## 8. Document exchange archives
+## 9. Document exchange archives
 
 - [ ] **XCH-001 — Export deterministic document archives**
 
@@ -631,7 +706,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Integration tests:** Verify atomic replacement, stale conflicts,
     allowed current-publication forks, and forbidden import behavior.
 
-## 9. Operations and maintenance
+## 10. Operations and maintenance
 
 - [ ] **OPS-001 — Validate configuration and startup recovery**
 

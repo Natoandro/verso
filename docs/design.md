@@ -68,6 +68,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 
 - [System architecture](design/system.md) — deployment model, technology
   direction, SQLite, internal layering, and representative request paths.
+- [Routing and static delivery](design/routing.md) — comptime route patterns,
+  composable routing layers, matching precedence, and static handlers.
 - [Content model](design/content.md) — document versions, typed sections,
   assets, interactive modules, working revisions, and portable exchange
   archives.

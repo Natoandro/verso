@@ -4,7 +4,9 @@
 
 This document defines Verso's runtime topology: the single application, its deployment shape, technology direction, persistence boundary, internal dependency direction, and representative request paths. It does not define the document schema, rendering rules, editor behavior, or identity policy.
 
-Related: [content model](content.md), [rendering and cache](rendering.md), [web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+Related: [routing and static delivery](routing.md), [content model](content.md),
+[rendering and cache](rendering.md), [web editor and preview](editor.md), and
+[identity and MCP](identity-and-mcp.md).
 
 ## 1. High-Level Architecture
 
@@ -210,15 +212,15 @@ Infrastructure provides implementations needed by the application layer.
 
 Request handling should carry long-lived dependencies through a
 `ServerContext` and per-request state through a `RequestContext`. Composable
-layers share one `handle(context, next)` shape: middleware delegates to
-`next`, final handlers terminate the pipeline, and services may perform work
-before or after delegation. This is a small request-pipeline boundary, not a
-general dependency-injection container; concrete dependencies should be added
-when the corresponding application service is implemented. Request logging is
-one such layer and surrounds the request pipeline so it can record both
-successful responses and downstream failures. It uses the shared structured
-logging framework, which accepts arbitrary record structs and assigns their
-wall-clock timestamps at write time.
+layers share `handle(request: *RequestContext, next: Next)`: middleware
+delegates to `next`, final handlers terminate the pipeline, and services may
+perform work before or after delegation. This is a small request-pipeline
+boundary, not a general dependency-injection container; concrete dependencies
+should be added when the corresponding application service is implemented.
+Request logging is one such layer and surrounds the request pipeline so it can
+record both successful responses and downstream failures. It uses the shared
+structured logging framework, which accepts arbitrary record structs and
+assigns their wall-clock timestamps at write time.
 
 ---
 

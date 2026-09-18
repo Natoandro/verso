@@ -4,7 +4,14 @@
 
 This document defines cross-cutting operational policy: publication commands, public/private route boundaries, deployment configuration, UI customization, failure behavior, initial non-goals, and the canonical/derived/recoverable-local/ephemeral state boundary. It does not define the detailed content schema, renderer internals, or MCP tool catalog.
 
-Related: [system architecture](system.md), [content model](content.md), [rendering and cache](rendering.md), [web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+Related: [system architecture](system.md), [routing and static delivery](routing.md),
+[content model](content.md), [rendering and cache](rendering.md), [web editor
+and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+
+The configured filesystem asset store is canonical application state and is
+never a public static root. A future public-static directory, if needed, must
+be a separate explicit deployment setting and must not be inferred from
+`storage.filesystem.path`.
 
 ## 1. Publication Workflow
 
@@ -183,6 +190,9 @@ Example:
 ```
 
 Draft content must never be exposed by ordinary public routes.
+
+The route pattern grammar, matching precedence, routing-layer composition, and
+static response handlers are specified in [routing and static delivery](routing.md).
 
 ---
 
