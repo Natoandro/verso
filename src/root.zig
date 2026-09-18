@@ -29,3 +29,7 @@ test {
 }
 pub const server = @import("server.zig");
 pub const web = @import("web.zig");
+
+test {
+    _ = @import("web.zig");
+}

@@ -41,6 +41,19 @@ pub const Layer = struct {
         };
     }
 
+    pub fn initFn(comptime handler_fn: *const fn (*RequestContext, Next) Error!void) Layer {
+        const Adapter = struct {
+            fn handle(_: *anyopaque, request: *RequestContext, next: Next) Error!void {
+                return handler_fn(request, next);
+            }
+        };
+
+        return .{
+            .state = undefined,
+            .handle_fn = Adapter.handle,
+        };
+    }
+
     pub fn handle(self: Layer, request: *RequestContext, next: Next) Error!void {
         return self.handle_fn(self.state, request, next);
     }
