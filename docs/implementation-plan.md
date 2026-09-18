@@ -292,22 +292,22 @@ unsaved document content and no server mutation path before `IAM-003`.
     path/method fallthrough, precedence, security-boundary isolation, captures,
     and draft-route isolation.
 
-- [ ] **WEB-003 — Add static response handlers**
+- [x] **WEB-003 — Add static response handlers**
 
   Static content is served by ordinary handlers selected by routes. Bundled
   editor assets and built-in shells use compile-time embedded bytes; configured
   public static files use a separate public root, while document-owned assets
   remain behind their authorization-aware application handler.
 
-  - [ ] **Embedded static:** Implement `EmbeddedStatic` with explicit content
+  - [x] **Embedded static:** Implement `EmbeddedStatic` with explicit content
     type, cache policy, response status, and shared layer composition.
-  - [ ] **Filesystem static:** Define the separate `public_static_root`
+  - [x] **Filesystem static:** Define the separate `public_static_root`
     deployment setting and implement `FilesystemStatic` below it without
     exposing canonical assets, databases, migrations, caches, staging, backups,
     or secrets.
-  - [ ] **HTTP policy:** Define cache headers, ETags, `HEAD`, malformed paths,
+  - [x] **HTTP policy:** Define cache headers, ETags, `HEAD`, malformed paths,
     and missing-file behavior without adding hidden router semantics.
-  - [ ] **Security tests:** Verify traversal, symlink, root-boundary, content
+  - [x] **Security tests:** Verify traversal, symlink, root-boundary, content
     type, cache-policy, and non-public-asset isolation behavior.
 
 - [ ] **WEB-004 — Migrate editor route declarations**

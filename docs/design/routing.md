@@ -201,11 +201,12 @@ layer has selected it.
 ### Filesystem static content
 
 `FilesystemStatic` serves files below one explicitly configured **public static
-root**. This root is a future explicit deployment setting and is distinct from
-the canonical filesystem asset store in `storage.filesystem.path`. It is not
-currently configured or served. The asset store must never be mounted as a
-public static directory; document-owned assets continue to use the
-authorization-aware, version-scoped asset handler defined by the content model.
+root**. The `public_static_root` deployment setting is distinct from the
+canonical filesystem asset store in `storage.filesystem.path`; it has no
+default and is not mounted by the server until an explicit public-static route
+selects it. The asset store must never be mounted as a public static directory;
+document-owned assets continue to use the authorization-aware, version-scoped
+asset handler defined by the content model.
 `FilesystemStatic` must enforce:
 
 - traversal-safe path resolution;
@@ -215,6 +216,11 @@ authorization-aware, version-scoped asset handler defined by the content model.
 - bounded file and response handling;
 - separation from SQLite, canonical assets, migration, cache, staging, backup,
   and secret paths.
+
+The initial handler reads the configured route capture named `path`, rejects
+absolute, traversal, encoded, and platform-separator forms, and applies a
+bounded response size. It opens the configured root without following root or
+file symlinks and uses beneath-root resolution where the platform supports it.
 
 Filesystem static delivery must not become a general file browser. Public
 static files are public only because an explicit public-static route selected

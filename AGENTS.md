@@ -40,6 +40,23 @@ assuming those exist.
   never allow a single Zig source file to exceed 600 lines. Split cohesive
   responsibilities into neighboring modules before reaching the hard limit.
 
+## Web static delivery
+
+- Use `web.EmbeddedStatic` for bytes embedded in the executable. Configure its
+  content type and `web.ResponsePolicy` explicitly, and expose it through the
+  shared `Layer` composition API rather than writing a bespoke response
+  handler.
+- Use `web.FilesystemStatic` for configured public files. It must be rooted at
+  `Config.public_static_root`, remain separate from the canonical asset store,
+  and be selected by an explicit route before serving any request.
+- Preserve the static-handler safeguards: bounded reads, traversal and
+  separator rejection, no symlink following, beneath-root resolution, explicit
+  MIME selection, cache policy, ETags, and built-in `HEAD` behavior.
+- Do not expose databases, migrations, caches, staging, backups, secrets, or
+  document-owned assets through a public filesystem handler. Do not add hidden
+  path dispatch inside the router or bypass application authorization for
+  document-owned assets.
+
 ## Browser editor implementation
 
 - Keep the application HTMX-oriented. Svelte is an editor-only island mounted

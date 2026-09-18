@@ -13,6 +13,7 @@ pub const ConfigError = error{
     InvalidMigrationConfiguration,
     InvalidStoragePath,
     InvalidCachePath,
+    InvalidPublicStaticPath,
     InvalidTheme,
     InvalidLogoPath,
     UnsupportedLogoVariant,
@@ -41,6 +42,7 @@ pub const Config = struct {
     server: Server = .{},
     database: Database = .{},
     migrations: Migrations = .{},
+    public_static_root: ?[]const u8 = null,
     storage: Storage = .{ .filesystem = .{} },
     cache: Cache = .{},
     ui: Ui = .{},
@@ -148,6 +150,9 @@ pub const Config = struct {
             },
         }
         if (!validation.isValidPath(self.cache.path)) return error.InvalidCachePath;
+        if (self.public_static_root) |root| {
+            if (!validation.isValidPath(root)) return error.InvalidPublicStaticPath;
+        }
 
         if (!validation.isSafeToken(self.ui.theme)) return error.InvalidTheme;
         if (self.ui.logo) |logo| {

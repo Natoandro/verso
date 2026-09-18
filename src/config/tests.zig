@@ -77,6 +77,15 @@ test "default configuration output is valid TOML" {
     try std.testing.expectEqual(true, parsed_config.value.logging.omit_null_fields);
 }
 
+test "public static root is separate from canonical storage paths" {
+    var app_config = types.Config{ .public_static_root = "./public" };
+    try app_config.validate();
+    try std.testing.expectEqualStrings("./public", app_config.public_static_root.?);
+
+    app_config.public_static_root = "./public/../secrets";
+    try std.testing.expectError(error.InvalidPublicStaticPath, app_config.validate());
+}
+
 test "logging format defaults follow environment and stderr" {
     var development = try types.Config.parse(std.testing.allocator, "");
     defer development.deinit();

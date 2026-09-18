@@ -32,5 +32,6 @@ pub const web = @import("web.zig");
 
 test {
     _ = @import("web.zig");
+    _ = @import("web/static.zig");
     _ = @import("web/router_test.zig");
 }
