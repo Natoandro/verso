@@ -1,0 +1,15 @@
+services:
+  verso:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      VERSO_LOGGING_FORMAT: text
+      VERSO_MIGRATIONS_RUN_ON_STARTUP: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - verso-data:/app/data
+
+volumes:
+  verso-data:

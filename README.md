@@ -83,6 +83,19 @@ verso migrate up
 verso serve
 ```
 
+### Docker
+
+The local Compose setup builds the server image, persists SQLite/assets/cache in
+a named volume, and publishes the server at <http://localhost:8080>:
+
+```bash
+docker compose up --build
+```
+
+The image defaults to development settings for local use. For a production
+deployment, set `VERSO_RUNTIME_ENVIRONMENT=production` and provide a public,
+non-loopback `VERSO_SITE_BASE_URL`.
+
 For persistent customization, an operator can generate a starter file:
 
 ```bash
