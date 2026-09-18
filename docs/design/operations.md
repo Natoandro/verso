@@ -338,8 +338,10 @@ HTTP request records use one `duration_ms` field, measured with the monotonic
 clock and serialized as a fractional `f32` number of milliseconds.
 Human-readable request lines display milliseconds below one second and seconds
 at or above one second; machine-readable records retain the stable millisecond
-unit. The same field is used for completed requests, downstream failures, and
-connection failures.
+unit. Request targets retain the path and query keys while redacting query
+values, omitting absolute-form authorities, and bounding the logged length.
+The same field is used for completed requests and downstream failures;
+connection failures use a focused record with the duration and error name only.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
@@ -479,8 +481,7 @@ not required to define the initial `serve` contract.
 Boolean values must be exactly `true` or `false`; enum and integer values use
 the same lowercase names and decimal representation as the configuration
 file. Commands emit a `configuration.loaded` diagnostic with the selected
-file and precedence explanation without logging effective database URLs or
-other secret values.
+file without logging effective database URLs or other secret values.
 
 ---
 

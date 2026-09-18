@@ -9,6 +9,74 @@ pub const Migration = struct {
     sql: []const u8,
 };
 
+const MigrationFailureLogRecord = struct {
+    comptime format: []const u8 = "migration run failed in {directory}: {error_name}",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    directory: []const u8,
+    error_name: []const u8,
+};
+
+const MigrationsLoadedLogRecord = struct {
+    comptime format: []const u8 = "loaded {migration_count} migrations from {directory}",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    directory: []const u8,
+    migration_count: usize,
+};
+
+const MigrationAppliedLogRecord = struct {
+    comptime format: []const u8 = "applied migration {version} ({name})",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    version: i64,
+    name: []const u8,
+};
+
+const MigrationVerifiedLogRecord = struct {
+    comptime format: []const u8 = "verified migration {version} ({name})",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    version: i64,
+    name: []const u8,
+};
+
+const MigrationsCompletedLogRecord = struct {
+    comptime format: []const u8 = "migration run completed ({applied_count} applied)",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    applied_count: usize,
+};
+
+test "migration records use focused text templates" {
+    var buffer: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try logging.writeRecord(
+        &writer,
+        std.testing.allocator,
+        .text,
+        42,
+        false,
+        false,
+        MigrationAppliedLogRecord{
+            .level = "info",
+            .event = "migration.applied",
+            .message = "applied migration",
+            .version = 1,
+            .name = "initial",
+        },
+    );
+    try std.testing.expectEqualStrings(
+        "timestamp=\"1970-01-01T00:00:00.042Z\" message=\"applied migration 1 (initial)\" level=\"info\" event=\"migration.applied\"\n",
+        writer.buffered(),
+    );
+}
+
 pub const MigrationContext = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -38,7 +106,7 @@ pub const MigrationContext = struct {
 
     pub fn migrateUp(self: *MigrationContext) !usize {
         return self.migrateUpInner() catch |migration_error| {
-            self.logger.log(self.io, .{
+            self.logger.log(self.io, MigrationFailureLogRecord{
                 .level = "error",
                 .event = "migrations.failed",
                 .message = "migration run failed",
@@ -54,7 +122,7 @@ pub const MigrationContext = struct {
 
         var files = try loadMigrationFiles(self.io, self.allocator, self.directory_path);
         defer files.deinit();
-        self.logger.log(self.io, .{
+        self.logger.log(self.io, MigrationsLoadedLogRecord{
             .level = "debug",
             .event = "migrations.loaded",
             .message = "loaded migrations",
@@ -66,7 +134,7 @@ pub const MigrationContext = struct {
         for (files.items) |migration| {
             if (try applyMigration(self.database, self.allocator, migration)) {
                 applied_count += 1;
-                self.logger.log(self.io, .{
+                self.logger.log(self.io, MigrationAppliedLogRecord{
                     .level = "info",
                     .event = "migration.applied",
                     .message = "applied migration",
@@ -74,7 +142,7 @@ pub const MigrationContext = struct {
                     .name = migration.name,
                 }) catch {};
             } else {
-                self.logger.log(self.io, .{
+                self.logger.log(self.io, MigrationVerifiedLogRecord{
                     .level = "debug",
                     .event = "migration.verified",
                     .message = "migration already applied",
@@ -84,7 +152,7 @@ pub const MigrationContext = struct {
             }
         }
 
-        self.logger.log(self.io, .{
+        self.logger.log(self.io, MigrationsCompletedLogRecord{
             .level = "debug",
             .event = "migrations.completed",
             .message = "migration run completed",

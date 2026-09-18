@@ -28,6 +28,39 @@ const ServerListeningLogRecord = struct {
     port: u16,
 };
 
+const ConnectionFailureLogRecord = struct {
+    comptime format: []const u8 = "HTTP connection failed after {duration_ms}: {error_name}",
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    duration_ms: web.logging.DurationMilliseconds,
+    error_name: []const u8,
+};
+
+test "connection failure records contain only connection details" {
+    var buffer: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try logging.writeRecord(
+        &writer,
+        std.testing.allocator,
+        .json,
+        42,
+        false,
+        false,
+        ConnectionFailureLogRecord{
+            .level = "warn",
+            .event = "http.connection_failed",
+            .message = "HTTP connection failed",
+            .duration_ms = .{ .milliseconds = 3.25 },
+            .error_name = "ConnectionReset",
+        },
+    );
+    try std.testing.expectEqualStrings(
+        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"warn\",\"event\":\"http.connection_failed\",\"message\":\"HTTP connection failed\",\"duration_ms\":3.25,\"error_name\":\"ConnectionReset\"}\n",
+        writer.buffered(),
+    );
+}
+
 pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Config) !void {
     shutdown_requested.store(false, .seq_cst);
 
@@ -326,16 +359,11 @@ fn logConnectionFailure(
 ) std.Io.Cancelable!void {
     const io = server_context.io;
     const finished_at = std.Io.Clock.now(.awake, io);
-    server_context.logger.log(io, .{
+    server_context.logger.log(io, ConnectionFailureLogRecord{
         .level = "warn",
-        .event = "http.request",
-        .message = "HTTP request failed",
-        .method = null,
-        .target = null,
-        .status = null,
-        .duration_ms = .{
-            .milliseconds = web.logging.durationMilliseconds(started_at.durationTo(finished_at)),
-        },
+        .event = "http.connection_failed",
+        .message = "HTTP connection failed",
+        .duration_ms = .{ .milliseconds = web.logging.durationMilliseconds(started_at.durationTo(finished_at)) },
         .error_name = @errorName(connection_error),
     }) catch {};
 }

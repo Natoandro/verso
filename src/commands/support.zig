@@ -42,7 +42,6 @@ pub fn logConfigurationLoaded(
         .event = "configuration.loaded",
         .message = "configuration loaded",
         .command = command_name,
-        .precedence = "defaults < file < environment < command line",
         .config_file = cli_overrides.config_path orelse "verso.toml",
     }) catch {};
 }

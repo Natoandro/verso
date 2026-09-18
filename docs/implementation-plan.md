@@ -86,9 +86,9 @@ starting `DOC-001`.
   - [x] **Configuration loading:** Parse and apply CLI overrides after file and
     environment loading, reject unknown or malformed options, and preserve the
     existing validation and secret-redaction rules.
-  - [x] **Diagnostics:** Show effective non-secret configuration sources and
-    explain precedence without printing database URLs or other sensitive
-    values.
+  - [x] **Diagnostics:** Show the selected configuration file and other
+    materially useful non-secret source details without printing database URLs
+    or other sensitive values.
   - [x] **Verification:** Test no-file startup, file-versus-environment-versus
     CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
