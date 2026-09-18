@@ -1,21 +1,17 @@
 const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
+const command_options = @import("options.zig");
 
-const ConfigCommand = enum {
-    dump_default,
-};
-
-pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !void {
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help  Display this help and exit.
-        \\<command>    Configuration command: dump-default.
-        \\
-    );
-    const parsers = .{ .command = parseConfigCommand };
+pub fn run(
+    init: std.process.Init,
+    command_args: *std.process.Args.Iterator,
+    _: verso.config.CliOverrides,
+) !void {
+    const params = comptime clap.parseParamsComptime(command_options.global_help ++ "\n<command>    Configuration command: dump-default.\n");
 
     var diagnostics = clap.Diagnostic{};
-    var parsed_args = clap.parseEx(clap.Help, &params, parsers, command_args, .{
+    var parsed_args = clap.parseEx(clap.Help, &params, command_options.parsers, command_args, .{
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
@@ -28,13 +24,8 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
-    switch (parsed_args.positionals[0] orelse return error.InvalidArguments) {
-        .dump_default => return writeDefaultConfig(init.io),
-    }
-}
-
-fn parseConfigCommand(command_name: []const u8) error{InvalidCommand}!ConfigCommand {
-    if (std.mem.eql(u8, command_name, "dump-default")) return .dump_default;
+    const command_name = parsed_args.positionals[0] orelse return error.InvalidArguments;
+    if (std.mem.eql(u8, command_name, "dump-default")) return writeDefaultConfig(init.io);
     return error.InvalidCommand;
 }
 

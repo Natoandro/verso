@@ -71,7 +71,7 @@ starting `DOC-001`.
     file-backed `serve` flows, invalid configuration handling, repeatable
     directory preparation, and permission/path failures.
 
-- [ ] **BOOT-002 — Command-line configuration overrides**
+- [x] **BOOT-002 — Command-line configuration overrides**
 
   Add an explicit, allowlisted set of command-line options for configuration
   values, including selection of an alternate configuration-file path. CLI
@@ -80,16 +80,16 @@ starting `DOC-001`.
   one-off or container-injected settings. Verify strict typed parsing,
   documented help output, precedence, and safe handling of sensitive values.
 
-  - [ ] **CLI contract:** Define stable option names and value syntax for the
+  - [x] **CLI contract:** Define stable option names and value syntax for the
     initial configuration fields, the optional config-file selector, and the
     `serve` and `config` command forms.
-  - [ ] **Configuration loading:** Parse and apply CLI overrides after file and
+  - [x] **Configuration loading:** Parse and apply CLI overrides after file and
     environment loading, reject unknown or malformed options, and preserve the
     existing validation and secret-redaction rules.
-  - [ ] **Diagnostics:** Show effective non-secret configuration sources and
+  - [x] **Diagnostics:** Show effective non-secret configuration sources and
     explain precedence without printing database URLs or other sensitive
     values.
-  - [ ] **Verification:** Test no-file startup, file-versus-environment-versus
+  - [x] **Verification:** Test no-file startup, file-versus-environment-versus
     CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
 - [x] **SCHEMA-001 — Initial SQLite migration**

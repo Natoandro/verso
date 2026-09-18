@@ -289,6 +289,51 @@ test "environment overrides reject invalid typed values" {
     );
 }
 
+test "command-line overrides take precedence over environment and TOML" {
+    var environ = std.process.Environ.Map.init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("VERSO_SITE_NAME", "Environment Publication");
+    try environ.put("VERSO_SERVER_PORT", "9090");
+    try environ.put("VERSO_DATABASE_URL", "./data/environment.db");
+
+    var parsed_config = try loading.load(std.testing.allocator, .{
+        .toml = "[site]\nname = 'TOML Publication'\nbase_url = 'https://toml.example'\n[server]\nport = 8081\n[database]\nurl = './data/toml.db'\n",
+        .envs = &environ,
+        .cli = .{
+            .site_name = "CLI Publication",
+            .server_port = 7070,
+            .database_url = "./data/cli.db",
+        },
+    });
+    defer parsed_config.deinit();
+
+    try std.testing.expectEqualStrings("CLI Publication", parsed_config.value.site.name);
+    try std.testing.expectEqual(@as(u16, 7070), parsed_config.value.server.port);
+    try std.testing.expectEqualStrings("./data/cli.db", parsed_config.value.database.url);
+}
+
+test "an explicitly selected configuration file is required" {
+    try std.testing.expectError(
+        error.FileNotFound,
+        loading.loadFile(std.testing.io, std.testing.allocator, "verso.toml", .{
+            .cli = .{ .config_path = "testdata/missing-selected-verso.toml" },
+        }),
+    );
+}
+
+test "an alternate configuration file path is loaded before overrides" {
+    var parsed_config = try loading.loadFile(std.testing.io, std.testing.allocator, "verso.toml", .{
+        .cli = .{
+            .config_path = "testdata/verso.toml",
+            .site_name = "CLI Publication",
+        },
+    });
+    defer parsed_config.deinit();
+
+    try std.testing.expectEqualStrings("CLI Publication", parsed_config.value.site.name);
+    try std.testing.expectEqual(@as(u16, 9090), parsed_config.value.server.port);
+}
+
 test "unknown environment variables do not change configuration" {
     var environ = std.process.Environ.Map.init(std.testing.allocator);
     defer environ.deinit();

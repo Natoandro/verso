@@ -2,22 +2,18 @@ const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
 const logging = verso.logging;
+const command_options = @import("options.zig");
 const command_support = @import("support.zig");
 
-const MigrationCommand = enum {
-    up,
-};
-
-pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !void {
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help  Display this help and exit.
-        \\<command>    Migration command: up.
-        \\
-    );
-    const parsers = .{ .command = clap.parsers.enumeration(MigrationCommand) };
+pub fn run(
+    init: std.process.Init,
+    command_args: *std.process.Args.Iterator,
+    inherited_overrides: verso.config.CliOverrides,
+) !void {
+    const params = comptime clap.parseParamsComptime(command_options.migration_help ++ "\n<command>    Migration command: up.\n");
 
     var diagnostics = clap.Diagnostic{};
-    var parsed_args = clap.parseEx(clap.Help, &params, parsers, command_args, .{
+    var parsed_args = clap.parseEx(clap.Help, &params, command_options.parsers, command_args, .{
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
@@ -30,23 +26,27 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
-    switch (parsed_args.positionals[0] orelse return error.InvalidArguments) {
-        .up => try runUp(init),
-    }
+    const command_name = parsed_args.positionals[0] orelse return error.InvalidArguments;
+    if (!std.mem.eql(u8, command_name, "up")) return error.InvalidCommand;
+    try runUp(init, command_options.merge(
+        inherited_overrides,
+        command_options.overrides(parsed_args.args),
+    ));
 }
 
-fn runUp(init: std.process.Init) !void {
+fn runUp(init: std.process.Init, cli_overrides: verso.config.CliOverrides) !void {
     var parsed_config = verso.config.loadFile(
         init.io,
         init.gpa,
         "verso.toml",
-        .{ .envs = init.environ_map },
+        .{ .envs = init.environ_map, .cli = cli_overrides },
     ) catch |configuration_error| {
         command_support.logConfigurationFailure(init, "migrate up", configuration_error);
         return configuration_error;
     };
     defer parsed_config.deinit();
     const app_config = parsed_config.value;
+    command_support.logConfigurationLoaded(init, "migrate up", app_config, cli_overrides);
 
     try verso.application.bootstrap.prepareDatabaseParentDirectory(
         init.io,

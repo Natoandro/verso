@@ -268,8 +268,8 @@ Relative paths are resolved from the process working directory. The default
 directory, allowing an installed binary to find its packaged migrations. The
 `migrate up` command always uses this path. `migrations.run_on_startup` defaults
 to `true`; when enabled, `serve` applies pending migrations before it binds the
-HTTP listener. Environment overrides are applied before validation; command-line
-overrides remain deferred.
+HTTP listener. Environment overrides are applied before validation, followed by
+command-line overrides.
 
 This startup default is appropriate for the initial SQLite, single-service
 deployment. If Verso later targets a shared database or supports multiple
@@ -341,10 +341,9 @@ connection failures.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override
-and validation process. The current file-backed loader treats a missing path as
-an empty TOML source; the command-line configuration work will define any
-different behavior for an explicitly selected path. The file remains useful
-for persistent deployment settings, but it is not a startup prerequisite.
+and validation process. An explicitly selected path is required to exist; a
+missing selected file is an error. The file remains useful for persistent
+deployment settings, but it is not a startup prerequisite.
 
 `database.url` accepts a bare path as a SQLite shorthand, such as
 `./data/verso.db`, or a database URL. Only the `sqlite` scheme is implemented
@@ -409,9 +408,22 @@ deployment still requires a public non-loopback base URL even when that value
 is supplied through the environment. Environment-provided database URLs are
 never included in configuration errors or startup diagnostics and are the
 preferred place for deployment-specific credentials once non-SQLite adapters
-exist. The Zig integration assembles a `ConfigSources` value, parses its TOML
-source, applies environment values, reserves the argument stage for future CLI
-support, and validates only after all available sources have been applied.
+exist.
+
+The command-line allowlist uses the corresponding kebab-case option names:
+
+| Command | Options |
+| --- | --- |
+| All commands | `--config PATH` |
+| `serve` | `--runtime-environment`, `--logging-format`, `--logging-omit-null-fields`, `--site-name`, `--site-base-url`, `--server-host`, `--server-port`, `--database-url`, `--migrations-path`, `--migrations-run-on-startup`, `--storage-filesystem-path`, `--cache-path`, `--public-static-root`, `--ui-language`, `--ui-theme`, `--ui-logo`, `--ui-icon`, `--ui-logo-wordmark`, `--features-math`, `--features-interactive-sections`, `--editor-local-preview-debounce-ms`, `--mcp-enabled`, `--mcp-allow-publish` |
+| `migrate up` and document operations | `--runtime-environment`, `--logging-format`, `--logging-omit-null-fields`, `--site-base-url`, `--database-url`, `--migrations-path`, `--migrations-run-on-startup` |
+
+Each command's help text is its parser option contract; unknown options are
+rejected. Boolean values must be exactly `true` or `false`; enum and integer
+values use the same lowercase names and decimal representation as the
+configuration file. Commands emit a `configuration.loaded` diagnostic with the
+selected file and precedence explanation without logging effective database
+URLs or other secret values.
 
 ---
 

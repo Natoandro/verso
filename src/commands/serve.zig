@@ -1,16 +1,18 @@
 const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
+const command_options = @import("options.zig");
 const command_support = @import("support.zig");
 
-pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !void {
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help  Display this help and exit.
-        \\
-    );
+pub fn run(
+    init: std.process.Init,
+    command_args: *std.process.Args.Iterator,
+    inherited_overrides: verso.config.CliOverrides,
+) !void {
+    const params = comptime clap.parseParamsComptime(command_options.server_help);
 
     var diagnostics = clap.Diagnostic{};
-    var parsed_args = clap.parseEx(clap.Help, &params, clap.parsers.default, command_args, .{
+    var parsed_args = clap.parseEx(clap.Help, &params, command_options.parsers, command_args, .{
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
@@ -23,13 +25,17 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
+    const cli_overrides = command_options.merge(
+        inherited_overrides,
+        command_options.overrides(parsed_args.args),
+    );
     var parsed_config = verso.config.loadFile(
         init.io,
         init.gpa,
         "verso.toml",
         .{
             .envs = init.environ_map,
-            .args = command_args,
+            .cli = cli_overrides,
         },
     ) catch |configuration_error| {
         command_support.logConfigurationFailure(init, "serve", configuration_error);
@@ -37,5 +43,6 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
     };
     defer parsed_config.deinit();
     const app_config = parsed_config.value;
+    command_support.logConfigurationLoaded(init, "serve", app_config, cli_overrides);
     return verso.server.run(init.io, init.gpa, app_config);
 }

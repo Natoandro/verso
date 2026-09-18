@@ -9,6 +9,7 @@ pub const UiLanguage = types.UiLanguage;
 pub const LoggingFormat = types.LoggingFormat;
 pub const ResolvedLoggingFormat = types.ResolvedLoggingFormat;
 pub const ConfigSources = loading.ConfigSources;
+pub const CliOverrides = loading.CliOverrides;
 
 pub const load = loading.load;
 pub const loadFile = loading.loadFile;

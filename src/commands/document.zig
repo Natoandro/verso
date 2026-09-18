@@ -1,6 +1,7 @@
 const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
+const command_options = @import("options.zig");
 const command_support = @import("support.zig");
 
 const DocumentCommand = enum {
@@ -16,50 +17,33 @@ const SectionOperation = enum {
     delete,
 };
 
-pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !void {
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help                 Display this help and exit.
-        \\    --id <ID>              Existing stable ID to continue creating version 1.
-        \\    --type <TYPE>          Logical document type (article).
-        \\    --title <TITLE>        Draft title.
-        \\    --slug <SLUG>          Draft slug.
-        \\    --description <TEXT>   Optional draft description.
-        \\    --language <LANG>      Draft language (default: en).
-        \\    --text <MARKDOWN>      Initial Markdown text.
-        \\    --version-id <ID>      Draft version ID for a section operation.
-        \\    --section-id <ID>      Existing section ID for a section operation.
-        \\    --position <POSITION>  Zero-based section position.
-        \\    --revision <REVISION> Expected draft revision.
-        \\    --asset <ASSET>       Image asset name.
-        \\    --alt <TEXT>          Image alternative text.
-        \\    --caption <TEXT>      Optional image caption.
-        \\    --display <DISPLAY>   Image display: inline, wide, or full.
-        \\<command>                Document command: create-draft or section.
-        \\<operation>              Section operation: insert, update, move, duplicate, or delete.
-        \\
-    );
-    const parsers = .{
-        .command = parseDocumentCommand,
-        .operation = parseSectionOperation,
-        .ID = clap.parsers.int(i64, 10),
-        .VERSION_ID = clap.parsers.int(i64, 10),
-        .SECTION_ID = clap.parsers.int(i64, 10),
-        .POSITION = clap.parsers.int(u32, 10),
-        .REVISION = clap.parsers.int(u64, 10),
-        .TYPE = clap.parsers.string,
-        .TITLE = clap.parsers.string,
-        .SLUG = clap.parsers.string,
-        .TEXT = clap.parsers.string,
-        .MARKDOWN = clap.parsers.string,
-        .LANG = clap.parsers.string,
-        .ASSET = clap.parsers.string,
-        .ALT = clap.parsers.string,
-        .CAPTION = clap.parsers.string,
-        .DISPLAY = clap.parsers.string,
-    };
+const document_help =
+    "    --id <ID>              Existing stable ID to continue creating version 1.\n" ++
+    "    --type <TYPE>          Logical document type (article).\n" ++
+    "    --title <TITLE>        Draft title.\n" ++
+    "    --slug <SLUG>          Draft slug.\n" ++
+    "    --description <TEXT>   Optional draft description.\n" ++
+    "    --language <LANG>      Draft language (default: en).\n" ++
+    "    --text <MARKDOWN>      Initial Markdown text.\n" ++
+    "    --version-id <ID>      Draft version ID for a section operation.\n" ++
+    "    --section-id <ID>      Existing section ID for a section operation.\n" ++
+    "    --position <POSITION>  Zero-based section position.\n" ++
+    "    --revision <REVISION> Expected draft revision.\n" ++
+    "    --asset <ASSET>        Image asset name.\n" ++
+    "    --alt <TEXT>           Image alternative text.\n" ++
+    "    --caption <TEXT>       Optional image caption.\n" ++
+    "    --display <DISPLAY>    Image display: inline, wide, or full.\n" ++
+    "<command>                 Document command: create-draft or section.\n" ++
+    "<operation>               Section operation: insert, update, move, duplicate, or delete.\n";
 
+pub fn run(
+    init: std.process.Init,
+    command_args: *std.process.Args.Iterator,
+    inherited_overrides: verso.config.CliOverrides,
+) !void {
+    const params = comptime clap.parseParamsComptime(command_options.document_help ++ "\n" ++ document_help);
     var diagnostics = clap.Diagnostic{};
-    var parsed_args = clap.parseEx(clap.Help, &params, parsers, command_args, .{
+    var parsed_args = clap.parseEx(clap.Help, &params, command_options.parsers, command_args, .{
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
@@ -72,10 +56,19 @@ pub fn run(init: std.process.Init, command_args: *std.process.Args.Iterator) !vo
         return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
     }
 
-    const command = parsed_args.positionals[0] orelse return error.InvalidArguments;
+    const command = try parseDocumentCommand(parsed_args.positionals[0] orelse return error.InvalidArguments);
+    const cli_overrides = command_options.merge(
+        inherited_overrides,
+        command_options.overrides(parsed_args.args),
+    );
     switch (command) {
-        .create_draft => try createDraft(init, parsed_args.args),
-        .section => try section(init, parsed_args.positionals[1] orelse return error.InvalidArguments, parsed_args.args),
+        .create_draft => try createDraft(init, parsed_args.args, cli_overrides),
+        .section => try section(
+            init,
+            try parseSectionOperation(parsed_args.positionals[1] orelse return error.InvalidArguments),
+            parsed_args.args,
+            cli_overrides,
+        ),
     }
 }
 
@@ -94,7 +87,11 @@ fn parseSectionOperation(operation_name: []const u8) error{InvalidOperation}!Sec
     return error.InvalidOperation;
 }
 
-fn createDraft(init: std.process.Init, args: anytype) !void {
+fn createDraft(
+    init: std.process.Init,
+    args: anytype,
+    cli_overrides: verso.config.CliOverrides,
+) !void {
     const raw_type = args.type orelse return error.InvalidArguments;
     const title = args.title orelse return error.InvalidArguments;
     const slug = args.slug orelse return error.InvalidArguments;
@@ -105,13 +102,14 @@ fn createDraft(init: std.process.Init, args: anytype) !void {
         init.io,
         init.gpa,
         "verso.toml",
-        .{ .envs = init.environ_map },
+        .{ .envs = init.environ_map, .cli = cli_overrides },
     ) catch |configuration_error| {
         command_support.logConfigurationFailure(init, "document create-draft", configuration_error);
         return configuration_error;
     };
     defer parsed_config.deinit();
     const app_config = parsed_config.value;
+    command_support.logConfigurationLoaded(init, "document create-draft", app_config, cli_overrides);
 
     try verso.application.bootstrap.prepareConfiguredDirectories(init.io, std.Io.Dir.cwd(), app_config);
     var database_path_buffer: [1024]u8 = undefined;
@@ -162,7 +160,12 @@ fn createDraft(init: std.process.Init, args: anytype) !void {
     try output_writer.flush();
 }
 
-fn section(init: std.process.Init, operation: SectionOperation, args: anytype) !void {
+fn section(
+    init: std.process.Init,
+    operation: SectionOperation,
+    args: anytype,
+    cli_overrides: verso.config.CliOverrides,
+) !void {
     const version_id = @field(args, "version-id") orelse return error.InvalidArguments;
     const expected_revision = args.revision orelse return error.InvalidArguments;
 
@@ -170,13 +173,14 @@ fn section(init: std.process.Init, operation: SectionOperation, args: anytype) !
         init.io,
         init.gpa,
         "verso.toml",
-        .{ .envs = init.environ_map },
+        .{ .envs = init.environ_map, .cli = cli_overrides },
     ) catch |configuration_error| {
         command_support.logConfigurationFailure(init, "document section", configuration_error);
         return configuration_error;
     };
     defer parsed_config.deinit();
     const app_config = parsed_config.value;
+    command_support.logConfigurationLoaded(init, "document section", app_config, cli_overrides);
 
     try verso.application.bootstrap.prepareConfiguredDirectories(init.io, std.Io.Dir.cwd(), app_config);
     var database_path_buffer: [1024]u8 = undefined;
