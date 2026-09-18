@@ -1,32 +1,14 @@
 const std = @import("std");
-const editor_assets = @import("editor_assets");
 const context = @import("context.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
-const static_content = @import("static.zig");
 const tmpl = @import("tmpl");
 
 const editor_template = tmpl.parse(@embedFile("editor.html"), .{});
-const editor_policy = static_content.ResponsePolicy{
-    .status = .ok,
-    .cache_control = "no-store",
-};
-
-const EditorPageContext = struct {
-    site_namespace: []const u8,
-    owner_scope: []const u8,
-};
 
 const EditorPage = struct {
     fn handle(request: *context.RequestContext, _: layer.Next) anyerror!void {
-        var base_url_buffer: [1024]u8 = undefined;
-        const site_namespace = try request.server.config.effectiveBaseUrl(&base_url_buffer);
-        const content = try editor_template.renderAlloc(request.server.allocator, EditorPageContext{
-            .site_namespace = site_namespace,
-            // IAM-003 will replace this request-local placeholder with the
-            // authenticated owner scope before persisted recovery is exposed.
-            .owner_scope = "anonymous",
-        });
+        const content = try editor_template.renderAlloc(request.server.allocator, .{});
         defer request.server.allocator.free(content);
         request.request.respond(content, .{
             .status = .ok,
@@ -55,25 +37,13 @@ pub const Handler = struct {
 
 const routes_table = route.routes(.{
     .{ "GET /admin/editor", EditorPage.handle },
-    .{ "GET /admin/editor.css", static_content.EmbeddedStatic.handler(
-        editor_assets.css,
-        "text/css; charset=utf-8",
-        editor_policy,
-    ) },
-    .{ "GET /admin/editor.js", static_content.EmbeddedStatic.handler(
-        editor_assets.javascript,
-        "text/javascript; charset=utf-8",
-        editor_policy,
-    ) },
 });
 
-test "editor routes use comptime embedded static handlers" {
+test "editor route table serves the server-rendered shell" {
     const routes = Handler.routes();
 
     try std.testing.expectEqual(@as(?usize, 0), route.resolve(routes, .GET, "/admin/editor?draft=one"));
     try std.testing.expectEqual(@as(?usize, 0), route.resolve(routes, .GET, "/admin/editor/"));
-    try std.testing.expectEqual(@as(?usize, 1), route.resolve(routes, .GET, "/admin/editor.css"));
-    try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .GET, "/admin/editor.js"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .POST, "/admin/editor"));
 }
 

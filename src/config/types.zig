@@ -49,7 +49,6 @@ pub const Config = struct {
     cache: Cache = .{},
     ui: Ui = .{},
     features: Features = .{},
-    editor: Editor = .{},
     mcp: Mcp = .{},
 
     pub const Runtime = struct {
@@ -108,10 +107,6 @@ pub const Config = struct {
     pub const Features = struct {
         math: bool = true,
         interactive_sections: bool = false,
-    };
-
-    pub const Editor = struct {
-        local_preview_debounce_ms: u32 = 500,
     };
 
     pub const Mcp = struct {
@@ -187,9 +182,6 @@ pub const Config = struct {
             return error.UnsupportedLogoVariant;
         }
 
-        if (self.editor.local_preview_debounce_ms == 0) {
-            return error.InvalidEditorConfiguration;
-        }
         if (self.mcp.allow_publish and !self.mcp.enabled) {
             return error.InvalidMcpConfiguration;
         }

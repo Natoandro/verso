@@ -1,16 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS frontend-dependencies
-
-WORKDIR /src/web-editor
-
-COPY web-editor/package.json web-editor/pnpm-lock.yaml ./
-RUN corepack enable \
-    && corepack install --global pnpm@10.34.1 \
-    && printf 'allowBuilds:\n  esbuild: true\n' > pnpm-workspace.yaml \
-    && pnpm install --frozen-lockfile
-
-FROM node:22-bookworm-slim AS builder
+FROM debian:bookworm-slim AS builder
 
 ARG TARGETARCH
 ARG ZIG_VERSION=0.16.0
@@ -34,7 +24,6 @@ ENV PATH="/opt/zig:${PATH}"
 
 WORKDIR /src
 
-COPY --from=frontend-dependencies /src/web-editor/node_modules ./web-editor/node_modules
 COPY . .
 
 RUN mkdir --parents /src/zig-pkg

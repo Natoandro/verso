@@ -10,6 +10,3 @@ zig-cache
 zig-out
 zig-pkg
 data
-
-web-editor/node_modules
-web-editor/dist

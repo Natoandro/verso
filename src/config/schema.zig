@@ -35,7 +35,6 @@ pub const serve_cli_metadata = [_]CliMetadata{
     .{ .config_field = "ui.logo_wordmark", .cli_enabled = true, .description = "Reserved UI wordmark path." },
     .{ .config_field = "features.math", .cli_enabled = true, .description = "Enable math rendering." },
     .{ .config_field = "features.interactive_sections", .cli_enabled = true, .description = "Enable interactive sections." },
-    .{ .config_field = "editor.local_preview_debounce_ms", .cli_enabled = true, .description = "Browser preview debounce interval." },
     .{ .config_field = "mcp.enabled", .cli_enabled = true, .description = "Enable the MCP interface." },
     .{ .config_field = "mcp.allow_publish", .cli_enabled = true, .description = "Allow the MCP interface to publish." },
 };

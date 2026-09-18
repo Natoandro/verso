@@ -37,9 +37,6 @@ test "parses and validates a complete configuration" {
         \\math = true
         \\interactive_sections = false
         \\
-        \\[editor]
-        \\local_preview_debounce_ms = 500
-        \\
         \\[mcp]
         \\enabled = true
         \\allow_publish = false
@@ -57,7 +54,6 @@ test "parses and validates a complete configuration" {
     try std.testing.expectEqual(@as(u16, 9090), parsed_config.value.server.port);
     try std.testing.expectEqualStrings("./schema", parsed_config.value.migrations.path);
     try std.testing.expectEqual(false, parsed_config.value.migrations.run_on_startup);
-    try std.testing.expectEqual(@as(u32, 500), parsed_config.value.editor.local_preview_debounce_ms);
     switch (parsed_config.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/assets", filesystem.path),
     }
@@ -241,8 +237,6 @@ test "environment overrides take precedence over TOML" {
     try environ.put("VERSO_MIGRATIONS_RUN_ON_STARTUP", "false");
     try environ.put("VERSO_LOGGING_OMIT_NULL_FIELDS", "false");
     try environ.put("VERSO_FEATURES_MATH", "false");
-    try environ.put("VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS", "750");
-
     var parsed_config = try loading.loadFile(std.testing.io, std.testing.allocator, "testdata/verso.toml", .{ .envs = &environ });
     defer parsed_config.deinit();
 
@@ -254,7 +248,6 @@ test "environment overrides take precedence over TOML" {
     try std.testing.expectEqualStrings("./data/environment-migrations", parsed_config.value.migrations.path);
     try std.testing.expectEqual(false, parsed_config.value.migrations.run_on_startup);
     try std.testing.expectEqual(false, parsed_config.value.features.math);
-    try std.testing.expectEqual(@as(u32, 750), parsed_config.value.editor.local_preview_debounce_ms);
     switch (parsed_config.value.storage) {
         .filesystem => |filesystem| try std.testing.expectEqualStrings("./data/environment-assets", filesystem.path),
     }

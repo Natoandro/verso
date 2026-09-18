@@ -6,8 +6,8 @@ Verso's document model is section-oriented, but that does not by itself
 require an offline-first browser editor. This note compares two possible web
 editor strategies:
 
-1. a pure HTMX, server-transactional editor; and
-2. the current HTMX shell with an offline-capable Svelte editor island.
+1. the current pure HTMX, server-transactional editor; and
+2. a future HTMX shell with an offline-capable Svelte editor island.
 
 The comparison is intended to keep the section model separate from the choice
 of where unsaved editor state lives.
@@ -84,13 +84,18 @@ This approach fits an online-first publishing CMS where explicit section saves
 and server-rendered previews are acceptable, and where simplicity and
 publication parity matter more than a document-editor-like interaction model.
 
-## Alternative B: offline-capable Svelte editor island
+## Future alternative: offline-capable Svelte editor island
 
-The current design keeps HTMX for the surrounding editorial application and
-mounts Svelte only below a stable editor root. Svelte owns a browser-local
-structured draft, section presentation state, provisional preview rendering,
-and local recovery. Server operations still go through the application
-services and remain canonical.
+An earlier implementation explored keeping HTMX for the surrounding editorial
+application and mounting Svelte below a stable editor root. In this alternative,
+Svelte owns a browser-local structured draft, section presentation state,
+provisional preview rendering, and local recovery. Server operations still go
+through the application services and remain canonical.
+
+That implementation is not the current direction. The last commit that edited
+the browser-local frontend was `08364ee` (`feat(editor): add persisted draft
+workflow foundations`). It is retained as historical context while the
+frontend is removed from the repository.
 
 ### Interaction model
 
@@ -137,7 +142,7 @@ services and remain canonical.
 
 ### Best fit
 
-This approach fits a long-form editor where losing a local working session is
+This approach could fit a long-form editor where losing a local working session is
 costly, where immediate preview and manipulation are central to the product,
 or where unreliable connectivity is an expected operating condition.
 
@@ -169,11 +174,10 @@ where the working document lives before an explicit save:
 The offline requirement should therefore be treated as a product decision,
 not as an implicit consequence of typed sections.
 
-## Recommendation for the initial release
+## Current decision
 
-Unless Verso has a confirmed requirement for unreliable-network or
-long-session editing, prefer an online-first, section-oriented HTMX editor for
-the initial release:
+The current intended implementation is an online-first, section-oriented HTMX
+editor:
 
 - keep ordered typed sections;
 - save section operations through application services;
@@ -186,4 +190,3 @@ If recovery is later shown to be necessary, it can be added as a bounded
 enhancement without changing canonical storage: first add a small local
 snapshot mechanism, then consider richer local preview or offline editing only
 if real usage justifies the additional synchronization and rendering cost.
-

@@ -2,339 +2,151 @@
 
 ## Scope
 
-This document defines the browser-based editorial interface and preview
-lifecycle. It owns section-oriented editing, client-side unsaved previews,
-explicit server previews of persisted drafts, and stale local-render
-protection; it does not define public caching, document persistence, or
-authorization policy.
+This document defines the initial server-transactional editorial interface.
+It covers section-oriented editing, HTMX fragment updates, persisted-draft
+previews, and the boundary between editorial state and publication state. A
+deferred browser-local editor alternative is documented separately in
+[editor architecture alternatives](editor-approaches.md).
 
-Related: [content model](content.md), [rendering and cache](rendering.md), [identity and MCP](identity-and-mcp.md), and [operations and boundaries](operations.md).
+Related: [content model](content.md), [rendering and cache](rendering.md),
+[identity and MCP](identity-and-mcp.md), and [operations and boundaries](operations.md).
 
-## 1. Web Editor
+## 1. Web editor
 
-Verso provides a browser-based editorial interface.
-
-The application remains HTMX-oriented, with the browser-local editing surface
-implemented as one Svelte + TypeScript island. It uses:
+The initial editor is an HTMX-oriented, server-rendered interface. HTMX is
+used for progressive fragment updates; it is not an application-owned client
+document model and does not replace application services.
 
 ```text
-HTML
+HTML forms and server-rendered fragments
 +
-HTMX 4
+HTMX 4 for requests and swaps
 +
-Svelte + TypeScript (editor island only)
+Verso application services for every mutation
 ```
 
-Svelte owns only a stable editor mount root; HTMX must not swap that subtree.
-Svelte is not used as an SPA framework for public pages, and no hydration or
-server-rendered editor state is required.
+The server owns the working draft. HTMX must not swap across a boundary that
+would bypass authorization, validation, revision checks, or application-level
+cache invalidation.
 
-The editor operates through normal Verso application services.
+The editor operates through the same application services used by other
+interfaces:
 
 ```mermaid
 flowchart TB
-    browser["Browser"] --> handler["Web handler"]
+    browser["Editor browser"] --> htmx["HTMX request"]
+    htmx --> handler["Web handler"]
     handler --> application["Application service"]
     application --> authorization["Authorization"]
     application --> validation["Validation"]
     application --> revision["Revision handling"]
     application --> persistence["Persistence"]
-    application --> invalidation["Cache invalidation"]
     persistence --> sqlite[("SQLite")]
+    application --> fragment["HTML fragment"]
+    fragment --> browser
 ```
 
----
+## 2. Section-oriented editing
 
-## 2. Section-Oriented Editor
+Documents are edited as ordered, typed sections. Sectioning is a content-model
+boundary rather than an offline-storage requirement. It provides stable
+identities for validation, rendering, insertion, reordering, duplication,
+deletion, asset ownership, and AI/MCP operations.
 
-The editor represents documents as ordered sections.
+Each section is rendered as an ordinary article region. An explicit action
+opens its editable fields or submits a section operation. The server returns
+the updated section or the smallest surrounding region needed to preserve
+ordering, controls, validation errors, and accessible focus.
 
-Each section has two browser-local presentation modes:
+Supported operations include:
 
-* `edit`, where its fields and section controls are visible;
-* `preview`, where the validated section is rendered as part of the article
-  flow and an `Edit` action is available from its contextual toolbar.
+- insert a section;
+- edit section fields;
+- reorder sections;
+- duplicate a section;
+- remove a section;
+- validate and preview a persisted section or draft.
 
-The editor presents the draft as an article rather than a stack of framed
-section cards. Preview output contains only the section content. Reordering,
-duplication, deletion, and edit/validate actions are icon-only controls in a
-vertical rail just outside the article's right margin on larger screens; they
-appear on hover or keyboard focus. On narrow screens the rail moves inside the
-section so it remains reachable. Clicking a section activates its toolbar
-until another section is activated, which keeps the controls usable on touch
-devices. Every icon has an accessible label and a native tooltip.
+For a published or archived version, the editor is read-only. Editing a
+published version first creates the next-version draft through the application
+service. Published and archived versions remain immutable.
 
-The document title is the primary heading of the article. It is edited inline
-in a multiline, auto-growing textarea styled as a heading and is made
-non-editable after the local validation action. Enter inserts a line break;
-Ctrl+Enter or Cmd+Enter validates the title. Slug and description remain
-available from the compact document-details control without adding a separate
-metadata card to the article surface.
+## 3. Request and mutation model
 
-Text sections retain a textarea so their Markdown source remains exact. A CSS
-grid mirror behind the textarea tracks the current value and supplies its
-height, avoiding an inner scroll area without using programmatic measurement.
+The initial editor uses explicit server requests rather than saving every
+keystroke. A typical section operation is:
 
-New sections start in `edit` mode. The editor explicitly validates a section
-with its check action before switching it to `preview` mode. A failed
-validation keeps the section in `edit` mode and displays an inline error.
-Returning to `edit` mode never changes the canonical document because the
-entire workflow is still browser-local.
+1. Render the current draft and section controls.
+2. Submit an HTML form or HTMX request for one validated operation.
+3. Authenticate and authorize the request.
+4. Validate the payload and expected revision.
+5. Persist the mutation atomically through the application service.
+6. Return the updated HTML fragment and the new revision information.
+7. Show a stale-revision error without overwriting newer work.
 
-The title follows the same two-mode treatment. Slug and description are
-editable from the compact document-details control. Reordering, duplication,
-and deletion controls remain available from the section toolbar in either
-mode.
+Section-level operations keep requests focused while preserving the aggregate
+draft and optimistic-concurrency rules in the application layer. A complete
+draft save may be used where an operation spans several sections, but the web
+handler must still delegate validation, authorization, persistence, and
+invalidation to the shared service.
 
-Example:
+## 4. Preview and save
 
-```text
-Article title                                      [document details]
+Preview, save, and publish remain distinct operations.
 
-Rendered Markdown                           [move · copy · delete · edit]
+The initial editor does not promise a browser-local preview of unsaved content.
+An editor saves a draft or section operation first, then requests a preview of
+the persisted draft. This keeps the server renderer as the only publication
+and editorial-preview authority and avoids a second Markdown implementation in
+the browser.
 
-Image placeholder + caption                 [move · copy · delete · edit]
+An explicit draft preview:
 
-                                                   [add]
-```
+- is available only after editorial authorization;
+- loads the persisted draft through the application layer;
+- uses the same validation, safe rendering, template, and asset-resolution
+  path as publication;
+- returns `Cache-Control: private, no-store`;
+- never enters the public filesystem cache;
+- does not mutate the draft or publish it.
 
-Sections may be:
+If a mutation fails validation or rendering, the response contains an
+actionable error and canonical state remains unchanged.
 
-* inserted;
-* edited;
-* reordered;
-* duplicated;
-* removed.
+## 5. State boundaries
 
-These operations apply only to a draft version. Opening a published or
-archived version is read-only. An editor who chooses to edit a published
-version must explicitly create the next version; Verso deep-copies the source
-version's sections and owned nested objects into that draft and records the
-source as `based_on_version_id`. The editor then edits the new draft without
-changing the source version.
-
----
-
-## 3. Inline Local Preview
-
-The editor does not need a separate side preview pane. Unsaved state is
-rendered inline, section by section, by the browser client-side renderer; the
-browser does not send unsaved document content to a Verso preview endpoint.
-
-Example:
-
-```text
-Article title
-
-Rendered Markdown                          [move · copy · delete · edit]
-
-[asset] [alt text] [caption]                [move · copy · delete · validate]
-```
-
-The Verso server remains authoritative for publication-equivalent output. A
-client-side preview is a provisional rendering of current local state and is
-used for responsiveness, offline editing, and recovery from interrupted work.
-
-This guarantees:
+The initial editor has four relevant kinds of state:
 
 ```mermaid
 flowchart LR
-    local["Current local editor state"] --> client["Client-side preview renderer"]
-    persisted["Published or persisted draft"] --> server["Verso production renderer"]
-    client --> immediate["Immediate provisional preview"]
-    server --> authoritative["Authoritative preview / published HTML"]
+    form["Browser form state"] --> request["HTMX request"]
+    request --> draft["Persisted draft"]
+    draft --> preview["Authoritative server preview"]
+    draft --> publish["Explicit publish"]
+    published["Published version"] --> public["Public HTML and cache"]
 ```
 
-The client-side renderer should use the same document model and compatible
-Markdown and section semantics as the server. Features requiring document
-context are unavailable in an unsaved inline preview; after an explicit save,
-the editor may request a server preview of that persisted draft.
+- **Canonical state:** persisted drafts and published versions in SQLite,
+  together with their authorized assets.
+- **Derived state:** rendered HTML and filesystem page-cache entries.
+- **Ephemeral state:** form fields before submission, pending HTMX requests,
+  response fragments, and preview request buffers.
+- **Deferred state:** browser-local recovery snapshots and offline working
+  documents are not part of the initial editor.
 
-The initial browser-local subset renders headings, paragraphs, line breaks,
-emphasis, strong text, inline code, fenced code, block quotes, ordered and
-unordered lists, and links or images with an allowed `http`, `https`,
-`mailto`, relative, or fragment URL. Raw HTML and unsupported URL schemes are
-escaped as text. Image sections remain placeholders until the asset workflow
-exists; the local preview does not resolve `assets://` references.
+Unsaved browser form state must not be treated as canonical, published, or
+publicly addressable. A failed request must leave the previous canonical draft
+intact and must allow the editor to retry or discard the local form values.
 
-Before inserting local preview output into the editor DOM, the client renderer
-must apply the same no-raw-HTML profile and safe URL rules as the server
-renderer. This protects the editor experience, but the server independently
-validates and safely renders every persisted draft; it never trusts client-side
-sanitization as a publication security boundary.
+## 6. Failure and concurrency behavior
 
----
+- A failed validation returns the form with field-level errors.
+- A failed authorization check does not expose draft content.
+- A stale expected revision fails instead of overwriting a newer mutation.
+- A failed preview does not change the draft or its public cache.
+- A lost connection may lose changes that were not successfully submitted; the
+  initial editor does not promise offline editing or browser-local recovery.
 
-## 4. Preview Is Not Save
-
-Client-side preview never mutates SQLite and never sends the current unsaved
-document state to Verso. The browser may persist a recovery snapshot without
-turning the preview into a Verso draft. Browser persistence and server
-persistence are separate operations. Switching a section or metadata field
-between `edit` and `preview` is presentation state only; it is not a save,
-validation of canonical state, or publication operation.
-
-Conceptually:
-
-```mermaid
-flowchart TB
-    state["Browser unsaved state"] --> renderer["Client-side renderer"]
-    renderer --> fragment["Local preview"]
-    renderer -. no persistence .-> sqlite[("SQLite")]
-```
-
-The following operations remain distinct:
-
-```text
-render local preview
-autosave local draft
-save draft / server-side autosave checkpoint
-render explicit server preview of persisted draft
-publish
-```
-
-Only server-side `save draft` (including an optional server-side draft autosave
-checkpoint) and `publish` mutate canonical Verso state. Local recovery autosave
-does not create a Verso revision or mutate SQLite.
-
-For a published document, `save draft` means saving the explicitly created
-next-version draft. It never means modifying the published version.
-
----
-
-### 4.1 Explicit server preview
-
-An editor may explicitly request a preview link for a persisted draft. This
-link is an authenticated editorial route, not a shareable bearer link. Verso
-loads the persisted draft after authorization and runs the exact same server
-validation, safe rendering, template, asset-resolution, and response-header
-path as publication. It differs only in that it is private, uses
-`Cache-Control: private, no-store`, does not enter the public filesystem cache,
-and does not change canonical draft state.
-
-The server preview renderer must not fetch arbitrary network URLs. Previewable
-assets resolve only through the authorized asset store, and any future embed
-provider requires a separate, allowlisted server-side integration. Rendering
-uses configured request-concurrency and execution-time limits; a limit or
-rendering failure returns an error without changing the draft.
-
----
-
-## 5. Local Draft Recovery and Client-Side Preview
-
-The editor should autosave the current structured document locally so a tab
-crash, browser restart, connectivity loss, or interrupted editing session does
-not discard work. Local autosave is a recovery mechanism, not a replacement
-for saving to Verso. Client-side preview improves responsiveness; local
-autosave provides recovery from interrupted work.
-
-IndexedDB is preferred for complete document snapshots and larger drafts.
-`localStorage` may be used as a fallback for small documents and recovery
-metadata. Another browser-provided durable store may be used if it offers
-better capacity or lifecycle guarantees.
-
-A local snapshot should include at least:
-
-```text
-site/deployment namespace
-account identity, when authenticated
-stable client-generated draft identity
-server document identity, when known
-base server version and working revision, if known
-draft content
-schema version
-updated_at
-```
-
-A recovery snapshot may also preserve editor-only presentation metadata such as
-the title mode, section edit/preview modes, active section, and details-panel
-visibility. Preview HTML remains derived state and is regenerated from the
-validated local document when a snapshot is restored.
-
-The storage key should be the tuple `{site_namespace, owner_scope, draft_id}`.
-`draft_id` is generated by the client when a new document is started and stays
-stable until the local snapshot is discarded. After the first successful save,
-the snapshot records the mapping from `draft_id` to the server `document_id`;
-subsequent recovery can use either identity without replacing the stable draft
-key. This prevents drafts for different documents from colliding and keeps new
-documents recoverable before they have a server identity.
-
-New browser-local drafts should be opened through a draft-scoped editor URL,
-such as a route or query parameter containing the stable `draft_id`. If an
-editor is opened without a draft identity and a new local document is created,
-the browser should update the current history entry or redirect to the
-draft-scoped URL before editing begins. A later reload of that same URL may
-automatically load the latest matching local snapshot when the site namespace
-and owner scope still match, because the URL identifies the same browser-local
-draft.
-
-Recovery must never cross user, site, or permission boundaries. On sign-out or
-account switching, the editor must stop exposing the previous account's
-snapshots before loading the next account's namespace. Anonymous snapshots must
-not be silently re-associated with an authenticated account; importing one
-requires an explicit user action and ownership decision.
-
-Autosave should be debounced during editing and also attempted at appropriate
-page-lifecycle checkpoints. Storage failures must not prevent editing; the UI
-should expose whether recovery data is being persisted.
-
-When opening a draft-scoped local editor URL, the editor should resume the
-matching local snapshot automatically if the snapshot is still in the same site
-and owner namespace. When opening an unscoped editor route, opening a server
-document, or discovering snapshots that do not match the current draft ID, the
-editor should offer an explicit recovery path instead of silently choosing one.
-For persisted documents, the editor should compare the local snapshot with the
-server draft. If the local snapshot is newer or diverges, the editor should
-offer explicit restore, merge, or discard actions. A successful server save or
-publish should advance the local base version and working revision or clear the
-obsolete snapshot. A local snapshot based on a published version must not be
-silently applied to a different next-version lineage.
-
-The local recovery path and client-side renderer share the same current draft:
-
-```mermaid
-flowchart TB
-    draft["Current editor state"] --> preview["Client-side preview renderer"]
-    draft --> autosave["Debounced local autosave"]
-    route["Draft-scoped editor URL"] --> draft
-    preview --> inline["Inline provisional views"]
-    autosave --> storage[("IndexedDB / localStorage")]
-    storage --> recovery["Restore / merge on next open"]
-```
-
-Local snapshots are origin-scoped, noncanonical, and user-visible. They must
-not be exposed through public routes or treated as authoritative publication
-state.
-
----
-
-## 6. Client-side Preview Behavior
-
-The editor may provide lightweight client-side optimistic updates and
-client-side document previews.
-
-Examples include:
-
-```text
-title text
-caption text
-alt text
-visibility
-layout selection
-editor UI state
-```
-
-The client-side preview is the only live preview of unsaved content. It renders
-the currently validated section inline where local semantics permit, and must
-rerender document-wide context when numbering, citations, footnotes,
-cross-references, or the table of contents can change. The editor must clearly
-label each rendered view as provisional. A server-rendered explicit preview
-becomes available after saving the draft.
-
-Verso should avoid unrelated, competing Markdown rendering rules in the
-browser and server. A shared grammar, generated compatibility layer, or
-explicitly documented supported subset should be used instead. The browser
-must apply its own stale-work protection when rendering asynchronously, so an
-older local render cannot replace a newer editor generation.
-
----
+Later browser-local recovery can be added as a separate enhancement if actual
+editorial use justifies it, without changing canonical storage or the server
+renderer.

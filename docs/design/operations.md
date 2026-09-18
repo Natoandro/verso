@@ -50,8 +50,8 @@ subject, author, feed, sitemap, and other derived indexes remain revalidated.
 
 The create-next-version operation accepts only the current published version
 as its source. It must reject drafts and all other unpublished versions as
-parents. A draft's working revisions, local recovery snapshots, and unsaved
-preview state do not change this rule.
+parents. A draft's working revisions and unsaved browser form state do not
+change this rule.
 
 The state belongs to a numbered document version. Published and archived
 versions are immutable, except for the deliberately mutable
@@ -247,9 +247,6 @@ logo = "/assets/logo.svg"
 [features]
 math = true
 interactive_sections = false # enabled only after its security design is specified
-
-[editor]
-local_preview_debounce_ms = 500
 
 [mcp]
 enabled = true
@@ -463,8 +460,8 @@ maintenance write barrier or a storage snapshot; copying a live database file
 alone, or copying an uncoordinated data directory, is not a valid backup
 procedure. In particular, a backup must account for SQLite WAL state.
 
-Filesystem page caches and browser-local recovery snapshots are not part of a
-canonical backup. Asset checksums, database schema compatibility, and
+Filesystem page caches are not part of a canonical backup. Asset checksums,
+database schema compatibility, and
 asset-reference integrity must be verified in an isolated restore location
 before a restored deployment is made live. Operators should test restoration
 periodically rather than relying on backup creation alone.
@@ -603,28 +600,6 @@ This can always be regenerated.
 
 ---
 
-### Recoverable local draft state
-
-```text
-browser autosave
-IndexedDB or localStorage
-local draft snapshot
-```
-
-This state is durable enough to recover interrupted editing, but it is not
-canonical and is not guaranteed to exist on another browser or device. It may
-be restored, merged, or discarded explicitly by the editor.
-
-```mermaid
-flowchart LR
-    editor["Editor state"] --> autosave["Browser autosave"]
-    autosave --> local["IndexedDB / localStorage"]
-    local --> recovery["Restore or merge"]
-    recovery --> server["Explicit save to Verso"]
-```
-
----
-
 ### Ephemeral state
 
 ```mermaid
@@ -647,7 +622,7 @@ Verso is a self-hosted publishing server built around:
 
 ```mermaid
 flowchart TB
-    editors["Editors"] --> web["Web CMS<br/>HTMX 4 + Svelte island"]
+    editors["Editors"] --> web["Web CMS<br/>HTMX 4"]
     editors --> mcp["AI MCP<br/>OAuth"]
     web --> verso["Verso application"]
     mcp --> verso
@@ -673,9 +648,8 @@ The central architectural decisions are:
 * **server-side rendering**;
 * **filesystem caching for published pages**;
 * **no public caching of mutable drafts**;
-* **HTMX 4 with a Svelte + TypeScript island for the browser-local web editor**;
-* **client-side live previews and server-rendered, production-equivalent
-  previews of persisted drafts**;
+* **HTMX 4 for server-transactional section editing**;
+* **server-rendered, production-equivalent previews of persisted drafts**;
 * **preview, save, and publish as distinct operations**;
 * **remote MCP as a first-class AI editing interface**;
 * **OAuth and permission-scoped MCP access**;

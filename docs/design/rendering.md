@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document defines the server transformation from canonical content to public HTML and the lifecycle of derived page output. It owns rendering, filesystem caching, invalidation, atomic writes, and draft-cache boundaries; it does not define editorial UX or persistence schemas. Client-side previews are covered in [web editor and preview](editor.md); the server renderer remains their authority.
+This document defines the server transformation from canonical content to public HTML and the lifecycle of derived page output. It owns rendering, filesystem caching, invalidation, atomic writes, and draft-cache boundaries; it does not define editorial UX or persistence schemas. Editorial previews are covered in [web editor and preview](editor.md) and use the server renderer.
 
 Related: [content model](content.md), [system architecture](system.md), [web editor and preview](editor.md), and [operations and boundaries](operations.md).
 
@@ -65,17 +65,15 @@ The rendering engine should not care whether the document was requested by:
 * a future API;
 * internal cache regeneration.
 
-The server renderer is authoritative for publication output and for explicit
-previews of persisted drafts. The editor uses a compatible client-side renderer
-for immediate previews of unsaved local state. Client output is provisional and
-may be incomplete for features that require server-side document context.
+The server renderer is authoritative for publication output and for previews of
+persisted drafts. The initial editor does not define a separate renderer for
+unsaved browser form state; preview follows an explicit persisted-draft
+operation.
 
 ```mermaid
 flowchart LR
     canonical["Published or persisted draft"] --> server["Server production renderer"]
-    local["Local draft snapshot"] --> client["Client-side preview renderer"]
-    server --> public["Published HTML / authoritative preview"]
-    client --> provisional["Provisional local preview"]
+    server --> public["Published HTML / private authoritative preview"]
 ```
 
 ---

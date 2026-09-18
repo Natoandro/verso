@@ -13,8 +13,8 @@ its only subtasks; keep them focused and normally limit them to four.
 `[ ]` means not implemented; change it to `[x]` only when the stated outcome
 and every nested division are complete. Public rendering comes before
 authentication because it is
-anonymous and read-only; earlier editor work remains browser-local and
-creates no unauthenticated server mutation path. Rendering slices construct
+anonymous and read-only; editorial mutations remain behind the authenticated
+server boundary. Rendering slices construct
 any needed published fixtures through application services for integration
 tests; they do not introduce a public or unauthenticated publishing
 interface.
@@ -243,89 +243,63 @@ migration task.
     repeated saves, stale-save rejection, rollback on failure, and the absence
     of any public or unauthenticated mutation route.
 
-## 2. Web editor, local preview, and local recovery
+## 2. Web editor and server-rendered preview
 
-This section is intentionally browser-local. It has no endpoint that accepts
-unsaved document content and no server mutation path before `IAM-003`. The
-later `ED-004` slice is the protected frontend integration that follows the
-backend authorization boundary delivered by `IAM-003`.
+The initial editor is online-first and server-transactional. HTMX is the
+intended browser interaction layer; the server owns the working draft and
+returns HTML fragments after application-service operations. Browser-local
+offline editing, local draft recovery, and a separate client-side renderer are
+deferred alternatives documented in
+[`docs/design/editor-approaches.md`](design/editor-approaches.md).
 
-- [x] **ED-001 — Compose an unsaved structured document**
+- [ ] **ED-001 — Render the protected section editor**
 
-  A browser can compose an unsaved structured document with text and
-  image-section placeholders, including insertion, edit, reorder, duplication,
-  and deletion. The HTMX-oriented shell uses a Svelte + TypeScript editor
-  island and the shared client document model.
-
-  - [x] **Web/editor:** Build the browser-local editor shell and controls for
-    manipulating sections without sending unsaved content to the server; keep
-    Svelte limited to a stable editor mount root.
-  - [x] **Client document model:** Define the shared typed in-memory
-    representation and deterministic operations used by the editor and preview.
-  - [x] **UI tests:** Verify section lifecycle operations, ordering, placeholder
-    behavior, and the absence of an unauthenticated mutation endpoint.
-
-- [x] **ED-002 — Render a safe local preview**
-
-  The editor renders validated unsaved sections and displayed metadata inline
-  in explicitly provisional local preview mode. Each item can return to edit
-  mode through an explicit action. Its Markdown subset disables raw HTML,
-  escapes output, validates URLs, and prevents stale asynchronous work from
-  replacing a newer render.
-
-  - [x] **Web/editor:** Add clearly provisional inline preview modes for
-    sections and displayed metadata, separate from persisted and published
-    rendering paths.
-  - [x] **Client renderer:** Implement the restricted Markdown subset, escaping,
-    safe-link handling, and stale-render cancellation or sequencing.
-  - [x] **Security tests:** Cover raw HTML, unsafe URLs, malformed input, and
-    out-of-order asynchronous preview results.
-
-- [x] **ED-003 — Recover browser-local drafts**
-
-  Browser-local recovery stores namespaced structured snapshots in IndexedDB
-  (with a limited fallback), gives new unsaved documents a stable
-  draft-scoped editor URL, automatically resumes the matching local draft on
-  reload, and reports storage failures without blocking editing. Snapshots are
-  isolated by site and owner scope and are never transmitted as preview data.
-  Recovery that is not tied to the current draft URL, crosses an identity
-  boundary, or conflicts with a persisted server draft requires an explicit
-  restore, merge, or discard choice.
-
-  - [x] **Web/editor:** Add stable draft-scoped editor URLs for new local
-    drafts, auto-resume the matching local snapshot on reload, and add recovery
-    prompts plus explicit restore/discard controls for ambiguous or conflicting
-    snapshots without conflating local snapshots with saved drafts.
-  - [x] **Browser storage:** Implement namespaced IndexedDB persistence and a
-    bounded fallback keyed by site namespace, owner scope, and stable local
-    draft ID.
-  - [x] **UI/security tests:** Verify route-scoped automatic reload recovery,
-    consent-gated restoration for non-current or conflicting snapshots,
-    storage-error handling, isolation, and that snapshots never become preview
-    requests.
-
-- [ ] **ED-004 — Wire the protected admin document workflow**
-
-  After `IAM-003` exposes the protected editorial boundary, the browser can
-  list authorized documents under `/admin`, create or open a draft, enter the
-  editor, save the complete document, and explicitly reconcile browser-local
-  recovery with the persisted server draft. The client tracks the server
-  document/version/revision identities and presents stale-save conflicts
-  without overwriting newer work. Svelte remains an editor island; it does not
-  implement authorization or bypass the shared application services.
+  After `IAM-003` exposes the protected editorial boundary, authorized editors
+  can list documents under `/admin`, create or open a draft, and edit its
+  ordered typed sections through server-rendered HTML and HTMX requests.
 
   - [ ] **Admin/document UI:** Add the protected document index, create/open
-    actions, editor links, loading states, empty states, and save/recovery
-    controls.
-  - [ ] **Persistence transport:** Implement the typed client transport for
-    the protected list, create, load, and save operations, including server
-    identity and expected-revision fields.
-  - [ ] **Editor integration:** Hydrate the existing reducer from persisted
-    drafts, send explicit saves, update revision state only after success, and
-    offer restore, merge, or discard choices for local recovery conflicts.
-  - [ ] **UI/integration tests:** Verify authorized data rendering through the
-    protected boundary, save success, stale conflict handling, recovery
-    reconciliation, and that public routes never receive draft data.
+    actions, editor links, loading states, and empty states.
+  - [ ] **Section forms:** Render insertion, editing, reordering, duplication,
+    deletion, and validation controls as ordinary forms and HTMX fragments.
+  - [ ] **Authorization boundary:** Ensure draft content and mutations remain
+    behind the authenticated application boundary.
+
+- [ ] **ED-002 — Persist section mutations with concurrency checks**
+
+  HTMX mutations call the shared application services, validate payloads,
+  enforce expected revisions, persist atomically, and return the updated
+  section or document fragment. Stale requests fail without overwriting newer
+  work.
+
+  - [ ] **Persistence transport:** Submit typed section operations with the
+    document, version, and expected-revision identities.
+  - [ ] **Application integration:** Route every mutation through validation,
+    authorization, persistence, and cache invalidation services.
+  - [ ] **UI/integration tests:** Verify successful mutations, validation
+    failures, stale conflicts, fragment replacement, and public-route
+    isolation.
+
+- [ ] **ED-003 — Preview persisted drafts**
+
+  An authorized editor can request a private preview of a persisted draft. The
+  preview uses the same server renderer, safe-content rules, templates, and
+  asset resolution as publication without entering the public cache or
+  changing canonical state.
+
+  - [ ] **Preview endpoint:** Authorize the draft, render through the
+    publication-equivalent path, and return private no-store responses.
+  - [ ] **Failure behavior:** Keep canonical content unchanged when validation
+    or rendering fails.
+  - [ ] **Rendering tests:** Verify output parity, authorization, cache
+    isolation, safe links, and draft/public route separation.
+
+- [ ] **ED-004 — Defer browser-local editing alternatives**
+
+  Do not add offline editing, browser-local draft recovery, or a separate
+  client-side Markdown renderer to the initial implementation. Reconsider only
+  when actual editorial use demonstrates that server-transactional HTMX
+  editing is insufficient.
 
 ## 3. Web routing and static delivery
 
@@ -737,7 +711,7 @@ backend authorization boundary delivered by `IAM-003`.
   - [ ] **Auth:** Apply token scopes and document capabilities consistently to
     every operation.
   - [ ] **Integration tests:** Verify permission boundaries, validation errors,
-    stale conflicts, and parity with web-editor mutations.
+    stale conflicts, and parity with web editor mutations.
 
 - [ ] **MCP-003 — Expose semantic editorial operations**
 

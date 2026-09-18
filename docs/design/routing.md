@@ -144,8 +144,6 @@ minimal conceptual declaration is:
 ```zig
 const admin_routes = web.routes(.{
     .{ "GET /admin/editor", editor_page },
-    .{ "GET /admin/editor.css", editor_stylesheet },
-    .{ "GET /admin/editor.js", editor_javascript },
 });
 ```
 
@@ -190,8 +188,6 @@ static handler forms are:
 `EmbeddedStatic` serves a compile-time byte slice with an explicit content type
 and response policy. It is appropriate for:
 
-- the bundled Svelte editor JavaScript;
-- the bundled editor stylesheet;
 - built-in HTML shells;
 - other binary or text assets shipped inside the executable.
 

@@ -48,7 +48,6 @@ pub fn add(
     target: std.Build.ResolvedTarget,
     modules: project.ProjectModules,
     app: application.Application,
-    frontend_step: *std.Build.Step,
 ) void {
     const test_step = b.step("test", "Run tests");
     const mod_tests = b.addTest(.{ .root_module = modules.verso });
@@ -69,12 +68,6 @@ pub fn add(
         compile_test.expect_errors = .{ .contains = failure.message };
         test_step.dependOn(&compile_test.step);
     }
-
-    test_step.dependOn(frontend_step);
-    const frontend_check = b.addSystemCommand(&.{ "corepack", "pnpm@10.15.0", "--dir", b.pathFromRoot("web-editor"), "check" });
-    test_step.dependOn(&frontend_check.step);
-    const frontend_tests = b.addSystemCommand(&.{ "corepack", "pnpm@10.15.0", "--dir", b.pathFromRoot("web-editor"), "test" });
-    test_step.dependOn(&frontend_tests.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");
     const verify_command = b.addSystemCommand(&.{ "sh", b.pathFromRoot("test/bootstrap.sh") });

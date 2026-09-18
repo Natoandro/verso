@@ -23,9 +23,8 @@ assuming those exist.
 - Route all mutations through application/domain services. Web handlers, MCP,
   and future interfaces must not manipulate SQLite directly or implement
   separate authorization logic.
-- Preserve server-side rendering as the publication authority. Client-side
-  editor previews may provide immediate feedback and local recovery, but must
-  remain compatible with the server renderer and fall back to it when needed.
+- Preserve server-side rendering as the publication and editorial preview
+  authority.
 - Treat preview, save, and publish as separate operations. Previewing unsaved
   state must not persist it.
 - Use optimistic concurrency for editorial mutations and fail on stale
@@ -66,31 +65,16 @@ assuming those exist.
 
 ## Browser editor implementation
 
-- Keep the application HTMX-oriented. Svelte is an editor-only island mounted
-  below the stable `data-editor-mount` root; it is not an SPA framework for
-  public pages, and HTMX must not swap that subtree.
-- Use Svelte 5 runes in `.svelte` components: `$props` for component inputs,
-  `$state` for local reactive state, `$derived` for computed values, and
-  `$effect` for browser effects. Do not introduce legacy `export let`, `$:`
-  reactive statements, legacy event directives, or deprecated module-script
-  syntax.
-- Keep document operations, safe local rendering, stale-preview protection,
-  and the explicit editor reducer in ordinary independently testable
-  TypeScript modules. Components dispatch reducer actions instead of mutating
-  canonical data or implementing parallel state transitions.
-- Use keyed section iteration by stable section ID. Svelte raw HTML rendering
-  is permitted only for output returned by the safe local renderer; raw editor
-  input must never be inserted into the DOM as markup.
-- The browser-local editor remains noncanonical: local previews and future
-  recovery snapshots must not send unsaved document content to the server or
-  mutate SQLite. The server renderer remains authoritative.
-- Build the editor with the tracked pnpm lockfile and the Zig-managed Node
-  build step. `build.zig` should recursively discover files under the frontend
-  source/test directories as cache inputs instead of maintaining a per-file
-  list; keep build metadata such as the manifest, lockfile, and Vite config
-  explicitly tracked. Generated bundles belong in Zig's cache output
-  directory, never in `src/` or the repository worktree; the released binary
-  embeds them and must not require Node at runtime.
+- Keep the application HTMX-oriented. The editor is server-rendered and
+  section-transactional; HTMX swaps responses returned by the application
+  services.
+- Keep document operations, validation, authorization, optimistic concurrency,
+  and preview rendering on the server. HTMX must not implement a second
+  persistence or authorization path.
+- Use stable section IDs and explicit forms/actions for insertion, editing,
+  reordering, duplication, deletion, and persisted-draft preview.
+- Do not introduce browser-local draft recovery, offline editing, or a separate
+  client-side Markdown renderer into the initial editor.
 
 ## Expected layout
 

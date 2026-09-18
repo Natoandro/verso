@@ -28,10 +28,9 @@ The initial implementation focuses on:
 * an online web editor;
 * AI-assisted editing through a remote MCP server;
 * SQLite as the sole database backend;
-* HTMX 4 for the editorial interface, with a Svelte + TypeScript editor-only
-  island;
-* client-side live previews with local draft recovery, plus explicit
-  server-rendered previews of persisted drafts;
+* HTMX 4 for the editorial interface, with server-transactional section
+  editing;
+* server-rendered previews of persisted drafts;
 * filesystem caching of published pages;
 * filesystem storage for large assets, with S3-compatible storage deferred to a
   later version;
@@ -78,12 +77,10 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 - [Compile-time markup templates](design/template-engine.md) — typed,
   developer-authored Zig templates, comptime validation, components, and
   writer-based HTML rendering.
-- [Web editor and preview](design/editor.md) — HTMX-oriented editing with a
-  Svelte editor island, client-side live previews, persisted-draft server
-  previews, and local draft recovery.
-- [Editor architecture alternatives](design/editor-approaches.md) — comparison
-  of a pure HTMX, server-transactional editor and the offline-capable Svelte
-  editor island.
+- [Web editor and preview](design/editor.md) — HTMX-oriented section editing
+  and server-rendered previews of persisted drafts.
+- [Editor architecture alternatives](design/editor-approaches.md) — deferred
+  editor alternatives and the rationale for the current HTMX direction.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,
   MCP tools, and optimistic concurrency.
 - [Operations and boundaries](design/operations.md) — publication workflow,

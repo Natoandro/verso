@@ -38,7 +38,7 @@ The initial target stack is:
 Language:              Zig
 Database:              SQLite
 Public rendering:      server-side HTML
-Editorial frontend:    HTMX 4 + Svelte/TypeScript editor island
+Editorial frontend:    HTMX 4 server-rendered section editor
 Text content:          Markdown
 Asset storage:         filesystem initially
 Later asset store:     S3-compatible storage / RustFS
@@ -255,18 +255,23 @@ flowchart TB
 
 ---
 
-### Live client preview
+### Draft editor mutation
 
 ```mermaid
 flowchart TB
-    state["Browser unsaved state"] --> renderer["Client-side renderer"]
-    renderer --> inline["Inline local section previews"]
-    renderer -. no mutation .-> sqlite[("SQLite")]
+    browser["Editor browser"] --> htmx["HTMX request"]
+    htmx --> verso["Verso"]
+    verso --> authenticate["Authenticate"]
+    authenticate --> authorize["Authorize"]
+    authorize --> application["Application service"]
+    application --> sqlite[("SQLite")]
+    sqlite --> response["Updated HTML fragment"]
+    response --> browser
 ```
 
-An explicit server preview is available only for a persisted draft. It follows
-the same server rendering path as publication after editorial authorization,
-but returns a private, noncached response and never changes the draft.
+An explicit server preview is available for a persisted draft. It follows the
+same server rendering path as publication after editorial authorization, but
+returns a private, noncached response and never changes the draft.
 
 ---
 

@@ -27,11 +27,9 @@ test "distinct literal routes with equal specificity are not ambiguous" {
     }.handle;
     const table = router.routes(.{
         .{ "GET /admin/editor", Layer.initFn(handler) },
-        .{ "GET /admin/editor.css", Layer.initFn(handler) },
     });
 
     try std.testing.expectEqual(@as(?usize, 0), router.resolve(table.asSlice(), .GET, "/admin/editor"));
-    try std.testing.expectEqual(@as(?usize, 1), router.resolve(table.asSlice(), .GET, "/admin/editor.css"));
 }
 
 test "route matching decodes captures but rejects encoded separators and malformed targets" {

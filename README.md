@@ -27,10 +27,8 @@ Verso is designed as a small, single-process application with:
 - Markdown text sections;
 - filesystem assets initially, with possible S3-compatible storage later;
 - filesystem caching for published HTML;
-- an HTMX 4-oriented web editor with a Svelte + TypeScript island limited to
-  the browser-local editing surface;
-- client-side previews with local draft autosave and explicit server-rendered,
-  publication-equivalent previews of persisted drafts;
+- an HTMX 4-oriented, server-transactional web editor for ordered sections;
+- server-rendered, publication-equivalent previews of persisted drafts;
 - immutable, explicitly numbered document versions with read-only archives;
 - planned, versioned JavaScript/WASM interactive modules, disabled until their
   security design is specified;
@@ -56,12 +54,10 @@ lives in SQLite and binary assets live in the configured asset store.
 Only the current published version may be the source of a next-version draft;
 unpublished drafts cannot be forked in the initial design.
 
-Rendered HTML is derived, disposable state. Local autosaved drafts are
-recoverable but noncanonical browser state, while current unsaved changes and
-client-side previews are ephemeral runtime state. This separation is
-central to the design: cache failures must not damage publications, local
-recovery must not silently save drafts to Verso, and publishing must be an
-explicit validated application operation.
+Rendered HTML is derived, disposable state, while draft and published content
+remain canonical server state. This separation is central to the design: cache
+failures must not damage publications, and publishing must be an explicit
+validated application operation.
 
 ## Intended deployment
 
@@ -147,10 +143,8 @@ Commands shown above may still expose partial behavior until their corresponding
 plan entries are complete and verified. Run `zig build test` for unit tests and
 `zig build verify` for the executable bootstrap flows.
 
-The editor frontend is bundled automatically by `zig build` using the locked
-dependencies in `web-editor/pnpm-lock.yaml`. Install them once with
-`corepack pnpm@10.15.0 install --dir web-editor`; the released Zig binary embeds the
-generated assets and does not require Node at runtime.
+The editor is served from the server-rendered web interface and does not
+require a separate frontend build or Node.js at runtime.
 
 ## Scope
 

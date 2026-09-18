@@ -21,7 +21,3 @@ data/
 .DS_Store
 *.swp
 *.swo
-
-# Frontend dependencies and local standalone build output.
-web-editor/node_modules/
-web-editor/dist/

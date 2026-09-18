@@ -10,7 +10,6 @@ pub fn add(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    editor_assets: *std.Build.Module,
 ) ProjectModules {
     const toml = b.dependency("toml", .{
         .target = target,
@@ -40,7 +39,6 @@ pub fn add(
             .{ .name = "sqlite", .module = sqlite },
             .{ .name = "embedded_migrations", .module = embedded_migrations },
             .{ .name = "tmpl", .module = tmpl },
-            .{ .name = "editor_assets", .module = editor_assets },
         },
     });
 

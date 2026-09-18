@@ -46,9 +46,6 @@ pub const text =
     \\math = true
     \\interactive_sections = false
     \\
-    \\[editor]
-    \\local_preview_debounce_ms = 500
-    \\
     \\[mcp]
     \\enabled = true
     \\allow_publish = false
