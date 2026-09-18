@@ -29,6 +29,15 @@ pub const EmbeddedStatic = struct {
         };
     }
 
+    /// Creates a stateless handler for comptime-embedded route declarations.
+    pub fn handler(
+        comptime content: []const u8,
+        comptime content_type: []const u8,
+        comptime policy: ResponsePolicy,
+    ) Layer {
+        return Layer.initFn(comptimeHandler(content, content_type, policy));
+    }
+
     pub fn layer(self: *@This()) Layer {
         return Layer.init(self);
     }
@@ -37,6 +46,18 @@ pub const EmbeddedStatic = struct {
         return respond(request, self.content, self.content_type, self.policy);
     }
 };
+
+fn comptimeHandler(
+    comptime content: []const u8,
+    comptime content_type: []const u8,
+    comptime policy: ResponsePolicy,
+) *const fn (*RequestContext, Next) Error!void {
+    return struct {
+        fn handle(request: *RequestContext, _: Next) Error!void {
+            return respond(request, content, content_type, policy);
+        }
+    }.handle;
+}
 
 pub const FilesystemStaticOptions = struct {
     path_parameter: []const u8 = "path",

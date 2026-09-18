@@ -312,17 +312,17 @@ unsaved document content and no server mutation path before `IAM-003`.
 
 - [ ] **WEB-004 — Migrate editor route declarations**
 
-  Existing editor shell, stylesheet, and bundle routes currently use a
-  temporary runtime route table. Migrate them to the shared comptime route and
-  embedded static-handler APIs. Public, historical, index, auth, preview, and
-  MCP features register their own routes in their respective feature tickets;
-  this slice does not take ownership of those application-specific routes.
+  The editor shell, stylesheet, and bundle routes now use the shared comptime
+  route and embedded static-handler APIs. Public, historical, index, auth,
+  preview, and MCP features register their own routes in their respective
+  feature tickets; this slice does not take ownership of those
+  application-specific routes.
 
-  - [ ] **Editor integration:** Replace temporary editor route declarations
+  - [x] **Editor integration:** Replace temporary editor route declarations
     with comptime patterns and embedded static handlers.
   - [ ] **Composition integration:** Mount the editor layer through the shared
     pipeline while preserving method fallthrough and protected-boundary rules.
-  - [ ] **Static integration:** Verify embedded HTML, stylesheet, and bundle
+  - [x] **Static integration:** Verify embedded HTML, stylesheet, and bundle
     responses use explicit content types and cache policy.
   - [ ] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.

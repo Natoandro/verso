@@ -122,7 +122,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .logger = &logger,
     };
     var status_handler = StatusHandler{};
-    var router = web.Router.init(web.EditorHandler.routes());
+    var router = web.EditorHandler.router();
     var request_logging = web.RequestLoggingLayer{};
     const layers = [_]web.Layer{ .init(&request_logging), .init(&router), .init(&status_handler) };
     const pipeline = web.Pipeline.init(&layers);
