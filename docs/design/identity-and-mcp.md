@@ -161,19 +161,20 @@ and OAuth redirect construction must not be derived from an arbitrary request
 
 The initial web login boundary does not accept identity assertions from a
 reverse proxy. A reverse proxy may terminate TLS and provide trusted forwarded
-origin metadata, but it never authenticates a user for Verso. Web login remains
-unavailable until Verso implements native providers. The local provider stores
-only a memory-hard password hash and requires generic credential failures,
-failure rate limiting, session rotation after login, and authenticated password
-change/recovery flows.
+origin metadata, but it never authenticates a user for Verso. The local
+provider stores only a memory-hard password hash and requires generic
+credential failures, failure rate limiting, session rotation after login, and
+authenticated password change/recovery flows. Recovery-token delivery is left
+to a future configured channel; the application does not expose tokens through
+the generic web response.
 
 Verso's OIDC integration is also implemented inside Verso rather than
 delegated to an authentication gateway. It uses the authorization-code flow with PKCE,
 exact redirect URI validation, state and nonce checks, issuer and audience
 validation, signed discovery/JWKS verification, and explicit account linking.
-Both providers resolve to the same local user and session services. Once
-enabled, login will establish a host-only session cookie and a readable CSRF
-cookie, while logout will be POST-only and require the session's CSRF token.
+Both providers resolve to the same local user and session services. Login
+establishes a host-only session cookie and a readable CSRF cookie, while logout
+is POST-only and requires the session's CSRF token.
 
 The transport-neutral session boundary stores only SHA-256 hashes of the opaque
 session and CSRF secrets. Owner bootstrap is a one-time application operation:

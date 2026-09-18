@@ -86,13 +86,13 @@ run_server() {
     [ "$response" = "Verso is running" ] || fail "unexpected HTTP response: $response"
 
     login_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/login") || fail "login page was not served"
-    printf '%s\n' "$login_response" | grep -F 'not configured yet' >/dev/null || fail "login page was incomplete"
+    printf '%s\n' "$login_response" | grep -F 'name="login"' >/dev/null || fail "login page was incomplete"
     editor_headers=$(curl --silent --dump-header - --output /dev/null "http://127.0.0.1:$port/admin/editor") || fail "protected editor request failed"
     printf '%s\n' "$editor_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "editor route was not protected"
     printf '%s\n' "$editor_headers" | grep -F 'location: /admin/login' >/dev/null || fail "editor did not redirect to login"
     login_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
         -H "Origin: http://127.0.0.1:$port" -X POST "http://127.0.0.1:$port/admin/login")
-    [ "$login_status" = "501" ] || fail "unconfigured login did not fail closed"
+    [ "$login_status" = "401" ] || fail "invalid local login did not fail generically"
     editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
     [ "$editor_post_status" = "403" ] || fail "editor method did not enforce origin protection"
 

@@ -1,7 +1,9 @@
 const std = @import("std");
 const auth_crypto = @import("../auth/crypto.zig");
 const auth_security = @import("../auth/security.zig");
+const application_identity = @import("../application/identity.zig");
 const context = @import("context.zig");
+const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 
@@ -49,6 +51,12 @@ const routes_table = route.routes(.{
     .{ "GET /admin/login", getLogin },
     .{ "POST /admin/login", postLogin },
     .{ "POST /admin/logout", postLogout },
+    .{ "GET /admin/password", getPassword },
+    .{ "POST /admin/password", postPassword },
+    .{ "GET /admin/recover", getRecovery },
+    .{ "POST /admin/recover", postRecovery },
+    .{ "GET /admin/recover/complete", getRecoveryComplete },
+    .{ "POST /admin/recover/complete", postRecoveryComplete },
 });
 
 fn getLogin(request: *RequestContext, _: Next) Error!void {
@@ -77,7 +85,21 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
             };
         } else |_| {}
     }
-    return respondText(request, "Web authentication is not configured\n", .not_implemented);
+    var values = form.read(request) catch {
+        return respondText(request, "Invalid credentials\n", .unauthorized);
+    };
+    defer values.deinit(request.server.allocator);
+    const login = values.login orelse return respondText(request, "Invalid credentials\n", .unauthorized);
+    const password = values.password orelse return respondText(request, "Invalid credentials\n", .unauthorized);
+    const credentials = request.server.identity_service.startLocalSession(
+        login,
+        password,
+        request.remote_address,
+    ) catch |login_error| switch (login_error) {
+        error.InvalidCredentials => return respondText(request, "Invalid credentials\n", .unauthorized),
+        else => return respondText(request, "Authentication failed\n", .internal_server_error),
+    };
+    return establishSession(request, credentials, "/admin/editor");
 }
 
 fn postLogout(request: *RequestContext, _: Next) Error!void {
@@ -94,6 +116,119 @@ fn postLogout(request: *RequestContext, _: Next) Error!void {
         return respondText(request, "Logout failed\n", .internal_server_error);
     };
     return clearSession(request);
+}
+
+fn getPassword(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    const token = cookieValue(request, session_cookie_name) orelse return redirectToLogin(request);
+    _ = request.server.identity_service.authenticate(token) catch return redirectToLogin(request);
+    const csrf_token = cookieValue(request, csrf_cookie_name) orelse
+        return respondText(request, "CSRF validation failed\n", .forbidden);
+    var html_buffer: [4096]u8 = undefined;
+    const html = try std.fmt.bufPrint(&html_buffer,
+        \\<!doctype html>
+        \\<html lang="en"><head><meta charset="utf-8"><title>Change password</title></head>
+        \\<body><main><h1>Change password</h1>
+        \\<form method="post" action="/admin/password">
+        \\<input type="hidden" name="csrf_token" value="{s}">
+        \\<label>Current password <input type="password" name="current_password" autocomplete="current-password" required></label>
+        \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
+        \\<button type="submit">Change password</button></form>
+        \\</main></body></html>
+    , .{csrf_token});
+    return respond(request, html, "text/html; charset=utf-8", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .ok);
+}
+
+fn postPassword(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    const token = cookieValue(request, session_cookie_name) orelse
+        return respondText(request, "Authentication required\n", .unauthorized);
+    _ = request.server.identity_service.authenticate(token) catch
+        return respondText(request, "Authentication required\n", .unauthorized);
+    var values = form.read(request) catch {
+        return respondText(request, "Invalid password\n", .bad_request);
+    };
+    defer values.deinit(request.server.allocator);
+    if (!try requireCsrf(request, token, values.csrf_token)) return;
+    const current = values.current_password orelse return respondText(request, "Invalid password\n", .bad_request);
+    const new_password = values.new_password orelse return respondText(request, "Invalid password\n", .bad_request);
+    const credentials = request.server.identity_service.changePassword(token, current, new_password) catch |change_error| switch (change_error) {
+        error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid password\n", .unauthorized),
+        else => return respondText(request, "Password change failed\n", .internal_server_error),
+    };
+    return establishSession(request, credentials, "/admin/editor");
+}
+
+fn getRecovery(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    return respond(request, recovery_html, "text/html; charset=utf-8", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .ok);
+}
+
+fn postRecovery(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    var values = form.read(request) catch {
+        return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
+    };
+    defer values.deinit(request.server.allocator);
+    if (values.login) |login| {
+        _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch {};
+    }
+    return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
+}
+
+fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    return respond(request, recovery_complete_html, "text/html; charset=utf-8", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .ok);
+}
+
+fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
+    if (!try checkRequestOrigin(request)) return;
+    var values = form.read(request) catch {
+        return respondText(request, "Invalid recovery request\n", .unauthorized);
+    };
+    defer values.deinit(request.server.allocator);
+    const reset_token = values.token orelse return respondText(request, "Invalid recovery request\n", .unauthorized);
+    const new_password = values.new_password orelse return respondText(request, "Invalid recovery request\n", .unauthorized);
+    const credentials = request.server.identity_service.completePasswordReset(reset_token, new_password) catch |reset_error| switch (reset_error) {
+        error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid recovery request\n", .unauthorized),
+        else => return respondText(request, "Recovery failed\n", .internal_server_error),
+    };
+    return establishSession(request, credentials, "/admin/editor");
+}
+
+fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
+    const csrf = headerValue(request, "x-csrf-token") orelse form_token orelse {
+        try respondText(request, "CSRF validation failed\n", .forbidden);
+        return false;
+    };
+    request.server.identity_service.validateCsrf(token, csrf) catch {
+        try respondText(request, "CSRF validation failed\n", .forbidden);
+        return false;
+    };
+    return true;
+}
+
+fn establishSession(
+    request: *RequestContext,
+    credentials: application_identity.SessionCredentials,
+    location: []const u8,
+) Error!void {
+    var session_cookie_buffer: [192]u8 = undefined;
+    var csrf_cookie_buffer: [192]u8 = undefined;
+    const session_cookie = try formatCookie(&session_cookie_buffer, session_cookie_name, &credentials.token, true);
+    const csrf_cookie = try formatCookie(&csrf_cookie_buffer, csrf_cookie_name, &credentials.csrf_token, false);
+    return respond(request, &.{}, "text/plain; charset=utf-8", &.{
+        .{ .name = "location", .value = location },
+        .{ .name = "set-cookie", .value = session_cookie },
+        .{ .name = "set-cookie", .value = csrf_cookie },
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .see_other);
 }
 
 fn checkRequestOrigin(request: *RequestContext) !bool {
@@ -222,8 +357,32 @@ const login_html =
     \\<!doctype html>
     \\<html lang="en"><head><meta charset="utf-8"><title>Sign in</title></head>
     \\<body><main><h1>Sign in</h1>
-    \\<p>Web authentication is not configured yet.</p>
-    \\<form method="post" action="/admin/login"><button type="submit">Continue</button></form>
+    \\<form method="post" action="/admin/login">
+    \\<label>Login <input name="login" autocomplete="username" required></label>
+    \\<label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+    \\<button type="submit">Sign in</button></form>
+    \\<p><a href="/admin/recover">Forgot your password?</a></p>
+    \\</main></body></html>
+;
+
+const recovery_html =
+    \\<!doctype html>
+    \\<html lang="en"><head><meta charset="utf-8"><title>Password recovery</title></head>
+    \\<body><main><h1>Password recovery</h1>
+    \\<form method="post" action="/admin/recover">
+    \\<label>Login <input name="login" autocomplete="username" required></label>
+    \\<button type="submit">Request recovery</button></form>
+    \\</main></body></html>
+;
+
+const recovery_complete_html =
+    \\<!doctype html>
+    \\<html lang="en"><head><meta charset="utf-8"><title>Set a new password</title></head>
+    \\<body><main><h1>Set a new password</h1>
+    \\<form method="post" action="/admin/recover/complete">
+    \\<label>Recovery token <input name="token" autocomplete="one-time-code" required></label>
+    \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
+    \\<button type="submit">Set password</button></form>
     \\</main></body></html>
 ;
 

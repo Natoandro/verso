@@ -93,6 +93,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     var identity_store = @import("storage/identity.zig").Store.init(database_connection.sqliteHandle());
     var identity_service = application_identity.Service.initForInterface(
         io,
+        allocator,
         &identity_store,
         .web,
     );

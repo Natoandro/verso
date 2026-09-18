@@ -424,8 +424,8 @@ unsaved document content and no server mutation path before `IAM-003`.
     handlers do not implement their own authentication decisions.
   - [x] **Web/admin boundary:** Mount protected editorial routes, enforce
     origin and CSRF checks, provide secure cookie handling, and fail closed
-    while no native provider is configured.
-  - [ ] **IAM-001a — Add local password authentication:** Add a native local
+    while authentication is unavailable or misconfigured.
+  - [x] **IAM-001a — Add local password authentication:** Add a native local
     login path that stores only a memory-hard password hash, bootstraps the
     initial owner password, returns generic credential failures, rate-limits
     repeated failures, rotates sessions after login, and provides authenticated
@@ -439,9 +439,9 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [ ] **Security tests:** Verify the complete native-auth session flow, CSRF
     failures, origin handling, cookie flags, and provider behavior.
 
-  Transport-neutral session and application services are complete. Web login is
-  intentionally deferred until the native providers below are implemented;
-  proxy identity headers are not accepted.
+  Transport-neutral session and application services are complete. Local web
+  login is implemented; OIDC remains deferred, and proxy identity headers are
+  not accepted.
 
 - [ ] **IAM-002 — Manage authors and scoped assignments**
 

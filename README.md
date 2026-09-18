@@ -80,8 +80,16 @@ The simplest first-run workflow is:
 
 ```bash
 verso migrate up
+VERSO_BOOTSTRAP_PASSWORD='use-a-secret-manager' verso auth bootstrap-owner \
+  --login owner@example.test \
+  --subject local-owner \
+  --display-name 'Site Owner'
 verso serve
 ```
+
+`auth bootstrap-owner` is one-time and reads the initial password from
+`VERSO_BOOTSTRAP_PASSWORD`; recovery-token delivery is intentionally deferred
+until an email or other configured delivery channel exists.
 
 ### Docker
 

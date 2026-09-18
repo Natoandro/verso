@@ -15,6 +15,7 @@ pub const domain = struct {
 pub const storage = struct {
     pub const documents = @import("storage/documents.zig");
     pub const identity = @import("storage/identity.zig");
+    pub const local_auth = @import("storage/local_auth.zig");
     pub const sections = @import("storage/sections.zig");
     pub const migration_directory = @import("storage/migration_directory.zig");
     pub const migrations = @import("storage/migrations.zig");
@@ -24,6 +25,7 @@ pub const storage = struct {
 test {
     _ = @import("auth/crypto.zig");
     _ = @import("auth/identity.zig");
+    _ = @import("auth/password.zig");
     _ = @import("auth/security.zig");
     _ = @import("domain/document.zig");
     _ = @import("domain/identity.zig");
@@ -32,6 +34,7 @@ test {
     _ = @import("application/identity.zig");
     _ = @import("storage/documents.zig");
     _ = @import("storage/identity.zig");
+    _ = @import("storage/local_auth.zig");
     _ = @import("storage/sections.zig");
     _ = @import("logging_test.zig");
     _ = @import("template/tests.zig");
@@ -42,6 +45,7 @@ pub const web = @import("web.zig");
 
 test {
     _ = @import("web.zig");
+    _ = @import("web/form.zig");
     _ = @import("web/static.zig");
     _ = @import("web/router_test.zig");
 }

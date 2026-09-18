@@ -1,5 +1,6 @@
 const std = @import("std");
 const clap = @import("clap");
+const auth_command = @import("commands/auth.zig");
 const config_command = @import("commands/config.zig");
 const document_command = @import("commands/document.zig");
 const migrate_command = @import("commands/migrate.zig");
@@ -10,12 +11,13 @@ const Command = enum {
     config,
     document,
     migrate,
+    auth,
 };
 
 pub fn main(init: std.process.Init) !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help  Display this help and exit.
-        \\<command>    Command to run: serve, config, document, or migrate.
+        \\<command>    Command to run: serve, config, document, migrate, or auth.
         \\
     );
     const parsers = .{
@@ -45,6 +47,7 @@ pub fn main(init: std.process.Init) !void {
         .config => return config_command.run(init, &command_args),
         .document => return document_command.run(init, &command_args),
         .migrate => return migrate_command.run(init, &command_args),
+        .auth => return auth_command.run(init, &command_args),
         .serve => return serve_command.run(init, &command_args),
     }
 }

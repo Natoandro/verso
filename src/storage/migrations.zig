@@ -265,11 +265,11 @@ test "migration is recorded and repeatable" {
 
     const tables = try database.one(
         i64,
-        "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('documents', 'document_versions', 'sections', 'working_revisions', 'users', 'user_roles', 'assets', 'cache_invalidation_jobs', 'idempotency_results', 'audit_log', 'version_import_provenance')",
+        "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('documents', 'document_versions', 'sections', 'working_revisions', 'users', 'local_password_credentials', 'user_roles', 'assets', 'web_sessions', 'local_password_reset_tokens', 'local_login_rate_limits', 'cache_invalidation_jobs', 'idempotency_results', 'audit_log', 'version_import_provenance')",
         .{},
         .{},
     );
-    try std.testing.expectEqual(@as(?i64, 11), tables);
+    try std.testing.expectEqual(@as(?i64, 15), tables);
 }
 
 test "migration ledger rejects checksum drift" {

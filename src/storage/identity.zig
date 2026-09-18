@@ -70,6 +70,31 @@ pub const Store = struct {
         return self.database.getLastInsertRowID();
     }
 
+    pub fn rotateUserSession(
+        self: *Store,
+        user_id: i64,
+        token_hash: []const u8,
+        csrf_secret_hash: []const u8,
+    ) !i64 {
+        try self.database.execMulti("BEGIN IMMEDIATE;", .{});
+        errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
+        try self.database.exec(
+            "UPDATE web_sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE user_id = ? AND revoked_at IS NULL",
+            .{},
+            .{user_id},
+        );
+        try self.database.exec(
+            \\INSERT INTO web_sessions (token_hash, csrf_secret_hash, user_id, expires_at)
+            \\    VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+8 hours'))
+        ,
+            .{},
+            .{ token_hash, csrf_secret_hash, user_id },
+        );
+        const session_id = self.database.getLastInsertRowID();
+        try self.database.execMulti("COMMIT;", .{});
+        return session_id;
+    }
+
     pub fn activeSessionUserId(self: *Store, token_hash: []const u8) !?i64 {
         const user_id = try self.database.one(
             i64,
