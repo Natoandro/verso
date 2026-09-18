@@ -41,6 +41,21 @@ pub fn Template(comptime source: []const u8, comptime options: anytype) type {
                 try renderer.renderNodes(writer, parsed.nodes, parsed.count, EmptyComponents{}, context);
             }
         }
+
+        /// Collects the writer renderer's output for callers that need an
+        /// owned response body. This is deliberately a thin convenience
+        /// wrapper; templates still parse and validate at comptime and use
+        /// the same streaming renderer.
+        pub fn renderAlloc(
+            comptime self: @This(),
+            allocator: std.mem.Allocator,
+            context: anytype,
+        ) ![]u8 {
+            var output: std.Io.Writer.Allocating = .init(allocator);
+            defer output.deinit();
+            try self.render(&output.writer, context);
+            return output.toOwnedSlice();
+        }
     };
 }
 

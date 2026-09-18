@@ -26,6 +26,8 @@ export type LocalDraftSnapshot = {
   draftId: string;
   document: EditorDocument;
   serverDocumentId?: string;
+  serverVersionId?: string;
+  serverVersionNumber?: number;
   baseServerVersion?: number;
   workingRevision?: number;
   updatedAt: number;
@@ -79,6 +81,8 @@ function parseSnapshot(value: unknown): LocalDraftSnapshot | null {
     return section.kind === "image" && typeof section.asset === "string" && typeof section.alt === "string" && typeof section.caption === "string" && typeof section.display === "string";
   })) return null;
   if (candidate.serverDocumentId !== undefined && typeof candidate.serverDocumentId !== "string") return null;
+  if (candidate.serverVersionId !== undefined && typeof candidate.serverVersionId !== "string") return null;
+  if (candidate.serverVersionNumber !== undefined && typeof candidate.serverVersionNumber !== "number") return null;
   if (candidate.baseServerVersion !== undefined && typeof candidate.baseServerVersion !== "number") return null;
   if (candidate.workingRevision !== undefined && typeof candidate.workingRevision !== "number") return null;
   if (candidate.presentation !== undefined) {
@@ -320,6 +324,8 @@ export function makeSnapshot(scope: RecoveryScope, document: EditorDocument, upd
     draftId: document.clientDraftId,
     document,
     serverDocumentId: document.serverDocumentId,
+    serverVersionId: document.serverVersionId,
+    serverVersionNumber: document.serverVersionNumber,
     baseServerVersion: document.baseServerVersion,
     workingRevision: document.workingRevision,
     updatedAt,

@@ -4,11 +4,43 @@ const context = @import("context.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
+const tmpl = @import("tmpl");
 
-const editor_html = @embedFile("editor.html");
+const editor_template = tmpl.parse(@embedFile("editor.html"), .{});
 const editor_policy = static_content.ResponsePolicy{
     .status = .ok,
     .cache_control = "no-store",
+};
+
+const EditorPageContext = struct {
+    site_namespace: []const u8,
+    owner_scope: []const u8,
+};
+
+const EditorPage = struct {
+    fn handle(request: *context.RequestContext, _: layer.Next) anyerror!void {
+        var base_url_buffer: [1024]u8 = undefined;
+        const site_namespace = try request.server.config.effectiveBaseUrl(&base_url_buffer);
+        const content = try editor_template.renderAlloc(request.server.allocator, EditorPageContext{
+            .site_namespace = site_namespace,
+            // IAM-003 will replace this request-local placeholder with the
+            // authenticated owner scope before persisted recovery is exposed.
+            .owner_scope = "anonymous",
+        });
+        defer request.server.allocator.free(content);
+        request.request.respond(content, .{
+            .status = .ok,
+            .keep_alive = true,
+            .extra_headers = &.{
+                .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+                .{ .name = "cache-control", .value = "no-store" },
+            },
+        }) catch |response_error| {
+            if (response_error == error.Canceled) return error.Canceled;
+            return response_error;
+        };
+        request.response_status = 200;
+    }
 };
 
 pub const Handler = struct {
@@ -22,11 +54,7 @@ pub const Handler = struct {
 };
 
 const routes_table = route.routes(.{
-    .{ "GET /admin/editor", static_content.EmbeddedStatic.handler(
-        editor_html,
-        "text/html; charset=utf-8",
-        editor_policy,
-    ) },
+    .{ "GET /admin/editor", EditorPage.handle },
     .{ "GET /admin/editor.css", static_content.EmbeddedStatic.handler(
         editor_assets.css,
         "text/css; charset=utf-8",

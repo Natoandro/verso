@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- Stable island mount. HTMX must not swap this subtree. -->
-  <main data-editor-mount></main>
+  <main data-editor-mount data-site-namespace="{{ site_namespace }}" data-owner-scope="{{ owner_scope }}"></main>
   <script src="/admin/editor.js"></script>
 </body>
 </html>

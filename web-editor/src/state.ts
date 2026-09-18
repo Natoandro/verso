@@ -27,6 +27,8 @@ export type EditorState = {
 };
 
 export type EditorAction =
+  | { type: "hydrate-document"; document: EditorDocument }
+  | { type: "set-server-state"; serverDocumentId: string; serverVersionId: string; serverVersionNumber: number; workingRevision: number }
   | { type: "toggle-details" }
   | { type: "set-active-section"; id: string | null }
   | { type: "set-title-mode"; mode: TitleMode }
@@ -74,6 +76,21 @@ function invalidate(state: EditorState, id: string): EditorState {
 
 export function reduceEditorState(state: EditorState, action: EditorAction, idFactory: IdFactory): EditorState {
   switch (action.type) {
+    case "hydrate-document":
+      return createEditorState(action.document, idFactory);
+    case "set-server-state":
+      return {
+        ...state,
+        document: {
+          ...state.document,
+          serverDocumentId: action.serverDocumentId,
+          serverVersionId: action.serverVersionId,
+          serverVersionNumber: action.serverVersionNumber,
+          baseServerVersion: action.serverVersionNumber,
+          workingRevision: action.workingRevision,
+        },
+        status: "idle",
+      };
     case "toggle-details":
       return { ...state, detailsOpen: !state.detailsOpen };
     case "set-active-section":

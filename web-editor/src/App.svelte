@@ -10,6 +10,7 @@
   import { createBrowserRecoveryStore, makeSnapshot, type LocalDraftPresentation, type RecoveryScope } from "./recovery";
   import { classifyRecovery, mergeDocuments, type RecoveryCandidate } from "./recovery-policy";
   import { createEditorState, reduceEditorState, type EditorAction, type EditorState } from "./state";
+  import { createDocumentTransport, DocumentTransportError, type ServerDraft } from "./transport";
 
   let sequence = 0;
   const idFactory = () => {
@@ -17,6 +18,8 @@
     return `local-${Date.now().toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2)}`;
   };
   const editorMount = document.querySelector<HTMLElement>("[data-editor-mount]");
+  const transport = createDocumentTransport();
+  const documentId = new URL(window.location.href).searchParams.get("document");
   const scope: RecoveryScope = {
     siteNamespace: editorMount?.dataset.siteNamespace || window.location.origin,
     ownerScope: editorMount?.dataset.ownerScope || "anonymous",
@@ -33,8 +36,8 @@
     candidates: RecoveryCandidate[];
   };
 
-  const initialDraftId = readDraftId() || newDraftId();
-  if (!readDraftId()) ensureDraftScopedUrl(initialDraftId);
+  const initialDraftId = readDraftId() || (documentId ? `server-${documentId}` : newDraftId());
+  if (!documentId && !readDraftId()) ensureDraftScopedUrl(initialDraftId);
   const recoveryStore = createBrowserRecoveryStore();
   // The reducer returns a new root state for every action. Keep it raw so
   // Svelte does not proxy Maps/sections or leak reactive proxies into storage.
@@ -42,6 +45,8 @@
   // Recovery UI is also replaced immutably. Keeping it raw avoids a second
   // proxy graph being reconciled while the keyed section list changes.
   let recoveryUi: RecoveryUiState = $state.raw({ phase: "loading", message: "Checking browser recovery…", candidates: [] });
+  let persistence = $state.raw({ phase: documentId ? "loading" : "local", message: documentId ? "Loading saved draft…" : "Browser-local draft" });
+  let persistedDraft: ServerDraft | undefined;
   let editorTouched = false;
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
   let lastSnapshotTime = 0;
@@ -49,13 +54,14 @@
   const previewSchedulers = new Map<string, PreviewRenderer<EditorDocument["sections"][number]>>();
 
   let sectionCount = $derived(editorState.document.sections.length);
+  let saveLabel = $derived(persistence.phase === "saving" ? "Saving…" : persistence.phase === "conflict" ? "Resolve conflict" : "Save draft");
   let statusText = $derived(editorState.status === "validating"
     ? "Validating local section preview…"
     : editorState.status === "editing"
-      ? `Unsaved browser-local document · ${recoveryUi.message || "changes are held in memory"}`
+      ? `${editorState.document.serverDocumentId ? "Unsaved server draft changes" : "Unsaved browser-local document"} · ${recoveryUi.message || "changes are held in memory"}`
       : recoveryUi.phase === "loading"
         ? "Checking browser recovery…"
-        : `Unsaved browser-local document · ${sectionCount} section${sectionCount === 1 ? "" : "s"}${recoveryUi.message ? ` · ${recoveryUi.message}` : ""}`);
+        : `${editorState.document.serverDocumentId ? "Saved draft" : "Unsaved browser-local document"} · ${sectionCount} section${sectionCount === 1 ? "" : "s"}${recoveryUi.message ? ` · ${recoveryUi.message}` : ""}`);
 
   function syncPublicState(): void {
     window.__versoEditorState = editorState.document;
@@ -122,18 +128,93 @@
     try {
       const snapshots = await recoveryStore.list(scope);
       const matching = snapshots.find((snapshot) => snapshot.draftId === initialDraftId);
-      if (matching && !editorTouched) {
+      const matchingConflicts = matching && persistedDraft
+        ? classifyRecovery([matching], initialDraftId, {
+          document: persistedDraft.document,
+          serverDocumentId: persistedDraft.documentId,
+          serverVersionId: persistedDraft.versionId,
+          workingRevision: persistedDraft.workingRevision,
+        }).length > 0
+        : false;
+      if (matching && !editorTouched && !matchingConflicts) {
         lastSnapshotTime = matching.updatedAt;
         applySnapshot(matching.document, matching.presentation);
         updateRecoveryUi({ message: "matching local draft resumed" });
       } else if (matching) {
-        updateRecoveryUi({ message: "recovery ready; current edits preserved" });
+        updateRecoveryUi({ message: matchingConflicts ? "saved draft differs from browser recovery" : "recovery ready; current edits preserved" });
       } else {
         updateRecoveryUi({ message: "recovery ready" });
       }
-      updateRecoveryUi({ candidates: classifyRecovery(snapshots, initialDraftId), phase: "ready" });
+      updateRecoveryUi({
+        candidates: classifyRecovery(snapshots, initialDraftId, persistedDraft ? {
+          document: persistedDraft.document,
+          serverDocumentId: persistedDraft.documentId,
+          serverVersionId: persistedDraft.versionId,
+          workingRevision: persistedDraft.workingRevision,
+        } : undefined),
+        phase: "ready",
+      });
     } catch (error) {
       updateRecoveryUi({ phase: "unavailable", message: `recovery unavailable: ${error instanceof Error ? error.message : "storage failed"}; editing continues` });
+    }
+  }
+
+  function documentForServer(draft: ServerDraft): EditorDocument {
+    return { ...draft.document, clientDraftId: initialDraftId };
+  }
+
+  async function initializeEditor(): Promise<void> {
+    if (documentId) {
+      try {
+        const draft = await transport.loadDraft(documentId);
+        persistedDraft = draft;
+        editorState = reduceEditorState(editorState, { type: "hydrate-document", document: documentForServer(draft) }, idFactory);
+        editorTouched = false;
+        persistence = { phase: "ready", message: `Saved draft · revision ${draft.workingRevision}` };
+      } catch (error) {
+        persistence = { phase: "error", message: error instanceof Error ? error.message : "Saved draft could not be loaded" };
+      }
+    }
+    await initializeRecovery();
+  }
+
+  async function saveDraft(): Promise<void> {
+    if (!editorState.document.serverDocumentId) {
+      persistence = { phase: "local", message: "Create a saved draft from the document index first" };
+      return;
+    }
+    persistence = { phase: "saving", message: "Saving draft…" };
+    try {
+      const result = await transport.saveDraft(editorState.document);
+      editorState = reduceEditorState(editorState, {
+        type: "set-server-state",
+        serverDocumentId: result.documentId,
+        serverVersionId: result.versionId,
+        serverVersionNumber: result.versionNumber,
+        workingRevision: result.workingRevision,
+      }, idFactory);
+      persistedDraft = {
+        document: editorState.document,
+        documentId: result.documentId,
+        versionId: result.versionId,
+        versionNumber: result.versionNumber,
+        workingRevision: result.workingRevision,
+      };
+      editorTouched = false;
+      try {
+        await recoveryStore?.remove(scope, editorState.document.clientDraftId);
+      } catch {
+        // A successful server save remains canonical even if local cleanup fails.
+      }
+      persistence = { phase: "ready", message: `Saved · revision ${result.workingRevision}` };
+    } catch (error) {
+      const transportError = error instanceof DocumentTransportError ? error : undefined;
+      persistence = {
+        phase: transportError?.stale ? "conflict" : "error",
+        message: transportError?.stale
+          ? "This draft changed elsewhere. Load the newer draft or reconcile local recovery before saving again."
+          : error instanceof Error ? error.message : "Draft could not be saved",
+      };
     }
   }
 
@@ -273,7 +354,7 @@
     window.VersoEditor = { getDocument: () => editorState.document, insertText, insertImagePlaceholder };
   });
 
-  void initializeRecovery();
+  void initializeEditor();
 </script>
 
 <main class="editor-shell" data-editor data-local-only data-model-schema-version="1" data-draft-id={editorState.document.clientDraftId}>
@@ -284,6 +365,9 @@
     </div>
     <div class="editor-header-actions">
       <IconButton icon="details" label="Document details" pressed={editorState.detailsOpen} onclick={() => dispatch({ type: "toggle-details" })} />
+      {#if editorState.document.serverDocumentId}
+        <button type="button" class="save-button" disabled={persistence.phase === "saving"} onclick={() => void saveDraft()}>{saveLabel}</button>
+      {/if}
       <span class="local-badge">Browser-local</span>
     </div>
   </header>
@@ -365,6 +449,6 @@
   <footer class="editor-footer">
     <span class="status-dot" aria-hidden="true"></span>
     <span>{statusText}</span>
-    <span class="footer-note">Saving and publishing are separate operations and are not available in this shell.</span>
+    <span class="footer-note">{persistence.message}. Saving and publishing are separate operations.</span>
   </footer>
 </main>

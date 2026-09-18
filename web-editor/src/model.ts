@@ -22,6 +22,8 @@ export type EditorDocument = {
   schemaVersion: number;
   clientDraftId: string;
   serverDocumentId?: string;
+  serverVersionId?: string;
+  serverVersionNumber?: number;
   baseServerVersion?: number;
   workingRevision?: number;
   documentType: string;
@@ -87,6 +89,8 @@ export function createDocument(options: DocumentOptions = {}, idFactory: IdFacto
     schemaVersion,
     clientDraftId: options.clientDraftId || idFactory(),
     ...(options.serverDocumentId ? { serverDocumentId: options.serverDocumentId } : {}),
+    ...(options.serverVersionId ? { serverVersionId: options.serverVersionId } : {}),
+    ...(typeof options.serverVersionNumber === "number" ? { serverVersionNumber: options.serverVersionNumber } : {}),
     ...(typeof options.baseServerVersion === "number" ? { baseServerVersion: options.baseServerVersion } : {}),
     ...(typeof options.workingRevision === "number" ? { workingRevision: options.workingRevision } : {}),
     documentType: options.documentType || "article",

@@ -6,6 +6,7 @@ export type PersistedDraft = {
   document: EditorDocument;
   updatedAt?: number;
   serverDocumentId?: string;
+  serverVersionId?: string;
   workingRevision?: number;
 };
 
@@ -25,6 +26,7 @@ export function nonCurrentSnapshots(snapshots: LocalDraftSnapshot[], draftId: st
 
 export function conflictsWithServer(snapshot: LocalDraftSnapshot, persisted: PersistedDraft): boolean {
   if (snapshot.serverDocumentId && persisted.serverDocumentId && snapshot.serverDocumentId !== persisted.serverDocumentId) return true;
+  if (snapshot.serverVersionId && persisted.serverVersionId && snapshot.serverVersionId !== persisted.serverVersionId) return true;
   if (typeof snapshot.workingRevision === "number" && typeof persisted.workingRevision === "number" && snapshot.workingRevision !== persisted.workingRevision) return true;
   if (typeof persisted.updatedAt === "number" && snapshot.updatedAt <= persisted.updatedAt && !snapshotDiffers(snapshot.document, persisted.document)) return false;
   return snapshotDiffers(snapshot.document, persisted.document);

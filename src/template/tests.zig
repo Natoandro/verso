@@ -67,6 +67,13 @@ test "renders an embedded template source" {
     try std.testing.expectEqualStrings("<h1>Embedded &amp; safe</h1>\n", writer.buffered());
 }
 
+test "renderAlloc collects the writer renderer output" {
+    const template = tmpl.parse("<h1>{{ title }}</h1>", .{});
+    const rendered = try template.renderAlloc(std.testing.allocator, .{ .title = "Collected & safe" });
+    defer std.testing.allocator.free(rendered);
+    try std.testing.expectEqualStrings("<h1>Collected &amp; safe</h1>", rendered);
+}
+
 test "streams writer failures" {
     const template = tmpl.parse("{{ title }}", .{});
     var buffer: [2]u8 = undefined;
