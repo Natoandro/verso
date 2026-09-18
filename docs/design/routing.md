@@ -115,9 +115,10 @@ uses deterministic specificity ordering:
 3. a trailing wildcard after a single-segment wildcard;
 4. longer otherwise-equivalent patterns before shorter patterns.
 
-Two patterns with the same method and equal specificity are a declaration
-error. The initial implementation should reject ambiguous route tables at
-comptime rather than make declaration order accidentally determine behavior.
+Two overlapping patterns with the same method and equal specificity are a
+declaration error. Disjoint literal paths may share specificity; the initial
+implementation should reject only ambiguous route tables at comptime rather
+than make declaration order accidentally determine behavior.
 
 The request target is reduced to its path before matching. Query values remain
 available to application code through the normal request target/query API, but

@@ -21,6 +21,19 @@ test "comptime routes compile parameters and select the most specific match" {
     try std.testing.expectEqual(@as(?usize, null), router.resolve(table.asSlice(), .POST, "/articles/42"));
 }
 
+test "distinct literal routes with equal specificity are not ambiguous" {
+    const handler = struct {
+        fn handle(_: *RequestContext, _: Next) Error!void {}
+    }.handle;
+    const table = router.routes(.{
+        .{ "GET /admin/editor", Layer.initFn(handler) },
+        .{ "GET /admin/editor.css", Layer.initFn(handler) },
+    });
+
+    try std.testing.expectEqual(@as(?usize, 0), router.resolve(table.asSlice(), .GET, "/admin/editor"));
+    try std.testing.expectEqual(@as(?usize, 1), router.resolve(table.asSlice(), .GET, "/admin/editor.css"));
+}
+
 test "route matching decodes captures but rejects encoded separators and malformed targets" {
     const handler = struct {
         fn handle(_: *RequestContext, _: Next) Error!void {}

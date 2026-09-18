@@ -215,6 +215,7 @@ fn validateDeclarations(comptime declarations: anytype) void {
             const right = compilePatternStructure(right_pattern);
             if (left.method != right.method) continue;
             if (!sameScore(left, right)) continue;
+            if (!patternsOverlap(left, right)) continue;
             @compileError(std.fmt.comptimePrint(
                 "ambiguous route declarations '{s} {s}' and '{s} {s}'",
                 .{ @tagName(left.method), left.path, @tagName(right.method), right.path },
@@ -227,6 +228,14 @@ fn sameScore(left: Route, right: Route) bool {
     return left.literal_segment_count == right.literal_segment_count and
         left.segment_count == right.segment_count and
         left.slash_required == right.slash_required;
+}
+
+fn patternsOverlap(left: Route, right: Route) bool {
+    for (left.segments[0..left.segment_count], right.segments[0..right.segment_count]) |left_segment, right_segment| {
+        if (left_segment.kind == .literal and right_segment.kind == .literal and
+            !std.mem.eql(u8, left_segment.text, right_segment.text)) return false;
+    }
+    return true;
 }
 
 pub const Router = struct {

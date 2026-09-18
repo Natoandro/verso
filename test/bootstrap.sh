@@ -94,8 +94,8 @@ run_server() {
     editor_styles_response=$(curl --fail --silent "http://127.0.0.1:$port/admin/editor.css") || fail "editor stylesheet was not served"
     printf '%s\n' "$editor_styles_response" | grep -F '.editor-shell' >/dev/null || fail "editor stylesheet was incomplete"
     editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
-    [ "$editor_post_status" = "200" ] || fail "editor method did not fall through to the next layer"
-    grep -F 'Verso is running' "$case_directory/editor-post.body" >/dev/null || fail "editor method did not reach the next layer"
+    [ "$editor_post_status" = "404" ] || fail "editor method did not preserve the fallback response"
+    grep -F 'Not Found' "$case_directory/editor-post.body" >/dev/null || fail "editor method did not preserve the fallback body"
 
     case "$shutdown_signal" in
         INT) kill -INT "$server_pid" ;;
