@@ -81,6 +81,9 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 - [Web editor and preview](design/editor.md) — HTMX-oriented editing with a
   Svelte editor island, client-side live previews, persisted-draft server
   previews, and local draft recovery.
+- [Editor architecture alternatives](design/editor-approaches.md) — comparison
+  of a pure HTMX, server-transactional editor and the offline-capable Svelte
+  editor island.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,
   MCP tools, and optimistic concurrency.
 - [Operations and boundaries](design/operations.md) — publication workflow,
