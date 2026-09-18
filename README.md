@@ -123,12 +123,14 @@ verso --config /etc/verso/production.toml serve --server-port 9090
 ```
 
 Configuration precedence is built-in defaults, optional file, environment,
-then command line. `serve` exposes the full configuration override set;
-`migrate up` and document operations expose only their logging, validation,
-database, and migration settings. Typed values are strict: booleans are
+then command line. The intended `serve` CLI surface will be generated from the
+canonical configuration schema plus sparse CLI metadata; it will not maintain
+a second list of configuration fields. Typed values are strict: booleans are
 `true` or `false`, enums use their documented lowercase names, and integers
 use decimal notation. Database URLs may be supplied with `--database-url`,
-but are never included in configuration diagnostics.
+but are never included in configuration diagnostics. The temporary document
+bootstrap commands are specified by DOC-001 and DOC-002 rather than by this
+CLI schema.
 
 See [`docs/design/operations.md`](docs/design/operations.md) for migration,
 configuration, deployment, and logging details.

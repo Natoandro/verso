@@ -92,6 +92,32 @@ starting `DOC-001`.
   - [x] **Verification:** Test no-file startup, file-versus-environment-versus
     CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
+- [ ] **BOOT-003 — Config-derived `serve` configuration surface**
+
+  Consolidate the `serve` configuration schema so `config.Config` is the sole
+  semantic source for field names, nesting, types, defaults, validation, CLI
+  value parsing, and environment mappings. Generate the `serve` help text and
+  CLI override transport from that type at comptime. Add a sparse metadata
+  record type containing only an existing `Config` field path, whether the
+  field is exposed as a CLI override, and an optional short description.
+  Metadata must be allowed to omit fields, must not define configuration
+  values or types, and must fail comptime validation when it names an unknown
+  `Config` path. Document generated environment-reference output without
+  maintaining a separate environment allowlist. Leave document bootstrap
+  command surfaces under DOC-001 and DOC-002.
+
+  - [ ] **Schema reflection:** Generate `serve` CLI names, parser types,
+    override transport, and ordinary environment names from `config.Config`.
+  - [ ] **CLI metadata:** Validate sparse exposure/description metadata against
+    `Config` without allowing metadata to add configuration fields.
+  - [ ] **Generated help and references:** Generate `serve --help` and
+    operator-facing environment reference output from the reflected schema.
+
+  The current design intentionally keeps `Config` as the semantic source and
+  metadata sparse. If future requirements make that metadata exhaustive, a
+  later architecture task may evaluate promoting it to a complete
+  `ConfigSchema` that generates `Config` and all derived interfaces.
+
 - [x] **SCHEMA-001 — Initial SQLite migration**
 
   Create one versioned initial migration with the canonical schema,

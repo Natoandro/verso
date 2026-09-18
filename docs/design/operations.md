@@ -365,44 +365,69 @@ configuration files.
 
 Environment overrides are optional. Configuration precedence, from lowest to
 highest, is built-in defaults, the optional `verso.toml`, environment variables,
-then command-line arguments. The command-line interface is intended to use an
-explicit allowlist of configuration options, and its values win over all other
+then command-line arguments. The command-line interface uses an explicit
+exposure allowlist of configuration options, and its values win over all other
 sources.
-The current environment-variable allowlist is:
 
-| Environment variable | Configuration value |
-| --- | --- |
-| `VERSO_RUNTIME_ENVIRONMENT` | `runtime.environment` |
-| `VERSO_LOGGING_FORMAT` | `logging.format` |
-| `VERSO_LOGGING_OMIT_NULL_FIELDS` | `logging.omit_null_fields` |
-| `VERSO_SITE_NAME` | `site.name` |
-| `VERSO_SITE_BASE_URL` | `site.base_url` |
-| `VERSO_SERVER_HOST` | `server.host` |
-| `VERSO_SERVER_PORT` | `server.port` |
-| `VERSO_SECURITY_TRUSTED_PROXY_ADDRESSES` | `security.trusted_proxy_addresses` |
-| `VERSO_DATABASE_URL` | `database.url` |
-| `VERSO_MIGRATIONS_PATH` | `migrations.path` |
-| `VERSO_MIGRATIONS_RUN_ON_STARTUP` | `migrations.run_on_startup` |
-| `VERSO_STORAGE_FS_PATH` | `storage.filesystem.path` |
-| `VERSO_CACHE_PATH` | `cache.path` |
-| `VERSO_UI_LANGUAGE` | `ui.language` |
-| `VERSO_UI_THEME` | `ui.theme` |
-| `VERSO_UI_LOGO` | `ui.logo` |
-| `VERSO_UI_ICON` | `ui.icon` |
-| `VERSO_UI_LOGO_WORDMARK` | `ui.logo_wordmark` |
-| `VERSO_FEATURES_MATH` | `features.math` |
-| `VERSO_FEATURES_INTERACTIVE_SECTIONS` | `features.interactive_sections` |
-| `VERSO_EDITOR_LOCAL_PREVIEW_DEBOUNCE_MS` | `editor.local_preview_debounce_ms` |
-| `VERSO_MCP_ENABLED` | `mcp.enabled` |
-| `VERSO_MCP_ALLOW_PUBLISH` | `mcp.allow_publish` |
+### Configuration source of truth
+
+`config.Config` is the canonical semantic configuration schema. It owns the
+configuration field names and nesting, Zig types, built-in defaults, TOML
+shape, and validation rules. CLI and environment support must derive from this
+type rather than define a second set of configuration fields or types.
+
+The initial `serve` CLI surface should be generated at comptime from
+`config.Config`. A separate sparse metadata object supplies only CLI
+presentation and exposure metadata for existing configuration fields:
+
+```zig
+const serve_cli_metadata = .{
+    .{
+        .config_field = "server.port",
+        .cli_enabled = true,
+        .description = "HTTP bind port.",
+    },
+};
+```
+
+Metadata entries may be omitted. An omitted entry means that the corresponding
+configuration field has no `serve` CLI override or extra help description.
+Metadata may mark an existing field as enabled or disabled and may provide an
+optional short description, but it must not define configuration values,
+types, defaults, or alternate configuration fields. A comptime validation step
+must reject any `config_field` path that does not resolve to a field in
+`config.Config`. The metadata object is therefore a list of metadata records,
+not a second configuration schema; its own fields are metadata-only and its
+paths may identify only existing `Config` fields.
+
+This choice can be revisited if the metadata grows beyond CLI exposure and
+presentation. If it eventually contains the complete field types, defaults,
+TOML shape, validation rules, environment behavior, and custom mappings, it
+may be promoted into a full `ConfigSchema` and used to generate `Config` and
+all derived interfaces. That is a possible future architecture, not a reason
+for the current sparse CLI metadata to duplicate configuration semantics.
+
+The generated `serve --help` text will be the parser contract. Its option names,
+value parser types, CLI override transport, and application paths come from
+`Config`; metadata controls only whether an existing field is exposed and how
+it is described. The global `--config` selector is an explicit CLI control and
+is not a `Config` field. Tagged unions such as filesystem storage may retain
+small explicit custom mappings where a flat option name is required.
+
+Environment names and parsers use the same `Config` reflection. There is no
+separately maintained environment-variable allowlist. Ordinary scalar fields
+use the uppercase nested field-path convention: for example,
+`server.port` becomes `VERSO_SERVER_PORT`, and `ui.logo` becomes
+`VERSO_UI_LOGO`. Tagged unions and other exceptional mappings are explicit
+custom cases; the initial storage mapping is `VERSO_STORAGE_FS_PATH` for
+`storage.filesystem.path`. Unknown variables, including unknown `VERSO_*`
+variables, are ignored.
 
 Boolean overrides must be exactly `true` or `false`; enum and integer values
 use the same lowercase names and decimal representation as the configuration
-file. The ordinary scalar configuration fields use the uppercase nested field
-path convention shown in the table; the loader derives those mappings at
-compile time. Tagged unions and other fields whose environment name or
-handling differs from that convention are explicit custom overrides. Unknown
-variables, including unknown `VERSO_*` variables, are ignored.
+file. Operator-facing environment-variable reference tables may be generated
+from this reflection, but such tables are documentation output and never a
+second source of truth.
 All overrides are applied before the normal validation pass, so a production
 deployment still requires a public non-loopback base URL even when that value
 is supplied through the environment. Environment-provided database URLs are
@@ -410,20 +435,18 @@ never included in configuration errors or startup diagnostics and are the
 preferred place for deployment-specific credentials once non-SQLite adapters
 exist.
 
-The command-line allowlist uses the corresponding kebab-case option names:
+For now, this generated source-of-truth contract applies primarily to
+`verso serve`. The document bootstrap commands belong to DOC-001 and DOC-002;
+they are temporary local verification interfaces and are not part of this
+configuration-schema design. The migration command may consume the same
+generated configuration metadata later, but its command-specific surface is
+not required to define the initial `serve` contract.
 
-| Command | Options |
-| --- | --- |
-| All commands | `--config PATH` |
-| `serve` | `--runtime-environment`, `--logging-format`, `--logging-omit-null-fields`, `--site-name`, `--site-base-url`, `--server-host`, `--server-port`, `--database-url`, `--migrations-path`, `--migrations-run-on-startup`, `--storage-filesystem-path`, `--cache-path`, `--public-static-root`, `--ui-language`, `--ui-theme`, `--ui-logo`, `--ui-icon`, `--ui-logo-wordmark`, `--features-math`, `--features-interactive-sections`, `--editor-local-preview-debounce-ms`, `--mcp-enabled`, `--mcp-allow-publish` |
-| `migrate up` and document operations | `--runtime-environment`, `--logging-format`, `--logging-omit-null-fields`, `--site-base-url`, `--database-url`, `--migrations-path`, `--migrations-run-on-startup` |
-
-Each command's help text is its parser option contract; unknown options are
-rejected. Boolean values must be exactly `true` or `false`; enum and integer
-values use the same lowercase names and decimal representation as the
-configuration file. Commands emit a `configuration.loaded` diagnostic with the
-selected file and precedence explanation without logging effective database
-URLs or other secret values.
+Boolean values must be exactly `true` or `false`; enum and integer values use
+the same lowercase names and decimal representation as the configuration
+file. Commands emit a `configuration.loaded` diagnostic with the selected
+file and precedence explanation without logging effective database URLs or
+other secret values.
 
 ---
 
