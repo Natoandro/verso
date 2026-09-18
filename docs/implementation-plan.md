@@ -417,14 +417,18 @@ unsaved document content and no server mutation path before `IAM-003`.
   Login/logout, secure cookie attributes, CSRF protection for unsafe requests,
   origin handling, and proxy-header trust rules are verified end to end.
 
-  - [ ] **Auth:** Implement owner bootstrap, session lifecycle, secure cookie
+  - [x] **Auth:** Implement owner bootstrap, session lifecycle, secure cookie
     attributes, CSRF tokens, origin checks, and explicit proxy trust rules.
-  - [ ] **Application:** Centralize session and identity use cases so web
+  - [x] **Application:** Centralize session and identity use cases so web
     handlers do not implement their own authentication decisions.
   - [ ] **Web/admin:** Add login and logout flows with protected route
     boundaries and safe failure responses.
   - [ ] **Security tests:** Verify the complete session flow, CSRF failures,
     origin handling, cookie flags, and proxy-header behavior.
+
+  The Auth and Application divisions are transport-neutral and complete. The
+  remaining Web/admin and end-to-end security-test divisions are intentionally
+  deferred until the WEB routing and serving work is available.
 
 - [ ] **IAM-002 — Manage authors and scoped assignments**
 

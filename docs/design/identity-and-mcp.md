@@ -153,6 +153,14 @@ host and scheme headers only from configured proxy addresses; public origin
 and OAuth redirect construction must not be derived from an arbitrary request
 `Host` header.
 
+The transport-neutral session boundary stores only SHA-256 hashes of the opaque
+session and CSRF secrets. Owner bootstrap is a one-time application operation:
+it creates the first local user with the `owner` role and records a system audit
+event. Session creation accepts only an identity subject that an interface has
+already verified; it does not treat an arbitrary request value as proof of
+identity. Session lookup rejects revoked, expired, or disabled identities, and
+logout revokes the current session.
+
 ---
 
 ## 5. MCP Scopes
