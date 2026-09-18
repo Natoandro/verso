@@ -1,5 +1,7 @@
 const std = @import("std");
 const editor_assets = @import("editor_assets");
+const context = @import("context.zig");
+const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
 
@@ -45,4 +47,28 @@ test "editor routes use comptime embedded static handlers" {
     try std.testing.expectEqual(@as(?usize, 1), route.resolve(routes, .GET, "/admin/editor.css"));
     try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .GET, "/admin/editor.js"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .POST, "/admin/editor"));
+}
+
+test "editor mount isolates admin misses from outer routes" {
+    const public_handler = struct {
+        fn handle(request: *context.RequestContext, _: layer.Next) layer.Error!void {
+            request.response_status = 418;
+        }
+    }.handle;
+
+    var editor_router = Handler.router();
+    var editor_mount = layer.Mount.init("/admin", layer.Layer.init(&editor_router));
+    const outer_layers = [_]layer.Layer{layer.Layer.initFn(public_handler)};
+    var http_request: std.http.Server.Request = undefined;
+    var request: context.RequestContext = undefined;
+    request.request = &http_request;
+    http_request.head.method = .GET;
+    http_request.head.target = "/admin/unknown";
+
+    try editor_mount.handle(&request, .{ .layers = &outer_layers, .index = 0 });
+    try std.testing.expectEqual(@as(?u16, null), request.response_status);
+
+    http_request.head.target = "/public";
+    try editor_mount.handle(&request, .{ .layers = &outer_layers, .index = 0 });
+    try std.testing.expectEqual(@as(?u16, 418), request.response_status);
 }

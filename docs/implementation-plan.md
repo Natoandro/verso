@@ -310,7 +310,7 @@ unsaved document content and no server mutation path before `IAM-003`.
   - [x] **Security tests:** Verify traversal, symlink, root-boundary, content
     type, cache-policy, and non-public-asset isolation behavior.
 
-- [ ] **WEB-004 — Migrate editor route declarations**
+- [x] **WEB-004 — Migrate editor route declarations**
 
   The editor shell, stylesheet, and bundle routes now use the shared comptime
   route and embedded static-handler APIs. Public, historical, index, auth,
@@ -320,11 +320,11 @@ unsaved document content and no server mutation path before `IAM-003`.
 
   - [x] **Editor integration:** Replace temporary editor route declarations
     with comptime patterns and embedded static handlers.
-  - [ ] **Composition integration:** Mount the editor layer through the shared
+  - [x] **Composition integration:** Mount the editor layer through the shared
     pipeline while preserving method fallthrough and protected-boundary rules.
   - [x] **Static integration:** Verify embedded HTML, stylesheet, and bundle
     responses use explicit content types and cache policy.
-  - [ ] **End-to-end verification:** Exercise editor and editor-asset routes,
+  - [x] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.
 
 ## 4. Safe server rendering and public routes

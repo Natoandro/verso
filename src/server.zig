@@ -121,10 +121,20 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .config = &app_config,
         .logger = &logger,
     };
-    var status_handler = StatusHandler{};
-    var router = web.EditorHandler.router();
+    var editor_router = web.EditorHandler.router();
+    var editor_mount = web.Mount.initWithFallback(
+        "/admin",
+        .init(&editor_router),
+        web.Layer.initFn(NotFoundHandler.handle),
+    );
+    var status_router = web.routes(.{.{ "GET /", StatusHandler.handle }}).router();
     var request_logging = web.RequestLoggingLayer{};
-    const layers = [_]web.Layer{ .init(&request_logging), .init(&router), .init(&status_handler) };
+    const layers = [_]web.Layer{
+        .init(&request_logging),
+        .init(&editor_mount),
+        .init(&status_router),
+        web.Layer.initFn(NotFoundHandler.handle),
+    };
     const pipeline = web.Pipeline.init(&layers);
     var handlers: std.Io.Group = .init;
     errdefer handlers.cancel(io);
@@ -192,7 +202,7 @@ fn handleHttpConnection(
 }
 
 const StatusHandler = struct {
-    pub fn handle(_: *@This(), http_request: *web.RequestContext, _: web.Next) anyerror!void {
+    pub fn handle(http_request: *web.RequestContext, _: web.Next) anyerror!void {
         http_request.request.respond("Verso is running\n", .{
             .keep_alive = false,
             .extra_headers = &.{.{
@@ -205,6 +215,24 @@ const StatusHandler = struct {
         };
 
         http_request.response_status = 200;
+    }
+};
+
+const NotFoundHandler = struct {
+    pub fn handle(http_request: *web.RequestContext, _: web.Next) anyerror!void {
+        http_request.request.respond("Not Found\n", .{
+            .status = .not_found,
+            .keep_alive = false,
+            .extra_headers = &.{.{
+                .name = "content-type",
+                .value = "text/plain; charset=utf-8",
+            }},
+        }) catch |response_error| {
+            if (response_error == error.Canceled) return error.Canceled;
+            return response_error;
+        };
+
+        http_request.response_status = @intFromEnum(std.http.Status.not_found);
     }
 };
 
