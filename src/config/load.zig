@@ -2,6 +2,7 @@ const std = @import("std");
 const toml = @import("toml");
 const config = @import("types.zig");
 const environment = @import("environment.zig");
+const schema = @import("schema.zig");
 
 pub const ConfigSources = struct {
     toml: []const u8 = "",
@@ -12,85 +13,43 @@ pub const ConfigSources = struct {
 pub const CliOverrides = makeCliOverrides();
 
 fn makeCliOverrides() type {
-    const field_count = 1 + cliFieldCount(config.Config);
+    const field_count = 1 + cliFieldCount();
     var field_names: [field_count][]const u8 = undefined;
     var field_types: [field_count]type = undefined;
     var field_attrs: [field_count]std.builtin.Type.StructField.Attributes = @splat(.{});
     var field_index: usize = 0;
 
     appendCliField(&field_names, &field_types, &field_attrs, &field_index, "config_path", []const u8);
-    fillCliFields(
-        config.Config,
-        "",
-        &field_names,
-        &field_types,
-        &field_attrs,
-        &field_index,
-    );
+    fillCliFields(&field_names, &field_types, &field_attrs, &field_index);
 
     return @Struct(.auto, null, &field_names, &field_types, &field_attrs);
 }
 
-fn cliFieldCount(comptime Struct: type) usize {
+fn cliFieldCount() usize {
     var count: usize = 0;
-    inline for (@typeInfo(Struct).@"struct".fields) |field| {
-        if (comptime Struct == config.Config and std.mem.eql(u8, field.name, "storage")) {
-            count += 1;
-            continue;
-        }
-
-        count += switch (@typeInfo(field.type)) {
-            .@"struct" => cliFieldCount(field.type),
-            .@"union" => @compileError("configuration union requires a custom CLI override"),
-            else => 1,
-        };
+    inline for (schema.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) count += 1;
     }
     return count;
 }
 
 fn fillCliFields(
-    comptime Struct: type,
-    comptime prefix: []const u8,
     field_names: anytype,
     field_types: anytype,
     field_attrs: anytype,
     field_index: *usize,
 ) void {
-    inline for (@typeInfo(Struct).@"struct".fields) |field| {
-        if (comptime Struct == config.Config and std.mem.eql(u8, field.name, "storage")) {
+    inline for (schema.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const field_name = schema.cliName(metadata.config_field);
             appendCliField(
                 field_names,
                 field_types,
                 field_attrs,
                 field_index,
-                "storage_filesystem_path",
-                []const u8,
-            );
-            continue;
-        }
-
-        const field_name = comptime concatNames(prefix, field.name);
-        switch (@typeInfo(field.type)) {
-            .@"struct" => {
-                const nested_prefix = comptime appendNameSeparator(field_name[0..]);
-                fillCliFields(
-                    field.type,
-                    nested_prefix[0..],
-                    field_names,
-                    field_types,
-                    field_attrs,
-                    field_index,
-                );
-            },
-            .@"union" => @compileError("configuration union requires a custom CLI override"),
-            else => appendCliField(
-                field_names,
-                field_types,
-                field_attrs,
-                field_index,
                 field_name[0..],
-                field.type,
-            ),
+                schema.fieldType(metadata.config_field),
+            );
         }
     }
 }
@@ -114,20 +73,6 @@ fn appendCliField(
     field_types[field_index.*] = OverrideType;
     field_attrs[field_index.*] = .{ .default_value_ptr = @ptrCast(&default_value) };
     field_index.* += 1;
-}
-
-fn concatNames(comptime prefix: []const u8, comptime name: []const u8) [prefix.len + name.len]u8 {
-    var result: [prefix.len + name.len]u8 = undefined;
-    @memcpy(result[0..prefix.len], prefix);
-    @memcpy(result[prefix.len..], name);
-    return result;
-}
-
-fn appendNameSeparator(comptime name: []const u8) [name.len + 1]u8 {
-    var result: [name.len + 1]u8 = undefined;
-    @memcpy(result[0..name.len], name);
-    result[name.len] = '_';
-    return result;
 }
 
 pub fn load(allocator: std.mem.Allocator, sources: ConfigSources) !toml.Parsed(config.Config) {
@@ -170,64 +115,70 @@ fn applyCli(
     overrides: ?CliOverrides,
 ) !void {
     const cli = overrides orelse return;
-    try applyCliFields(allocator, app_config, cli, config.Config, "");
-}
-
-fn applyCliFields(
-    allocator: std.mem.Allocator,
-    target: anytype,
-    cli: CliOverrides,
-    comptime Struct: type,
-    comptime prefix: []const u8,
-) !void {
-    inline for (@typeInfo(Struct).@"struct".fields) |field| {
-        if (comptime Struct == config.Config and std.mem.eql(u8, field.name, "storage")) {
-            if (cli.storage_filesystem_path) |path| {
-                switch (@field(target.*, field.name)) {
-                    .filesystem => |*filesystem| filesystem.path = try allocator.dupe(u8, path),
-                }
+    inline for (schema.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const field_name = comptime schema.cliName(metadata.config_field);
+            if (@field(cli, field_name[0..])) |value| {
+                try applyCliPath(allocator, app_config, metadata.config_field, value);
             }
-            continue;
-        }
-
-        const field_name = comptime concatNames(prefix, field.name);
-        switch (@typeInfo(field.type)) {
-            .@"struct" => {
-                const nested_prefix = comptime appendNameSeparator(field_name[0..]);
-                try applyCliFields(
-                    allocator,
-                    &@field(target.*, field.name),
-                    cli,
-                    field.type,
-                    nested_prefix[0..],
-                );
-            },
-            .@"union" => @compileError("configuration union requires a custom CLI override"),
-            else => {
-                if (@hasField(CliOverrides, field_name[0..])) {
-                    try applyCliValue(
-                        allocator,
-                        &@field(target.*, field.name),
-                        @field(cli, field_name[0..]),
-                    );
-                }
-            },
         }
     }
 }
 
+fn applyCliPath(
+    allocator: std.mem.Allocator,
+    target: anytype,
+    comptime path: []const u8,
+    value: anytype,
+) !void {
+    const head = comptime pathHead(path);
+    const tail = comptime pathTail(path);
+    const field_target = &@field(target.*, head);
+    if (tail.len == 0) {
+        return applyCliValue(allocator, field_target, value);
+    }
+
+    switch (@typeInfo(@TypeOf(field_target.*))) {
+        .@"struct" => try applyCliPath(allocator, field_target, tail, value),
+        .@"union" => try applyUnionCliPath(allocator, field_target, tail, value),
+        else => @compileError("configuration CLI path traverses a non-container field"),
+    }
+}
+
+fn applyUnionCliPath(
+    allocator: std.mem.Allocator,
+    target: anytype,
+    comptime path: []const u8,
+    value: anytype,
+) !void {
+    if (@TypeOf(target.*) != config.Config.Storage) {
+        @compileError("configuration union requires an explicit CLI mapping");
+    }
+    const tail = comptime pathTail(path);
+    switch (target.*) {
+        .filesystem => |*filesystem| try applyCliPath(allocator, filesystem, tail, value),
+    }
+}
+
+fn pathHead(comptime path: []const u8) []const u8 {
+    return path[0 .. std.mem.indexOfScalar(u8, path, '.') orelse path.len];
+}
+
+fn pathTail(comptime path: []const u8) []const u8 {
+    const separator = std.mem.indexOfScalar(u8, path, '.') orelse return "";
+    return path[separator + 1 ..];
+}
+
 fn applyCliValue(allocator: std.mem.Allocator, target: anytype, value: anytype) !void {
-    if (value) |resolved| {
-        const TargetType = @TypeOf(target.*);
-        const ValueType = switch (@typeInfo(TargetType)) {
-            .optional => |optional| optional.child,
-            else => TargetType,
-        };
-        if (ValueType == []const u8) {
-            target.* = try allocator.dupe(u8, resolved);
-        } else {
-            target.* = resolved;
-        }
+    const TargetType = @TypeOf(target.*);
+    const ValueType = switch (@typeInfo(TargetType)) {
+        .optional => |optional| optional.child,
+        else => TargetType,
+    };
+    if (ValueType == []const u8) {
+        target.* = try allocator.dupe(u8, value);
+    } else {
+        target.* = value;
     }
 }
 
@@ -236,50 +187,64 @@ fn applyEnvironment(
     app_config: *config.Config,
     environ_map: ?*const std.process.Environ.Map,
 ) !void {
-    try applyEnvironmentStruct(allocator, app_config, environ_map, "VERSO_");
-
-    if (environment.get(environ_map, "VERSO_STORAGE_FS_PATH")) |asset_path| {
-        switch (app_config.storage) {
-            .filesystem => |*filesystem| filesystem.path = try allocator.dupe(u8, asset_path),
-        }
+    inline for (schema.environment_fields) |field| {
+        try applyEnvironmentPath(
+            allocator,
+            app_config,
+            field.config_field,
+            field.environment_name,
+            environ_map,
+        );
     }
 }
 
-fn applyEnvironmentStruct(
+fn applyEnvironmentPath(
     allocator: std.mem.Allocator,
     target: anytype,
+    comptime path: []const u8,
+    name: []const u8,
     environ_map: ?*const std.process.Environ.Map,
-    comptime prefix: []const u8,
 ) !void {
-    const Target = @TypeOf(target);
-    const Struct = @typeInfo(Target).pointer.child;
+    const head = comptime pathHead(path);
+    const tail = comptime pathTail(path);
+    const field_target = &@field(target.*, head);
+    if (tail.len == 0) {
+        return overrideValue(allocator, environ_map, name, field_target);
+    }
 
-    inline for (@typeInfo(Struct).@"struct".fields) |field| {
-        // The storage union has a deliberately stable, custom environment
-        // variable name: VERSO_STORAGE_FS_PATH.
-        if (comptime Struct == config.Config and std.mem.eql(u8, field.name, "storage")) continue;
-
-        const environment_name = comptime makeEnvironmentName(prefix, field.name);
-        const field_target = &@field(target.*, field.name);
-
-        switch (@typeInfo(field.type)) {
-            .@"struct" => {
-                const nested_prefix = comptime std.fmt.comptimePrint("{s}_", .{environment_name});
-                try applyEnvironmentStruct(allocator, field_target, environ_map, nested_prefix);
-            },
-            .@"union" => @compileError("configuration union requires a custom environment override"),
-            else => try overrideValue(allocator, environ_map, environment_name[0..], field_target),
-        }
+    switch (@typeInfo(@TypeOf(field_target.*))) {
+        .@"struct" => try applyEnvironmentPath(allocator, field_target, tail, name, environ_map),
+        .@"union" => try applyUnionEnvironmentPath(
+            allocator,
+            field_target,
+            tail,
+            name,
+            environ_map,
+        ),
+        else => @compileError("configuration environment path traverses a non-container field"),
     }
 }
 
-fn makeEnvironmentName(comptime prefix: []const u8, comptime field_name: []const u8) [prefix.len + field_name.len]u8 {
-    var result: [prefix.len + field_name.len]u8 = undefined;
-    @memcpy(result[0..prefix.len], prefix);
-    inline for (field_name, 0..) |character, index| {
-        result[prefix.len + index] = std.ascii.toUpper(character);
+fn applyUnionEnvironmentPath(
+    allocator: std.mem.Allocator,
+    target: anytype,
+    comptime path: []const u8,
+    name: []const u8,
+    environ_map: ?*const std.process.Environ.Map,
+) !void {
+    if (@TypeOf(target.*) != config.Config.Storage) {
+        @compileError("configuration union requires an explicit environment mapping");
     }
-    return result;
+    const tail = comptime pathTail(path);
+    switch (target.*) {
+        .filesystem => |*filesystem| try applyEnvironmentPath(
+            allocator,
+            filesystem,
+            tail,
+            name,
+            environ_map,
+        ),
+    }
 }
 
 fn overrideValue(

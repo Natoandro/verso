@@ -115,6 +115,9 @@ verso serve
 The server uses built-in defaults when `verso.toml` is absent and creates its
 configured runtime directories during startup.
 
+`verso config env-reference` prints the reflected `VERSO_*` environment
+variable names and their configuration paths.
+
 One-off configuration values may be supplied after the command, or before the
 command for the shared `--config` selector:
 
@@ -123,9 +126,9 @@ verso --config /etc/verso/production.toml serve --server-port 9090
 ```
 
 Configuration precedence is built-in defaults, optional file, environment,
-then command line. The intended `serve` CLI surface will be generated from the
-canonical configuration schema plus sparse CLI metadata; it will not maintain
-a second list of configuration fields. Typed values are strict: booleans are
+then command line. The `serve` CLI surface is generated from the canonical
+configuration schema plus sparse CLI metadata; it does not maintain a second
+list of configuration fields. Typed values are strict: booleans are
 `true` or `false`, enums use their documented lowercase names, and integers
 use decimal notation. Database URLs may be supplied with `--database-url`,
 but are never included in configuration diagnostics. The temporary document

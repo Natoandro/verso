@@ -6,80 +6,198 @@ pub const global_help =
     "-h, --help                                      Display this help and exit.\n" ++
     "    --config <PATH>                              Alternate configuration file.\n";
 
-pub const server_help = global_help ++
-    "    --runtime-environment <ENVIRONMENT>          Runtime environment: development or production.\n" ++
-    "    --logging-format <FORMAT>                    Logging format: auto, json, text, or pretty.\n" ++
-    "    --logging-omit-null-fields <BOOL>            Include null fields in logs: true or false.\n" ++
-    "    --site-name <NAME>                           Publication name.\n" ++
-    "    --site-base-url <URL>                        Public site URL.\n" ++
-    "    --server-host <HOST>                         HTTP bind host.\n" ++
-    "    --server-port <PORT>                         HTTP bind port.\n" ++
-    "    --database-url <URL>                         SQLite database path or URL.\n" ++
-    "    --migrations-path <PATH>                     Migration directory.\n" ++
-    "    --migrations-run-on-startup <BOOL>           Run pending migrations at startup.\n" ++
-    "    --storage-filesystem-path <PATH>             Filesystem asset directory.\n" ++
-    "    --cache-path <PATH>                          Derived HTML cache directory.\n" ++
-    "    --public-static-root <PATH>                  Configured public static directory.\n" ++
-    "    --ui-language <LANGUAGE>                     UI language: en.\n" ++
-    "    --ui-theme <THEME>                           UI theme name.\n" ++
-    "    --ui-logo <PATH>                             UI logo path.\n" ++
-    "    --ui-icon <PATH>                             Reserved UI icon path.\n" ++
-    "    --ui-logo-wordmark <PATH>                    Reserved UI wordmark path.\n" ++
-    "    --features-math <BOOL>                       Enable math rendering.\n" ++
-    "    --features-interactive-sections <BOOL>       Enable interactive sections.\n" ++
-    "    --editor-local-preview-debounce-ms <MS>      Browser preview debounce interval.\n" ++
-    "    --mcp-enabled <BOOL>                         Enable the MCP interface.\n" ++
-    "    --mcp-allow-publish <BOOL>                   Allow the MCP interface to publish.\n";
+fn serveHelpLine(comptime metadata: verso.config.CliMetadata) []const u8 {
+    @setEvalBranchQuota(100_000);
+    const option_name = verso.config.cliOptionName(metadata.config_field);
+    const placeholder = verso.config.cliPlaceholderName(metadata.config_field);
+    return std.fmt.comptimePrint(
+        "    --{s} <{s}> {s}\n",
+        .{ option_name, placeholder, metadata.description orelse "" },
+    );
+}
 
-pub const migration_help = global_help ++
-    "    --runtime-environment <ENVIRONMENT>          Runtime environment: development or production.\n" ++
-    "    --logging-format <FORMAT>                    Logging format: auto, json, text, or pretty.\n" ++
-    "    --logging-omit-null-fields <BOOL>            Include null fields in logs: true or false.\n" ++
-    "    --site-base-url <URL>                        Public site URL for validation.\n" ++
-    "    --database-url <URL>                         SQLite database path or URL.\n" ++
-    "    --migrations-path <PATH>                     Migration directory.\n" ++
-    "    --migrations-run-on-startup <BOOL>           Run pending migrations at startup.\n";
+fn serveHelpLength() usize {
+    @setEvalBranchQuota(100_000);
+    var length: usize = global_help.len;
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) length += serveHelpLine(metadata).len;
+    }
+    return length;
+}
+
+fn makeServeHelp() [serveHelpLength()]u8 {
+    @setEvalBranchQuota(100_000);
+    var result: [serveHelpLength()]u8 = undefined;
+    var index: usize = 0;
+    @memcpy(result[index .. index + global_help.len], global_help);
+    index += global_help.len;
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const line = serveHelpLine(metadata);
+            @memcpy(result[index .. index + line.len], line);
+            index += line.len;
+        }
+    }
+    return result;
+}
+
+pub const serve_help_text = makeServeHelp();
+pub const server_help = serve_help_text[0..];
+
+const migration_config_fields = .{
+    .{ "runtime.environment", "Runtime environment: development or production." },
+    .{ "logging.format", "Logging format: auto, json, text, or pretty." },
+    .{ "logging.omit_null_fields", "Include null fields in logs: true or false." },
+    .{ "site.base_url", "Public site URL for validation." },
+    .{ "database.url", "SQLite database path or URL." },
+    .{ "migrations.path", "Migration directory." },
+    .{ "migrations.run_on_startup", "Run pending migrations at startup." },
+};
+
+fn migrationHelpLine(comptime path: []const u8, comptime description: []const u8) []const u8 {
+    @setEvalBranchQuota(100_000);
+    const option_name = verso.config.cliOptionName(path);
+    const placeholder = verso.config.cliPlaceholderName(path);
+    return std.fmt.comptimePrint(
+        "    --{s} <{s}> {s}\n",
+        .{ option_name, placeholder, description },
+    );
+}
+
+fn migrationHelpLength() usize {
+    var length: usize = global_help.len;
+    inline for (migration_config_fields) |field| {
+        length += migrationHelpLine(field[0], field[1]).len;
+    }
+    return length;
+}
+
+fn makeMigrationHelp() [migrationHelpLength()]u8 {
+    @setEvalBranchQuota(100_000);
+    var result: [migrationHelpLength()]u8 = undefined;
+    var index: usize = 0;
+    @memcpy(result[index .. index + global_help.len], global_help);
+    index += global_help.len;
+    inline for (migration_config_fields) |field| {
+        const line = migrationHelpLine(field[0], field[1]);
+        @memcpy(result[index .. index + line.len], line);
+        index += line.len;
+    }
+    return result;
+}
+
+pub const migration_help_text = makeMigrationHelp();
+pub const migration_help = migration_help_text[0..];
 
 pub const document_help = migration_help;
 
-pub const parsers = .{
-    .command = clap.parsers.string,
-    .operation = clap.parsers.string,
-    .PATH = clap.parsers.string,
-    .ENVIRONMENT = clap.parsers.enumeration(verso.config.Environment),
-    .FORMAT = clap.parsers.enumeration(verso.config.LoggingFormat),
-    .BOOL = parseBool,
-    .NAME = clap.parsers.string,
-    .URL = clap.parsers.string,
-    .HOST = clap.parsers.string,
-    .PORT = clap.parsers.int(u16, 10),
-    .DATABASE_URL = clap.parsers.string,
-    .MIGRATIONS_PATH = clap.parsers.string,
-    .STORAGE_FILESYSTEM_PATH = clap.parsers.string,
-    .CACHE_PATH = clap.parsers.string,
-    .PUBLIC_STATIC_ROOT = clap.parsers.string,
-    .LANGUAGE = clap.parsers.enumeration(verso.config.UiLanguage),
-    .THEME = clap.parsers.string,
-    .LOGO = clap.parsers.string,
-    .ICON = clap.parsers.string,
-    .WORDMARK = clap.parsers.string,
-    .MS = clap.parsers.int(u32, 10),
-    .ID = clap.parsers.int(i64, 10),
-    .VERSION_ID = clap.parsers.int(i64, 10),
-    .SECTION_ID = clap.parsers.int(i64, 10),
-    .POSITION = clap.parsers.int(u32, 10),
-    .REVISION = clap.parsers.int(u64, 10),
-    .TYPE = clap.parsers.string,
-    .TITLE = clap.parsers.string,
-    .SLUG = clap.parsers.string,
-    .TEXT = clap.parsers.string,
-    .MARKDOWN = clap.parsers.string,
-    .LANG = clap.parsers.string,
-    .ASSET = clap.parsers.string,
-    .ALT = clap.parsers.string,
-    .CAPTION = clap.parsers.string,
-    .DISPLAY = clap.parsers.string,
-};
+// These are temporary document-command fields. Config fields below are
+// reflected from Config and are not duplicated in this parser table.
+const DocumentParserCount = 18;
+
+fn serveParserCount() usize {
+    var count: usize = 0;
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) count += 1;
+    }
+    return count;
+}
+
+fn configParserType(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .optional => |optional| configParserType(optional.child),
+        .pointer => if (T == []const u8) @TypeOf(clap.parsers.string) else @compileError("unsupported CLI pointer type"),
+        .bool => @TypeOf(parseBool),
+        .int => @TypeOf(clap.parsers.int(T, 10)),
+        .@"enum" => @TypeOf(clap.parsers.enumeration(T)),
+        else => @compileError("unsupported Config CLI parser type"),
+    };
+}
+
+fn configParser(comptime T: type) configParserType(T) {
+    return switch (@typeInfo(T)) {
+        .optional => |optional| configParser(optional.child),
+        .pointer => clap.parsers.string,
+        .bool => parseBool,
+        .int => clap.parsers.int(T, 10),
+        .@"enum" => clap.parsers.enumeration(T),
+        else => @compileError("unsupported Config CLI parser type"),
+    };
+}
+
+fn parserSetType() type {
+    var names: [DocumentParserCount + serveParserCount()][]const u8 = undefined;
+    var field_types: [names.len]type = undefined;
+    var attrs: [names.len]std.builtin.Type.StructField.Attributes = @splat(.{});
+    var index: usize = 0;
+
+    inline for (.{
+        .{ "command", @TypeOf(clap.parsers.string) },
+        .{ "operation", @TypeOf(clap.parsers.string) },
+        .{ "PATH", @TypeOf(clap.parsers.string) },
+        .{ "ID", @TypeOf(clap.parsers.int(i64, 10)) },
+        .{ "VERSION_ID", @TypeOf(clap.parsers.int(i64, 10)) },
+        .{ "SECTION_ID", @TypeOf(clap.parsers.int(i64, 10)) },
+        .{ "POSITION", @TypeOf(clap.parsers.int(u32, 10)) },
+        .{ "REVISION", @TypeOf(clap.parsers.int(u64, 10)) },
+        .{ "TYPE", @TypeOf(clap.parsers.string) },
+        .{ "TITLE", @TypeOf(clap.parsers.string) },
+        .{ "SLUG", @TypeOf(clap.parsers.string) },
+        .{ "TEXT", @TypeOf(clap.parsers.string) },
+        .{ "MARKDOWN", @TypeOf(clap.parsers.string) },
+        .{ "LANG", @TypeOf(clap.parsers.string) },
+        .{ "ASSET", @TypeOf(clap.parsers.string) },
+        .{ "ALT", @TypeOf(clap.parsers.string) },
+        .{ "CAPTION", @TypeOf(clap.parsers.string) },
+        .{ "DISPLAY", @TypeOf(clap.parsers.string) },
+    }) |entry| {
+        names[index] = entry[0];
+        field_types[index] = entry[1];
+        index += 1;
+    }
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const placeholder = verso.config.cliPlaceholderName(metadata.config_field);
+            names[index] = placeholder[0..];
+            field_types[index] = configParserType(verso.config.fieldType(metadata.config_field));
+            index += 1;
+        }
+    }
+    return @Struct(.auto, null, &names, &field_types, &attrs);
+}
+
+const ParserSet = parserSetType();
+
+fn makeParsers() ParserSet {
+    var result: ParserSet = undefined;
+    result.command = clap.parsers.string;
+    result.operation = clap.parsers.string;
+    result.PATH = clap.parsers.string;
+    result.ID = clap.parsers.int(i64, 10);
+    result.VERSION_ID = clap.parsers.int(i64, 10);
+    result.SECTION_ID = clap.parsers.int(i64, 10);
+    result.POSITION = clap.parsers.int(u32, 10);
+    result.REVISION = clap.parsers.int(u64, 10);
+    result.TYPE = clap.parsers.string;
+    result.TITLE = clap.parsers.string;
+    result.SLUG = clap.parsers.string;
+    result.TEXT = clap.parsers.string;
+    result.MARKDOWN = clap.parsers.string;
+    result.LANG = clap.parsers.string;
+    result.ASSET = clap.parsers.string;
+    result.ALT = clap.parsers.string;
+    result.CAPTION = clap.parsers.string;
+    result.DISPLAY = clap.parsers.string;
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const placeholder = verso.config.cliPlaceholderName(metadata.config_field);
+            @field(result, placeholder[0..]) = configParser(verso.config.fieldType(metadata.config_field));
+        }
+    }
+    return result;
+}
+
+pub const parsers = makeParsers();
 
 pub fn parseBool(value: []const u8) error{InvalidBoolean}!bool {
     if (std.mem.eql(u8, value, "true")) return true;
@@ -92,6 +210,18 @@ test "CLI boolean values are strict" {
     try std.testing.expectEqual(false, try parseBool("false"));
     try std.testing.expectError(error.InvalidBoolean, parseBool("TRUE"));
     try std.testing.expectError(error.InvalidBoolean, parseBool("1"));
+}
+
+test "serve help and parsers follow Config metadata" {
+    inline for (verso.config.serve_cli_metadata) |metadata| {
+        if (metadata.cli_enabled) {
+            const option_name = verso.config.cliOptionName(metadata.config_field);
+            const placeholder = verso.config.cliPlaceholderName(metadata.config_field);
+            const option = std.fmt.comptimePrint("--{s}", .{option_name});
+            try std.testing.expect(std.mem.indexOf(u8, server_help, option) != null);
+            try std.testing.expect(@hasField(ParserSet, placeholder[0..]));
+        }
+    }
 }
 
 pub fn overrides(args: anytype) verso.config.CliOverrides {

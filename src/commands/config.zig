@@ -8,7 +8,9 @@ pub fn run(
     command_args: *std.process.Args.Iterator,
     _: verso.config.CliOverrides,
 ) !void {
-    const params = comptime clap.parseParamsComptime(command_options.global_help ++ "\n<command>    Configuration command: dump-default.\n");
+    const params = comptime clap.parseParamsComptime(
+        command_options.global_help ++ "\n<command>    Configuration command: dump-default or env-reference.\n",
+    );
 
     var diagnostics = clap.Diagnostic{};
     var parsed_args = clap.parseEx(clap.Help, &params, command_options.parsers, command_args, .{
@@ -26,6 +28,7 @@ pub fn run(
 
     const command_name = parsed_args.positionals[0] orelse return error.InvalidArguments;
     if (std.mem.eql(u8, command_name, "dump-default")) return writeDefaultConfig(init.io);
+    if (std.mem.eql(u8, command_name, "env-reference")) return writeEnvironmentReference(init.io);
     return error.InvalidCommand;
 }
 
@@ -33,5 +36,12 @@ fn writeDefaultConfig(io: std.Io) !void {
     var output_buffer: [4096]u8 = undefined;
     var output_writer = std.Io.File.stdout().writer(io, &output_buffer);
     try verso.config.Config.writeDefault(&output_writer.interface);
+    try output_writer.flush();
+}
+
+fn writeEnvironmentReference(io: std.Io) !void {
+    var output_buffer: [4096]u8 = undefined;
+    var output_writer = std.Io.File.stdout().writer(io, &output_buffer);
+    try output_writer.interface.writeAll(verso.config.environment_reference[0..]);
     try output_writer.flush();
 }

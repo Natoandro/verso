@@ -92,7 +92,7 @@ starting `DOC-001`.
   - [x] **Verification:** Test no-file startup, file-versus-environment-versus
     CLI conflicts, alternate config paths, help output, and invalid CLI input.
 
-- [ ] **BOOT-003 — Config-derived `serve` configuration surface**
+- [x] **BOOT-003 — Config-derived `serve` configuration surface**
 
   Consolidate the `serve` configuration schema so `config.Config` is the sole
   semantic source for field names, nesting, types, defaults, validation, CLI
@@ -106,11 +106,11 @@ starting `DOC-001`.
   maintaining a separate environment allowlist. Leave document bootstrap
   command surfaces under DOC-001 and DOC-002.
 
-  - [ ] **Schema reflection:** Generate `serve` CLI names, parser types,
+  - [x] **Schema reflection:** Generate `serve` CLI names, parser types,
     override transport, and ordinary environment names from `config.Config`.
-  - [ ] **CLI metadata:** Validate sparse exposure/description metadata against
+  - [x] **CLI metadata:** Validate sparse exposure/description metadata against
     `Config` without allowing metadata to add configuration fields.
-  - [ ] **Generated help and references:** Generate `serve --help` and
+  - [x] **Generated help and references:** Generate `serve --help` and
     operator-facing environment reference output from the reflected schema.
 
   The current design intentionally keeps `Config` as the semantic source and
