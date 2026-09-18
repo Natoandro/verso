@@ -45,13 +45,10 @@ pub const serve_help_text = makeServeHelp();
 pub const server_help = serve_help_text[0..];
 
 const migration_config_fields = .{
-    .{ "runtime.environment", "Runtime environment: development or production." },
     .{ "logging.format", "Logging format: auto, json, text, or pretty." },
     .{ "logging.omit_null_fields", "Include null fields in logs: true or false." },
-    .{ "site.base_url", "Public site URL for validation." },
     .{ "database.url", "SQLite database path or URL." },
     .{ "migrations.path", "Migration directory." },
-    .{ "migrations.run_on_startup", "Run pending migrations at startup." },
 };
 
 fn migrationHelpLine(comptime path: []const u8, comptime description: []const u8) []const u8 {
@@ -89,7 +86,10 @@ fn makeMigrationHelp() [migrationHelpLength()]u8 {
 pub const migration_help_text = makeMigrationHelp();
 pub const migration_help = migration_help_text[0..];
 
-pub const document_help = migration_help;
+pub const document_help = migration_help ++
+    migrationHelpLine("runtime.environment", "Runtime environment: development or production.") ++
+    migrationHelpLine("site.base_url", "Public site URL for validation.") ++
+    migrationHelpLine("migrations.run_on_startup", "Run pending migrations at startup.");
 
 // These are temporary document-command fields. Config fields below are
 // reflected from Config and are not duplicated in this parser table.
@@ -222,6 +222,17 @@ test "serve help and parsers follow Config metadata" {
             try std.testing.expect(@hasField(ParserSet, placeholder[0..]));
         }
     }
+}
+
+test "migration help exposes only migration inputs" {
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--database-url") != null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--migrations-path") != null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--logging-format") != null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--logging-omit-null-fields") != null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--runtime-environment") == null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--site-base-url") == null);
+    try std.testing.expect(std.mem.indexOf(u8, migration_help, "--migrations-run-on-startup") == null);
+    try std.testing.expect(std.mem.indexOf(u8, document_help, "--migrations-run-on-startup") != null);
 }
 
 pub fn overrides(args: anytype) verso.config.CliOverrides {

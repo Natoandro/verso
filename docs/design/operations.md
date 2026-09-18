@@ -271,6 +271,11 @@ to `true`; when enabled, `serve` applies pending migrations before it binds the
 HTTP listener. Environment overrides are applied before validation, followed by
 command-line overrides.
 
+The focused `migrate up` command surface accepts the global `--config`
+selector, database URL, migration path, and logging overrides. The temporary
+document bootstrap commands retain their broader configuration options until
+their DOC-001/DOC-002 surfaces are replaced.
+
 This startup default is appropriate for the initial SQLite, single-service
 deployment. If Verso later targets a shared database or supports multiple
 service replicas, deployments should set `migrations.run_on_startup = false`
