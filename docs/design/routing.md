@@ -7,8 +7,9 @@ composition, and static response handlers. It does not define authentication,
 authorization, document lookup, canonical public URLs, or publication policy.
 Those concerns remain owned by the application and identity specifications.
 
-Related: [system architecture](system.md), [operations and boundaries](operations.md),
-[web editor and preview](editor.md), and [identity and MCP](identity-and-mcp.md).
+Related: [system architecture](system.md), [typed web form extraction](forms.md),
+[operations and boundaries](operations.md), [web editor and preview](editor.md),
+and [identity and MCP](identity-and-mcp.md).
 
 ## 1. Routing Boundary
 

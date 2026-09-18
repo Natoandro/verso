@@ -69,6 +69,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
   direction, SQLite, internal layering, and representative request paths.
 - [Routing and static delivery](design/routing.md) — comptime route patterns,
   composable routing layers, matching precedence, and static handlers.
+- [Typed web form extraction](design/forms.md) — endpoint-owned form schemas,
+  comptime field reflection, scalar conversion, and request-body ownership.
 - [Content model](design/content.md) — document versions, typed sections,
   assets, interactive modules, working revisions, and portable exchange
   archives.

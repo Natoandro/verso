@@ -376,6 +376,52 @@ deferred alternatives documented in
   - [x] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.
 
+- [ ] **WEB-005 — Extract typed endpoint form values**
+
+  Replace the generic all-fields `web.form.Values` bag with endpoint-owned
+  comptime-known schema structs. A typed extractor decodes the bounded
+  `application/x-www-form-urlencoded` body, maps reflected field names, parses
+  the supported scalar types, rejects malformed input and duplicate declared
+  fields, and reports missing required fields before the handler reaches an
+  application service. Unknown fields follow the initial permissive policy and
+  are ignored; strict unknown-field handling is a separate follow-up. Required
+  fields are non-optional struct fields; optional fields use `?T`. The extractor owns the
+  request body through a small parsed-result wrapper, while authentication,
+  authorization, domain validation, and application mutations remain in their
+  existing layers. See
+  [`docs/design/forms.md`](design/forms.md).
+
+  - [ ] **Typed extraction API:** Define the comptime schema constraints and
+    parsed-result ownership/deinitialization contract without adding a generic
+    dependency-injection or universal request-extractor framework.
+  - [ ] **Comptime reflection and parsing:** Generate field assignment from
+    struct reflection, initialize optional fields, detect missing required
+    fields, parse the endpoint-required integer types, and preserve empty versus
+    missing text semantics.
+  - [ ] **Endpoint migration:** Add distinct schemas for authentication,
+    management, document, and section forms; remove `Values.required` and the
+    generic field list while preserving existing response and service-boundary
+    behavior.
+  - [ ] **Verification:** Test schema reflection, scalar conversion, unknown
+    field compatibility, duplicate fields, malformed bodies, limits, cleanup,
+    and all migrated endpoint paths without direct storage or authorization
+    logic.
+
+- [ ] **WEB-006 — Add configurable strict form policies**
+
+  Add an opt-in policy for rejecting fields not declared by an endpoint schema,
+  without changing the permissive default established by `WEB-005`. The API
+  may use an options value or a separately named strict extraction operation;
+  choose the smallest form justified by an actual endpoint need. This remains
+  independent from required-field typing and application/domain validation.
+
+  - [ ] **Policy API:** Define the strict mode's public shape and its default
+    behavior without duplicating the parser or schema reflection logic.
+  - [ ] **Compatibility and diagnostics:** Distinguish unknown-field failures
+    from malformed encoding and preserve safe, endpoint-appropriate responses.
+  - [ ] **Verification:** Test opt-in strict rejection, permissive extraction,
+    duplicate handling, and migration of at least one concrete endpoint.
+
 ## 4. Safe server rendering and public routes
 
 - [ ] **RND-001 — Render published text safely**
