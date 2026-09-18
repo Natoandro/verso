@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: web-editor/pnpm-lock.yaml
 
       - name: Install editor dependencies
-        run: corepack pnpm --dir web-editor install --frozen-lockfile
+        run: corepack pnpm@10.15.0 --dir web-editor install --frozen-lockfile
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2

@@ -421,9 +421,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&snippet_isolation_test.step);
     test_step.dependOn(&missing_layout_slot_test.step);
     test_step.dependOn(&frontend_bundle.step);
-    const frontend_check = b.addSystemCommand(&.{ "corepack", "pnpm", "--dir", b.pathFromRoot("web-editor"), "check" });
+    const frontend_check = b.addSystemCommand(&.{ "corepack", "pnpm@10.15.0", "--dir", b.pathFromRoot("web-editor"), "check" });
     test_step.dependOn(&frontend_check.step);
-    const frontend_tests = b.addSystemCommand(&.{ "corepack", "pnpm", "--dir", b.pathFromRoot("web-editor"), "test" });
+    const frontend_tests = b.addSystemCommand(&.{ "corepack", "pnpm@10.15.0", "--dir", b.pathFromRoot("web-editor"), "test" });
     test_step.dependOn(&frontend_tests.step);
 
     const verify_step = b.step("verify", "Verify executable bootstrap flows");

@@ -108,7 +108,7 @@ plan entries are complete and verified. Run `zig build test` for unit tests and
 
 The editor frontend is bundled automatically by `zig build` using the locked
 dependencies in `web-editor/pnpm-lock.yaml`. Install them once with
-`corepack pnpm install --dir web-editor`; the released Zig binary embeds the
+`corepack pnpm@10.15.0 install --dir web-editor`; the released Zig binary embeds the
 generated assets and does not require Node at runtime.
 
 ## Scope
