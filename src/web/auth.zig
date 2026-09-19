@@ -16,6 +16,34 @@ pub const session_cookie_name = "__Host-verso_session";
 pub const csrf_cookie_name = "__Host-verso_csrf";
 const setup_csrf_cookie_name = "__Host-verso_setup_csrf";
 
+const RegistrationForm = struct {
+    csrf_token: ?[]const u8,
+    display_name: []const u8,
+    email: ?[]const u8,
+    login: []const u8,
+    password: []const u8,
+};
+
+const LoginForm = struct {
+    login: []const u8,
+    password: []const u8,
+};
+
+const PasswordForm = struct {
+    csrf_token: ?[]const u8,
+    current_password: []const u8,
+    new_password: []const u8,
+};
+
+const RecoveryForm = struct {
+    login: ?[]const u8,
+};
+
+const RecoveryCompleteForm = struct {
+    token: []const u8,
+    new_password: []const u8,
+};
+
 pub const Handler = struct {
     pub fn routes() []const route.Route {
         return routes_table.asSlice();
@@ -108,18 +136,15 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     if (!try request.server.identity_service.initialSetupAvailable()) return redirectToLogin(request);
     const setup_cookie = cookieValue(request, setup_csrf_cookie_name);
-    var values = form.read(request) catch {
+    var parsed = form.extract(RegistrationForm, request) catch {
         return respondText(request, "Invalid registration\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try requireSetupCsrf(setup_cookie, values.csrf_token, request)) return;
-    const display_name = values.display_name orelse return respondText(request, "Invalid registration\n", .bad_request);
-    const login = values.login orelse return respondText(request, "Invalid registration\n", .bad_request);
-    const password_text = values.password orelse return respondText(request, "Invalid registration\n", .bad_request);
+    defer parsed.deinit(request.server.allocator);
+    if (!try requireSetupCsrf(setup_cookie, parsed.value.csrf_token, request)) return;
     const credentials = request.server.identity_service.registerInitialLocalOwner(
-        .{ .display_name = display_name, .email = values.email },
-        login,
-        password_text,
+        .{ .display_name = parsed.value.display_name, .email = parsed.value.email },
+        parsed.value.login,
+        parsed.value.password,
         request.remote_address,
     ) catch |registration_error| switch (registration_error) {
         error.OwnerAlreadyExists => return redirectToLogin(request),
@@ -141,15 +166,13 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
             };
         } else |_| {}
     }
-    var values = form.read(request) catch {
+    var parsed = form.extract(LoginForm, request) catch {
         return respondText(request, "Invalid credentials\n", .unauthorized);
     };
-    defer values.deinit(request.server.allocator);
-    const login = values.login orelse return respondText(request, "Invalid credentials\n", .unauthorized);
-    const password = values.password orelse return respondText(request, "Invalid credentials\n", .unauthorized);
+    defer parsed.deinit(request.server.allocator);
     const credentials = request.server.identity_service.startLocalSession(
-        login,
-        password,
+        parsed.value.login,
+        parsed.value.password,
         request.remote_address,
     ) catch |login_error| switch (login_error) {
         error.InvalidCredentials => return respondText(request, "Invalid credentials\n", .unauthorized),
@@ -203,14 +226,12 @@ fn postPassword(request: *RequestContext, _: Next) Error!void {
         return respondText(request, "Authentication required\n", .unauthorized);
     _ = request.server.identity_service.authenticate(token) catch
         return respondText(request, "Authentication required\n", .unauthorized);
-    var values = form.read(request) catch {
+    var parsed = form.extract(PasswordForm, request) catch {
         return respondText(request, "Invalid password\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try requireCsrf(request, token, values.csrf_token)) return;
-    const current = values.current_password orelse return respondText(request, "Invalid password\n", .bad_request);
-    const new_password = values.new_password orelse return respondText(request, "Invalid password\n", .bad_request);
-    const credentials = request.server.identity_service.changePassword(token, current, new_password) catch |change_error| switch (change_error) {
+    defer parsed.deinit(request.server.allocator);
+    if (!try requireCsrf(request, token, parsed.value.csrf_token)) return;
+    const credentials = request.server.identity_service.changePassword(token, parsed.value.current_password, parsed.value.new_password) catch |change_error| switch (change_error) {
         error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid password\n", .unauthorized),
         else => return respondText(request, "Password change failed\n", .internal_server_error),
     };
@@ -226,11 +247,11 @@ fn getRecovery(request: *RequestContext, _: Next) Error!void {
 
 fn postRecovery(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    var values = form.read(request) catch {
+    var parsed = form.extract(RecoveryForm, request) catch {
         return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
     };
-    defer values.deinit(request.server.allocator);
-    if (values.login) |login| {
+    defer parsed.deinit(request.server.allocator);
+    if (parsed.value.login) |login| {
         _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch {};
     }
     return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
@@ -245,13 +266,11 @@ fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
 
 fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    var values = form.read(request) catch {
+    var parsed = form.extract(RecoveryCompleteForm, request) catch {
         return respondText(request, "Invalid recovery request\n", .unauthorized);
     };
-    defer values.deinit(request.server.allocator);
-    const reset_token = values.token orelse return respondText(request, "Invalid recovery request\n", .unauthorized);
-    const new_password = values.new_password orelse return respondText(request, "Invalid recovery request\n", .unauthorized);
-    const credentials = request.server.identity_service.completePasswordReset(reset_token, new_password) catch |reset_error| switch (reset_error) {
+    defer parsed.deinit(request.server.allocator);
+    const credentials = request.server.identity_service.completePasswordReset(parsed.value.token, parsed.value.new_password) catch |reset_error| switch (reset_error) {
         error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid recovery request\n", .unauthorized),
         else => return respondText(request, "Recovery failed\n", .internal_server_error),
     };

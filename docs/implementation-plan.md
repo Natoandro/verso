@@ -376,7 +376,7 @@ deferred alternatives documented in
   - [x] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.
 
-- [ ] **WEB-005 — Extract typed endpoint form values**
+- [x] **WEB-005 — Extract typed endpoint form values**
 
   Replace the generic all-fields `web.form.Values` bag with endpoint-owned
   comptime-known schema structs. A typed extractor decodes the bounded
@@ -391,21 +391,21 @@ deferred alternatives documented in
   existing layers. See
   [`docs/design/forms.md`](design/forms.md).
 
-  - [ ] **Typed extraction API:** Define the comptime schema constraints and
+  - [x] **Typed extraction API:** Define the comptime schema constraints and
     parsed-result ownership/deinitialization contract without adding a generic
     dependency-injection or universal request-extractor framework.
-  - [ ] **Comptime reflection and parsing:** Generate field assignment from
+  - [x] **Comptime reflection and parsing:** Generate field assignment from
     struct reflection, initialize optional fields, detect missing required
     fields, parse the endpoint-required integer types, and preserve empty versus
     missing text semantics.
-  - [ ] **Endpoint migration:** Add distinct schemas for authentication,
+  - [x] **Endpoint migration:** Add distinct schemas for authentication,
     management, document, and section forms; remove `Values.required` and the
-    generic field list while preserving existing response and service-boundary
-    behavior.
-  - [ ] **Verification:** Test schema reflection, scalar conversion, unknown
-    field compatibility, duplicate fields, malformed bodies, limits, cleanup,
-    and all migrated endpoint paths without direct storage or authorization
-    logic.
+    generic field list while preserving successful-operation and
+    service-boundary behavior.
+  - [x] **Verification:** Test schema reflection, scalar conversion, unknown
+    field compatibility, duplicate fields, malformed bodies, content-type and
+    size limits, cleanup, and compilation of all migrated endpoint handlers
+    without direct storage or authorization logic.
 
 - [ ] **WEB-006 — Add configurable strict form policies**
 

@@ -12,6 +12,25 @@ const RequestContext = context.RequestContext;
 const Next = layer.Next;
 const Error = anyerror;
 
+const AuthorForm = struct {
+    csrf_token: ?[]const u8,
+    display_name: []const u8,
+    slug: []const u8,
+    biography: ?[]const u8,
+};
+
+const AssignmentForm = struct {
+    csrf_token: ?[]const u8,
+    editor_user_id: i64,
+    scope_type: []const u8,
+    scope_id: i64,
+};
+
+const RevokeAssignmentForm = struct {
+    csrf_token: ?[]const u8,
+    expected_revision: i64,
+};
+
 pub const Handler = struct {
     pub fn router() routing.Router {
         return routes_table.router();
@@ -37,18 +56,18 @@ fn getAuthors(request: *RequestContext, _: Next) Error!void {
 
 fn postCreateAuthor(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    var values = form.read(request) catch {
+    var parsed = form.extract(AuthorForm, request) catch {
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try auth.requireCsrf(request, token, values.csrf_token)) return;
+    defer parsed.deinit(request.server.allocator);
+    if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
-    const display_name = values.required("display_name") catch return auth.respondText(request, "Invalid author form\n", .bad_request);
-    const slug = values.required("slug") catch return auth.respondText(request, "Invalid author form\n", .bad_request);
+    const display_name = parsed.value.display_name;
+    const slug = parsed.value.slug;
     _ = request.server.identity_service.createAuthor(token, .{
         .display_name = display_name,
         .slug = slug,
-        .biography = values.biography,
+        .biography = parsed.value.biography,
     }) catch |mutation_error| return managementError(request, mutation_error);
     return redirectToAuthors(request);
 }
@@ -58,38 +77,36 @@ fn postUpdateAuthor(request: *RequestContext, _: Next) Error!void {
     const author_id = parseId(request.routeParam("id") orelse "") catch {
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    var values = form.read(request) catch {
+    var parsed = form.extract(AuthorForm, request) catch {
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try auth.requireCsrf(request, token, values.csrf_token)) return;
+    defer parsed.deinit(request.server.allocator);
+    if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
-    const display_name = values.required("display_name") catch return auth.respondText(request, "Invalid author form\n", .bad_request);
-    const slug = values.required("slug") catch return auth.respondText(request, "Invalid author form\n", .bad_request);
+    const display_name = parsed.value.display_name;
+    const slug = parsed.value.slug;
     _ = request.server.identity_service.updateAuthor(token, .{
         .author_id = author_id,
         .display_name = display_name,
         .slug = slug,
-        .biography = values.biography orelse "",
+        .biography = parsed.value.biography orelse "",
     }) catch |mutation_error| return managementError(request, mutation_error);
     return redirectToAuthors(request);
 }
 
 fn postCreateAssignment(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    var values = form.read(request) catch {
+    var parsed = form.extract(AssignmentForm, request) catch {
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try auth.requireCsrf(request, token, values.csrf_token)) return;
+    defer parsed.deinit(request.server.allocator);
+    if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
-    const editor_user_id = parseId(values.required("editor_user_id") catch {
+    const editor_user_id = validateId(parsed.value.editor_user_id) catch
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
-    }) catch return auth.respondText(request, "Invalid assignment form\n", .bad_request);
-    const scope_type = values.required("scope_type") catch return auth.respondText(request, "Invalid assignment form\n", .bad_request);
-    const scope_id = parseId(values.required("scope_id") catch {
+    const scope_type = parsed.value.scope_type;
+    const scope_id = validateId(parsed.value.scope_id) catch
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
-    }) catch return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     const scope: domain.AssignmentScope = if (std.mem.eql(u8, scope_type, "author"))
         .{ .author = scope_id }
     else if (std.mem.eql(u8, scope_type, "document"))
@@ -109,14 +126,13 @@ fn postRevokeAssignment(request: *RequestContext, _: Next) Error!void {
     const assignment_id = parseId(request.routeParam("id") orelse "") catch {
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    var values = form.read(request) catch {
+    var parsed = form.extract(RevokeAssignmentForm, request) catch {
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    defer values.deinit(request.server.allocator);
-    if (!try auth.requireCsrf(request, token, values.csrf_token)) return;
-    const expected_revision = parseRevision(values.required("expected_revision") catch {
+    defer parsed.deinit(request.server.allocator);
+    if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
+    const expected_revision = validateRevision(parsed.value.expected_revision) catch
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
-    }) catch return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     _ = request.server.identity_service.revokeAssignment(token, .{
         .assignment_id = assignment_id,
         .expected_revision = expected_revision,
@@ -239,14 +255,22 @@ fn redirectToAuthors(request: *RequestContext) Error!void {
 
 fn parseId(value: []const u8) !i64 {
     const id = std.fmt.parseInt(i64, value, 10) catch return error.InvalidId;
-    if (id <= 0) return error.InvalidId;
-    return id;
+    return validateId(id);
 }
 
 fn parseRevision(value: []const u8) !i64 {
     const revision = std.fmt.parseInt(i64, value, 10) catch return error.InvalidRevision;
-    if (revision < 0) return error.InvalidRevision;
-    return revision;
+    return validateRevision(revision);
+}
+
+fn validateId(value: i64) !i64 {
+    if (value <= 0) return error.InvalidId;
+    return value;
+}
+
+fn validateRevision(value: i64) !i64 {
+    if (value < 0) return error.InvalidRevision;
+    return value;
 }
 
 fn managementError(request: *RequestContext, failure: anyerror) Error!void {

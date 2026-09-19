@@ -42,6 +42,37 @@ const editor_documents_css = @embedFile("styles/editor/documents.css");
 const editor_responsive_css = @embedFile("styles/editor/responsive.css");
 const local_actor: application.Actor = .local_operator;
 
+const CreateDraftForm = struct {
+    csrf_token: ?[]const u8,
+    title: []const u8,
+    slug: []const u8,
+};
+
+const SaveDocumentForm = struct {
+    csrf_token: ?[]const u8,
+    document_id: i64,
+    version_id: i64,
+    expected_revision: u64,
+    title: []const u8,
+    slug: []const u8,
+    description: ?[]const u8,
+};
+
+const SectionForm = struct {
+    csrf_token: ?[]const u8,
+    document_id: i64,
+    version_id: i64,
+    expected_revision: u64,
+    section_id: ?i64,
+    operation: []const u8,
+    kind: ?[]const u8,
+    markdown: ?[]const u8,
+    asset: ?[]const u8,
+    alt: ?[]const u8,
+    caption: ?[]const u8,
+    display: ?[]const u8,
+};
+
 pub const Handler = struct {
     pub fn routes() []const route.Route {
         return routes_table.asSlice();
@@ -96,16 +127,14 @@ fn getEditor(request: *context.RequestContext, _: layer.Next) anyerror!void {
 
 fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
     if (!try requireEditorCapability(request, .document_create)) return;
-    var values = form.read(request) catch return auth.respondText(request, "Invalid draft form\n", .bad_request);
-    defer values.deinit(request.server.allocator);
-    if (!try requireEditorCsrf(request, values.csrf_token)) return;
+    var parsed = form.extract(CreateDraftForm, request) catch return auth.respondText(request, "Invalid draft form\n", .bad_request);
+    defer parsed.deinit(request.server.allocator);
+    if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
-    const title = values.required("title") catch return renderList(request, csrf, "Enter a title.", true);
-    const slug = values.required("slug") catch return renderList(request, csrf, "Enter a URL slug.", true);
     const draft = request.server.document_service.createDraft(local_actor, .{
         .document_type = .article,
-        .title = title,
-        .slug = slug,
+        .title = parsed.value.title,
+        .slug = parsed.value.slug,
         .description = null,
         .language = "en",
         .markdown = "",
@@ -115,15 +144,13 @@ fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
 
 fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
     if (!try requireEditorCapability(request, .document_update_any)) return;
-    var values = form.read(request) catch return auth.respondText(request, "Invalid document form\n", .bad_request);
-    defer values.deinit(request.server.allocator);
-    if (!try requireEditorCsrf(request, values.csrf_token)) return;
+    var parsed = form.extract(SaveDocumentForm, request) catch return auth.respondText(request, "Invalid document form\n", .bad_request);
+    defer parsed.deinit(request.server.allocator);
+    if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
-    const document_id = parseValue(values, "document_id") catch return auth.respondText(request, "Invalid document form\n", .bad_request);
-    const version_id = parseValue(values, "version_id") catch return auth.respondText(request, "Invalid document form\n", .bad_request);
-    const expected_revision = parseUnsigned(values, "expected_revision") catch return auth.respondText(request, "Invalid document form\n", .bad_request);
-    const title = values.required("title") catch return renderDocumentById(request, csrf, document_id, "Enter a title.", true);
-    const slug = values.required("slug") catch return renderDocumentById(request, csrf, document_id, "Enter a URL slug.", true);
+    const document_id = parsed.value.document_id;
+    const version_id = parsed.value.version_id;
+    const expected_revision = parsed.value.expected_revision;
     var loaded = request.server.document_service.loadDraft(local_actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
@@ -132,14 +159,14 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
     const draft_sections = try request.server.allocator.alloc(domain.DraftSection, loaded.document.sections.len);
     defer request.server.allocator.free(draft_sections);
     for (loaded.document.sections, 0..) |section, index| draft_sections[index] = section;
-    const description_value = values.description orelse "";
+    const description_value = parsed.value.description orelse "";
     _ = request.server.document_service.saveDraft(local_actor, .{
         .document_id = document_id,
         .version_id = version_id,
         .expected_revision = expected_revision,
         .document_type = loaded.document.document_type,
-        .title = title,
-        .slug = slug,
+        .title = parsed.value.title,
+        .slug = parsed.value.slug,
         .description = if (description_value.len == 0) null else description_value,
         .language = loaded.document.language,
         .sections = draft_sections,
@@ -149,14 +176,14 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
 
 fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void {
     if (!try requireEditorCapability(request, .document_update_any)) return;
-    var values = form.read(request) catch return auth.respondText(request, "Invalid section form\n", .bad_request);
-    defer values.deinit(request.server.allocator);
-    if (!try requireEditorCsrf(request, values.csrf_token)) return;
+    var parsed = form.extract(SectionForm, request) catch return auth.respondText(request, "Invalid section form\n", .bad_request);
+    defer parsed.deinit(request.server.allocator);
+    if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
-    const document_id = parseValue(values, "document_id") catch return auth.respondText(request, "Invalid section form\n", .bad_request);
-    const version_id = parseValue(values, "version_id") catch return renderDocumentById(request, csrf, document_id, "Invalid draft version.", true);
-    const expected_revision = parseUnsigned(values, "expected_revision") catch return renderDocumentById(request, csrf, document_id, "Invalid draft revision.", true);
-    const operation = values.required("operation") catch return renderDocumentById(request, csrf, document_id, "Invalid section operation.", true);
+    const document_id = parsed.value.document_id;
+    const version_id = parsed.value.version_id;
+    const expected_revision = parsed.value.expected_revision;
+    const operation = parsed.value.operation;
 
     if (std.mem.eql(u8, operation, "insert-text") or std.mem.eql(u8, operation, "insert-image")) {
         const payload: section_domain.Payload = if (std.mem.eql(u8, operation, "insert-text"))
@@ -172,7 +199,8 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
         return renderDocument(request, csrf, version_id, false, null, "Section added.", false);
     }
 
-    const section_id = parseValue(values, "section_id") catch return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
+    const section_id = parsed.value.section_id orelse return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
+    if (section_id <= 0) return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
     var loaded = request.server.document_service.loadDraft(local_actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
@@ -196,7 +224,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
         return renderDocument(request, csrf, version_id, false, null, "Section deleted.", false);
     }
 
-    const payload = sectionPayload(values) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+    const payload = sectionPayload(parsed.value) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
     _ = request.server.document_service.updateSection(local_actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
     const show_preview = std.mem.eql(u8, operation, "preview");
     if (isHtmx(request)) return renderSection(request, csrf, version_id, section_id, if (show_preview) section_id else null) catch return renderDocument(request, csrf, version_id, false, null, "The section was saved, but could not be rendered.", true);
@@ -282,14 +310,14 @@ fn respondPage(request: *context.RequestContext, page: views.Page) !void {
     return auth.respond(request, content, "text/html; charset=utf-8", &.{.{ .name = "cache-control", .value = "no-store" }}, .ok);
 }
 
-fn sectionPayload(values: form.Values) !section_domain.Payload {
-    const kind = values.required("kind") catch return error.InvalidSectionKind;
-    if (std.mem.eql(u8, kind, "text")) return .{ .text = .{ .markdown = values.required("markdown") catch return error.InvalidMarkdown } };
+fn sectionPayload(values: SectionForm) !section_domain.Payload {
+    const kind = values.kind orelse return error.InvalidSectionKind;
+    if (std.mem.eql(u8, kind, "text")) return .{ .text = .{ .markdown = values.markdown orelse return error.InvalidMarkdown } };
     if (!std.mem.eql(u8, kind, "image")) return error.InvalidSectionKind;
     const display_text = values.display orelse "inline";
     return .{ .image = .{
-        .asset = values.required("asset") catch return error.InvalidAssetName,
-        .alt = values.required("alt") catch return error.InvalidAltText,
+        .asset = values.asset orelse return error.InvalidAssetName,
+        .alt = values.alt orelse return error.InvalidAltText,
         .caption = if (values.caption) |caption| if (caption.len == 0) null else caption else null,
         .display = try section_domain.ImageDisplay.parse(display_text),
     } };
@@ -316,14 +344,6 @@ fn csrfToken(request: *context.RequestContext) ![]const u8 {
         try auth.respondText(request, "CSRF validation failed\n", .forbidden);
         return error.ResponseAlreadySent;
     };
-}
-
-fn parseValue(values: form.Values, comptime field: []const u8) !i64 {
-    return std.fmt.parseInt(i64, try values.required(field), 10) catch error.InvalidForm;
-}
-
-fn parseUnsigned(values: form.Values, comptime field: []const u8) !u64 {
-    return std.fmt.parseInt(u64, try values.required(field), 10) catch error.InvalidForm;
 }
 
 fn parseId(value: []const u8) !i64 {

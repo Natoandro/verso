@@ -8,14 +8,15 @@ authentication, authorization, application mutations, or domain validation.
 Those concerns remain owned by the existing request pipeline and application
 services.
 
-The design is planned work. The current implementation still uses the generic
-`form.Values` field bag described in the rationale below.
+The typed extractor described here is implemented by `src/web/form.zig`.
+Configurable strict unknown-field handling remains planned follow-up work in
+`WEB-006`.
 
 ## 1. Why the generic field bag is insufficient
 
-The current parser has one `Values` struct containing every field name used by
-any endpoint. Every field is optional because the parser does not know which
-endpoint is consuming the body. Handlers therefore have to reconstruct each
+The previous parser had one `Values` struct containing every field name used by
+any endpoint. Every field was optional because the parser did not know which
+endpoint was consuming the body. Handlers therefore had to reconstruct each
 endpoint's schema with calls such as `required("title")`, followed by separate
 integer parsing and ad hoc error handling.
 
@@ -62,7 +63,7 @@ An optional field remains explicit:
 
 ```zig
 const SaveDocumentForm = struct {
-    csrf_token: []const u8,
+    csrf_token: ?[]const u8,
     document_id: i64,
     version_id: i64,
     expected_revision: u64,
@@ -72,16 +73,15 @@ const SaveDocumentForm = struct {
 };
 ```
 
-The exact function and wrapper names are implementation details for the
-`WEB-005` slice, but the important contract is that the returned wrapper owns
-the request body while `value` has the endpoint's concrete type. The user
-schema does not need a hidden allocator or a `body` field.
+`form.extract` returns `form.Extracted(Schema)`. The returned wrapper owns the
+request body while `value` has the endpoint's concrete type. The user schema
+does not need a hidden allocator or a `body` field.
 
-Schemas should be defined per distinct semantic payload rather than by
-combining every field used below one route namespace. The initial migration
-will cover login, password, recovery, author-management, assignment,
-document, and section forms. A schema may be reused only when the endpoint
-contracts are genuinely identical.
+Schemas are defined per distinct semantic payload rather than by combining
+every field used below one route namespace. The completed migration covers
+login, password, recovery, author-management, assignment, document, and
+section forms. A schema may be reused only when the endpoint contracts are
+genuinely identical.
 
 ## 3. Comptime extraction contract
 
@@ -144,7 +144,9 @@ services, change canonical state, or bypass authentication and authorization.
 Handlers continue to perform origin/session/capability checks at the existing
 boundaries and then pass typed values to application services. Domain rules
 such as title validity, slug policy, password policy, and section semantics
-remain below the web layer.
+remain below the web layer. A missing required field is an extraction error and
+is handled before endpoint-specific rendering; field-specific editor responses
+remain the responsibility of later application validation.
 
 Path captures remain separate request-local values. This first extractor slice
 does not combine route parameters, query parameters, headers, cookies, and form
@@ -154,7 +156,7 @@ API is insufficient.
 
 ## 5. Migration and verification
 
-The migration should replace generic `Values` use in the existing endpoint
+The completed migration replaced generic `Values` use in the existing endpoint
 handlers with schemas for:
 
 - local login, password change, password recovery, and recovery completion;
@@ -163,9 +165,9 @@ handlers with schemas for:
 - draft creation and document saving; and
 - section mutation operations.
 
-It should remove `Values.required`, endpoint-local field-name parsing helpers,
-and the all-fields `Values` declaration while preserving response behavior and
-application-service boundaries.
+It removed `Values.required`, endpoint-local field-name parsing helpers, and
+the all-fields `Values` declaration while preserving application-service
+boundaries.
 
 Tests should cover:
 
