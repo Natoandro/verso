@@ -203,7 +203,10 @@ pub const Store = struct {
     pub fn userHasRole(self: *Store, user_id: i64, role: identity.Role) !bool {
         return (try self.database.one(
             i64,
-            "SELECT 1 FROM user_roles WHERE user_id = ? AND role = ?",
+            \\SELECT 1 FROM user_roles AS role_grant
+            \\    JOIN users AS user ON user.id = role_grant.user_id
+            \\    WHERE role_grant.user_id = ? AND role_grant.role = ? AND user.state = 'active'
+        ,
             .{},
             .{ user_id, @tagName(role) },
         )) != null;

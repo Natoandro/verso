@@ -154,7 +154,11 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         &identity_query_store,
         &identity_service,
     );
-    var document_service = application_documents.Service.init(allocator, &document_store);
+    var document_service = application_documents.Service.initProtected(
+        allocator,
+        &document_store,
+        &identity_service,
+    );
 
     var base_url_buffer: [1024]u8 = undefined;
     const base_url = app_config.effectiveBaseUrl(&base_url_buffer) catch |startup_error| {

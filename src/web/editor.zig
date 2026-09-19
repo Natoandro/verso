@@ -1,6 +1,5 @@
 const std = @import("std");
 const application = @import("../application/documents.zig");
-const auth_identity = @import("../auth/identity.zig");
 const domain = @import("../domain/document.zig");
 const section_domain = @import("../domain/sections.zig");
 const auth = @import("auth.zig");
@@ -42,8 +41,6 @@ const editor_document_css = @embedFile("styles/editor/document.css");
 const editor_sections_css = @embedFile("styles/editor/sections.css");
 const editor_documents_css = @embedFile("styles/editor/documents.css");
 const editor_responsive_css = @embedFile("styles/editor/responsive.css");
-const local_actor: application.Actor = .local_operator;
-
 const CreateDraftForm = struct {
     csrf_token: ?[]const u8,
     title: []const u8,
@@ -122,23 +119,23 @@ const routes_table = route.routes(.{
 });
 
 fn getEditor(request: *context.RequestContext, _: layer.Next) anyerror!void {
-    if (!try requireEditorCapability(request, .document_read_any)) return;
+    const actor = try currentActor(request);
     const csrf = try csrfToken(request);
     const document_text = queryParam(request, "document") orelse return renderList(request, csrf, "", false);
     const document_id = parseId(document_text) catch return renderList(request, csrf, "Invalid document.", true);
-    const version_id = request.server.document_service.mutableVersionForDocument(local_actor, document_id) catch |failure| {
+    const version_id = request.server.document_service.mutableVersionForDocument(actor, document_id) catch |failure| {
         return renderList(request, csrf, failureMessage(failure), true);
     };
     return renderDocument(request, csrf, version_id, detailsOpen(request), previewId(request), "", false);
 }
 
 fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
-    if (!try requireEditorCapability(request, .document_create)) return;
+    const actor = try currentActor(request);
     var parsed = form.extract(CreateDraftForm, request) catch return auth.respondText(request, "Invalid draft form\n", .bad_request);
     defer parsed.deinit(request.server.allocator);
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
-    const draft = request.server.document_service.createDraft(local_actor, .{
+    const draft = request.server.document_service.createDraft(actor, .{
         .document_type = .article,
         .title = parsed.value.title,
         .slug = parsed.value.slug,
@@ -150,7 +147,7 @@ fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
 }
 
 fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
-    if (!try requireEditorCapability(request, .document_update_any)) return;
+    const actor = try currentActor(request);
     var parsed = form.extract(SaveDocumentForm, request) catch return auth.respondText(request, "Invalid document form\n", .bad_request);
     defer parsed.deinit(request.server.allocator);
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
@@ -158,7 +155,7 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
     const document_id = parsed.value.document_id;
     const version_id = parsed.value.version_id;
     const expected_revision = parsed.value.expected_revision;
-    var loaded = request.server.document_service.loadDraft(local_actor, version_id) catch |failure| {
+    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
     defer loaded.deinit();
@@ -167,7 +164,7 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
     defer request.server.allocator.free(draft_sections);
     for (loaded.document.sections, 0..) |section, index| draft_sections[index] = section;
     const description_value = parsed.value.description orelse "";
-    _ = request.server.document_service.saveDraft(local_actor, .{
+    _ = request.server.document_service.saveDraft(actor, .{
         .document_id = document_id,
         .version_id = version_id,
         .expected_revision = expected_revision,
@@ -182,7 +179,7 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
 }
 
 fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void {
-    if (!try requireEditorCapability(request, .document_update_any)) return;
+    const actor = try currentActor(request);
     var parsed = form.extract(SectionForm, request) catch return auth.respondText(request, "Invalid section form\n", .bad_request);
     defer parsed.deinit(request.server.allocator);
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
@@ -197,7 +194,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
             .{ .text = .{ .markdown = "" } }
         else
             .{ .image = .{ .asset = "placeholder.png", .alt = "Image placeholder", .caption = null, .display = .inline_display } };
-        _ = request.server.document_service.insertSection(local_actor, .{
+        _ = request.server.document_service.insertSection(actor, .{
             .version_id = version_id,
             .position = sectionCount(request, version_id) catch 0,
             .expected_revision = expected_revision,
@@ -208,7 +205,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
 
     const section_id = parsed.value.section_id orelse return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
     if (section_id <= 0) return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
-    var loaded = request.server.document_service.loadDraft(local_actor, version_id) catch |failure| {
+    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
     defer loaded.deinit();
@@ -219,28 +216,32 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
             @intCast(index -| 1)
         else
             @intCast(@min(index + 1, loaded.document.sections.len - 1));
-        _ = request.server.document_service.moveSection(local_actor, .{ .version_id = version_id, .section_id = section_id, .position = target, .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+        _ = request.server.document_service.moveSection(actor, .{ .version_id = version_id, .section_id = section_id, .position = target, .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
         return renderDocument(request, csrf, version_id, false, null, "Section order updated.", false);
     }
     if (std.mem.eql(u8, operation, "duplicate")) {
-        _ = request.server.document_service.duplicateSection(local_actor, .{ .version_id = version_id, .section_id = section_id, .position = @intCast(index + 1), .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+        _ = request.server.document_service.duplicateSection(actor, .{ .version_id = version_id, .section_id = section_id, .position = @intCast(index + 1), .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
         return renderDocument(request, csrf, version_id, false, null, "Section duplicated.", false);
     }
     if (std.mem.eql(u8, operation, "delete")) {
-        _ = request.server.document_service.deleteSection(local_actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+        _ = request.server.document_service.deleteSection(actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
         return renderDocument(request, csrf, version_id, false, null, "Section deleted.", false);
     }
 
     const payload = sectionPayload(parsed.value) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
-    _ = request.server.document_service.updateSection(local_actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+    _ = request.server.document_service.updateSection(actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
     const show_preview = std.mem.eql(u8, operation, "preview");
     if (isHtmx(request)) return renderSection(request, csrf, version_id, section_id, if (show_preview) section_id else null) catch return renderDocument(request, csrf, version_id, false, null, "The section was saved, but could not be rendered.", true);
     return renderDocument(request, csrf, version_id, false, if (show_preview) section_id else null, if (show_preview) "Section saved and previewed." else "Section saved.", false);
 }
 
 fn renderList(request: *context.RequestContext, csrf: []const u8, notice: []const u8, is_error: bool) !void {
-    const summaries = request.server.document_service.listDrafts(local_actor, request.server.allocator) catch |failure| return auth.respondText(request, failureMessage(failure), .internal_server_error);
-    defer for (summaries) |*summary| summary.deinit(request.server.allocator);
+    const actor = try currentActor(request);
+    const summaries = request.server.document_service.listDrafts(actor, request.server.allocator) catch |failure| return editorFailure(request, failure);
+    defer {
+        for (summaries) |*summary| summary.deinit(request.server.allocator);
+        request.server.allocator.free(summaries);
+    }
     var arena = std.heap.ArenaAllocator.init(request.server.allocator);
     defer arena.deinit();
     const page = try views.list(arena.allocator(), csrf, summaries, notice, is_error);
@@ -248,12 +249,14 @@ fn renderList(request: *context.RequestContext, csrf: []const u8, notice: []cons
 }
 
 fn renderDocumentById(request: *context.RequestContext, csrf: []const u8, document_id: i64, notice: []const u8, is_error: bool) !void {
-    const version_id = request.server.document_service.mutableVersionForDocument(local_actor, document_id) catch return renderList(request, csrf, notice, is_error);
+    const actor = try currentActor(request);
+    const version_id = request.server.document_service.mutableVersionForDocument(actor, document_id) catch return renderList(request, csrf, notice, is_error);
     return renderDocument(request, csrf, version_id, false, null, notice, is_error);
 }
 
 fn renderDocument(request: *context.RequestContext, csrf: []const u8, version_id: i64, details_open: bool, preview_id: ?i64, notice: []const u8, is_error: bool) !void {
-    var loaded = request.server.document_service.loadDraft(local_actor, version_id) catch |failure| return renderList(request, csrf, failureMessage(failure), true);
+    const actor = try currentActor(request);
+    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| return editorFailure(request, failure);
     defer loaded.deinit();
     var arena = std.heap.ArenaAllocator.init(request.server.allocator);
     defer arena.deinit();
@@ -262,7 +265,8 @@ fn renderDocument(request: *context.RequestContext, csrf: []const u8, version_id
 }
 
 fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id: i64, section_id: i64, preview_id: ?i64) !void {
-    var loaded = try request.server.document_service.loadDraft(local_actor, version_id);
+    const actor = try currentActor(request);
+    var loaded = try request.server.document_service.loadDraft(actor, version_id);
     defer loaded.deinit();
     var arena = std.heap.ArenaAllocator.init(request.server.allocator);
     defer arena.deinit();
@@ -293,19 +297,15 @@ fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id:
     return auth.respond(request, content, "text/html; charset=utf-8", &headers, .ok);
 }
 
-fn requireEditorCapability(request: *context.RequestContext, capability: auth_identity.Capability) !bool {
-    const token = auth.cookieValue(request, auth.session_cookie_name) orelse {
-        try errors.respond(request, .unauthorized);
-        return false;
+fn currentActor(request: *const context.RequestContext) !application.Actor {
+    return .{ .user = request.authenticated_user_id orelse return error.InvalidSession };
+}
+
+fn editorFailure(request: *context.RequestContext, failure: anyerror) !void {
+    return switch (failure) {
+        error.Forbidden => auth.respondText(request, "Forbidden\n", .forbidden),
+        else => auth.respondText(request, failureMessage(failure), .internal_server_error),
     };
-    request.server.identity_service.requireCapability(token, capability) catch |failure| switch (failure) {
-        error.Forbidden => {
-            try errors.respond(request, .forbidden);
-            return false;
-        },
-        else => return failure,
-    };
-    return true;
 }
 
 fn respondPage(request: *context.RequestContext, page: views.Page) !void {
@@ -331,7 +331,8 @@ fn sectionPayload(values: SectionForm) !section_domain.Payload {
 }
 
 fn sectionCount(request: *context.RequestContext, version_id: i64) !u32 {
-    var loaded = try request.server.document_service.loadDraft(local_actor, version_id);
+    const actor = try currentActor(request);
+    var loaded = try request.server.document_service.loadDraft(actor, version_id);
     defer loaded.deinit();
     return std.math.cast(u32, loaded.document.sections.len) orelse error.SectionLimitExceeded;
 }

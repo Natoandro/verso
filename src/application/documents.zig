@@ -4,9 +4,12 @@ const section_domain = @import("../domain/sections.zig");
 const storage = @import("../storage/documents.zig");
 const version_storage = @import("../storage/document_versions.zig");
 const section_storage = @import("../storage/sections.zig");
+const identity_application = @import("identity.zig");
+const document_access = @import("document_access.zig");
 
-pub const Actor = enum {
+pub const Actor = union(enum) {
     local_operator,
+    user: i64,
 };
 
 pub const LoadedDraft = struct {
@@ -24,9 +27,22 @@ pub const DraftSummary = storage.DraftSummary;
 pub const Service = struct {
     allocator: std.mem.Allocator,
     store: *storage.Store,
+    identity_service: ?*identity_application.Service,
 
     pub fn init(allocator: std.mem.Allocator, store: *storage.Store) Service {
-        return .{ .allocator = allocator, .store = store };
+        return .{ .allocator = allocator, .store = store, .identity_service = null };
+    }
+
+    pub fn initProtected(
+        allocator: std.mem.Allocator,
+        store: *storage.Store,
+        identity_service: *identity_application.Service,
+    ) Service {
+        return .{
+            .allocator = allocator,
+            .store = store,
+            .identity_service = identity_service,
+        };
     }
 
     pub fn createDraft(
@@ -34,12 +50,12 @@ pub const Service = struct {
         actor: Actor,
         request: domain.CreateDraft,
     ) !domain.Draft {
-        try authorizeCreateDraft(actor);
+        try authorizeCreateDraft(self, actor, request.document_id);
         try domain.validateCreateDraft(request);
 
         const section_data = try buildTextSection(self.allocator, request.markdown);
         defer self.allocator.free(section_data);
-        return self.store.createDraft(request, section_data);
+        return self.store.createDraft(request, section_data, userId(actor));
     }
 
     pub fn createNextVersion(
@@ -47,9 +63,9 @@ pub const Service = struct {
         actor: Actor,
         request: domain.CreateNextVersion,
     ) !domain.NextVersion {
-        try authorizeCreateNextVersion(actor);
+        try authorizeCreateNextVersion(self, actor, request.source_version_id);
         try domain.validateCreateNextVersion(request);
-        return version_storage.createNextVersion(self.store, self.allocator, request);
+        return version_storage.createNextVersion(self.store, self.allocator, request, userId(actor));
     }
 
     pub fn saveDraft(
@@ -57,7 +73,7 @@ pub const Service = struct {
         actor: Actor,
         request: domain.SaveDraft,
     ) !domain.SaveResult {
-        try authorizeDraftMutation(actor);
+        try authorizeDraftMutation(self, actor, request.version_id);
         try domain.validateSaveDraft(request);
 
         const encoded = try self.allocator.alloc(storage.EncodedSection, request.sections.len);
@@ -73,11 +89,11 @@ pub const Service = struct {
             };
             encoded_count += 1;
         }
-        return self.store.saveDraft(request, encoded);
+        return self.store.saveDraft(request, encoded, userId(actor));
     }
 
     pub fn loadDraft(self: *Service, actor: Actor, version_id: i64) !LoadedDraft {
-        try authorizeDraftRead(actor);
+        try authorizeDraftRead(self, actor, version_id);
 
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         errdefer arena.deinit();
@@ -115,13 +131,22 @@ pub const Service = struct {
     }
 
     pub fn listDrafts(self: *Service, actor: Actor, allocator: std.mem.Allocator) ![]DraftSummary {
-        try authorizeDraftRead(actor);
-        return self.store.listDrafts(allocator);
+        switch (actor) {
+            .local_operator => return self.store.listDrafts(allocator),
+            .user => |user_id| {
+                const service = self.identity_service orelse return error.AuthorizationUnavailable;
+                if (try document_access.userHasCapability(service, user_id, .document_read_any)) {
+                    return self.store.listDrafts(allocator);
+                }
+                try document_access.requireUserCapability(service, user_id, .document_read_assigned);
+                return self.store.listDraftsForUser(allocator, user_id);
+            },
+        }
     }
 
     pub fn mutableVersionForDocument(self: *Service, actor: Actor, document_id: i64) !i64 {
-        try authorizeDraftRead(actor);
         if (document_id <= 0) return error.InvalidDocumentId;
+        try authorizeDocumentRead(self, actor, document_id);
         return self.store.mutableVersionForDocument(document_id);
     }
 
@@ -130,7 +155,7 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Insert,
     ) !section_storage.MutationResult {
-        try authorizeSectionMutation(actor);
+        try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateInsert(request);
         const data = try encodeSection(self.allocator, request.payload);
         defer self.allocator.free(data);
@@ -141,6 +166,7 @@ pub const Service = struct {
             request.expected_revision,
             request.payload.kind().name(),
             data,
+            userId(actor),
         );
     }
 
@@ -149,7 +175,7 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Update,
     ) !section_storage.MutationResult {
-        try authorizeSectionMutation(actor);
+        try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateUpdate(request);
         const data = try encodeSection(self.allocator, request.payload);
         defer self.allocator.free(data);
@@ -160,6 +186,7 @@ pub const Service = struct {
             request.expected_revision,
             request.payload.kind().name(),
             data,
+            userId(actor),
         );
     }
 
@@ -168,7 +195,7 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Move,
     ) !section_storage.MutationResult {
-        try authorizeSectionMutation(actor);
+        try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateMove(request);
         return section_storage.moveSection(
             self.store,
@@ -176,6 +203,7 @@ pub const Service = struct {
             request.section_id,
             request.position,
             request.expected_revision,
+            userId(actor),
         );
     }
 
@@ -184,7 +212,7 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Duplicate,
     ) !section_storage.MutationResult {
-        try authorizeSectionMutation(actor);
+        try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateDuplicate(request);
         return section_storage.duplicateSection(
             self.store,
@@ -192,6 +220,7 @@ pub const Service = struct {
             request.section_id,
             request.position,
             request.expected_revision,
+            userId(actor),
         );
     }
 
@@ -200,45 +229,78 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Delete,
     ) !section_storage.MutationResult {
-        try authorizeSectionMutation(actor);
+        try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateDelete(request);
         return section_storage.deleteSection(
             self.store,
             request.version_id,
             request.section_id,
             request.expected_revision,
+            userId(actor),
         );
     }
 };
 
-fn authorizeCreateDraft(actor: Actor) !void {
+fn userId(actor: Actor) ?i64 {
     return switch (actor) {
-        .local_operator => {},
+        .local_operator => null,
+        .user => |user_id| user_id,
     };
 }
 
-fn authorizeCreateNextVersion(actor: Actor) !void {
-    return switch (actor) {
-        .local_operator => {},
-    };
+fn requireIdentity(self: *Service) !*identity_application.Service {
+    return self.identity_service orelse error.AuthorizationUnavailable;
 }
 
-fn authorizeSectionMutation(actor: Actor) !void {
-    return switch (actor) {
+fn authorizeCreateDraft(self: *Service, actor: Actor, document_id: ?i64) !void {
+    switch (actor) {
         .local_operator => {},
-    };
+        .user => |user_id| {
+            const service = try requireIdentity(self);
+            try document_access.requireUserCapability(service, user_id, .document_create);
+            if (document_id) |id| {
+                try document_access.requireUserDocumentUpdate(service, user_id, id);
+            }
+        },
+    }
 }
 
-fn authorizeDraftMutation(actor: Actor) !void {
-    return switch (actor) {
+fn authorizeCreateNextVersion(self: *Service, actor: Actor, version_id: i64) !void {
+    switch (actor) {
         .local_operator => {},
-    };
+        .user => |user_id| try document_access.requireUserVersionRead(try requireIdentity(self), user_id, version_id),
+    }
 }
 
-fn authorizeDraftRead(actor: Actor) !void {
-    return switch (actor) {
+fn authorizeDocumentRead(self: *Service, actor: Actor, document_id: i64) !void {
+    switch (actor) {
         .local_operator => {},
-    };
+        .user => |user_id| try document_access.requireUserDocumentRead(try requireIdentity(self), user_id, document_id),
+    }
+}
+
+fn authorizeDraftRead(self: *Service, actor: Actor, version_id: i64) !void {
+    switch (actor) {
+        .local_operator => {},
+        .user => |user_id| try document_access.requireUserVersionRead(try requireIdentity(self), user_id, version_id),
+    }
+}
+
+fn authorizeDraftMutation(self: *Service, actor: Actor, version_id: i64) !void {
+    switch (actor) {
+        .local_operator => {},
+        .user => |user_id| {
+            const service = try requireIdentity(self);
+            try document_access.requireUserVersionUpdate(service, user_id, version_id);
+        },
+    }
+}
+
+fn authorizeVersionMutation(self: *Service, actor: Actor, version_id: i64) !void {
+    switch (actor) {
+        .local_operator => {},
+        .user => |user_id| try document_access.requireUserVersionUpdate(try requireIdentity(self), user_id, version_id),
+    }
 }
 
 fn buildTextSection(allocator: std.mem.Allocator, markdown: []const u8) ![]u8 {

@@ -1,6 +1,7 @@
 const sqlite = @import("sqlite");
 const domain = @import("../domain/document.zig");
 const std = @import("std");
+const document_access = @import("document_access.zig");
 
 pub const EncodedSection = struct {
     id: ?i64,
@@ -72,15 +73,16 @@ pub const Store = struct {
         self: *Store,
         request: domain.CreateDraft,
         section_data: []const u8,
+        created_by: ?i64,
     ) !domain.Draft {
         try self.database.execMulti("BEGIN IMMEDIATE;", .{});
         errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
 
         const document_id = request.document_id orelse blk: {
             try self.database.exec(
-                "INSERT INTO documents (type) VALUES (?)",
+                "INSERT INTO documents (type, created_by) VALUES (?, ?)",
                 .{},
-                .{request.document_type.text()},
+                .{ request.document_type.text(), created_by },
             );
             break :blk self.database.getLastInsertRowID();
         };
@@ -114,11 +116,11 @@ pub const Store = struct {
 
         try self.database.exec(
             \\INSERT INTO document_versions
-            \\    (document_id, version_number, state, slug, title, description, language)
-            \\    VALUES (?, 1, 'draft', ?, ?, ?, ?)
+            \\    (document_id, version_number, state, slug, title, description, language, created_by)
+            \\    VALUES (?, 1, 'draft', ?, ?, ?, ?, ?)
         ,
             .{},
-            .{ document_id, request.slug, request.title, request.description, request.language },
+            .{ document_id, request.slug, request.title, request.description, request.language, created_by },
         );
         const version_id = self.database.getLastInsertRowID();
 
@@ -143,11 +145,18 @@ pub const Store = struct {
         self: *Store,
         request: domain.SaveDraft,
         encoded_sections: []const EncodedSection,
+        actor_user_id: ?i64,
     ) !domain.SaveResult {
         if (request.sections.len != encoded_sections.len) return error.InvalidSectionData;
 
         try self.database.execMulti("BEGIN IMMEDIATE;", .{});
         errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
+
+        if (actor_user_id) |user_id| {
+            if (!try document_access.hasVersionUpdateAccess(self.database, user_id, request.version_id)) {
+                return error.Forbidden;
+            }
+        }
 
         if (try self.database.one(
             i64,
@@ -300,6 +309,27 @@ pub const Store = struct {
         , .{});
         defer statement.deinit();
         return statement.all(DraftSummary, allocator, .{}, .{});
+    }
+
+    pub fn listDraftsForUser(self: *Store, allocator: std.mem.Allocator, user_id: i64) ![]DraftSummary {
+        var statement = try self.database.prepareWithDiags(
+            \\SELECT d.id AS document_id, v.id AS version_id,
+            \\       v.version_number, v.revision_number,
+            \\       d.type AS document_type, v.title, v.slug, v.updated_at
+            \\FROM documents AS d
+            \\JOIN document_versions AS v ON v.document_id = d.id
+            \\WHERE v.state IN ('draft', 'review')
+            \\  AND (d.created_by = ? OR v.created_by = ? OR EXISTS (
+            \\      SELECT 1 FROM editor_assignments AS assignment
+            \\      WHERE assignment.editor_user_id = ?
+            \\        AND assignment.revoked_at IS NULL
+            \\        AND (assignment.document_id = d.id OR assignment.author_id IN (
+            \\            SELECT version_author.author_id FROM version_authors AS version_author
+            \\            WHERE version_author.version_id = v.id))))
+            \\ORDER BY v.updated_at DESC, v.id DESC
+        , .{});
+        defer statement.deinit();
+        return statement.all(DraftSummary, allocator, .{}, .{ user_id, user_id, user_id });
     }
 
     pub fn mutableVersionForDocument(self: *Store, document_id: i64) !i64 {

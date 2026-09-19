@@ -619,12 +619,12 @@ deferred alternatives documented in
   around the persistence and revision services delivered by the DOC tickets;
   frontend pages and editor wiring belong to `ED-004`.
 
-  - [ ] **Auth:** Enforce editor assignment scope and read-only boundaries for
-    published and archived versions.
-  - [ ] **Application/API:** Connect protected list, create, open, and save
-    operations to the shared draft and revision services with authorization
-    and optimistic-concurrency checks; keep handlers free of direct SQLite
-    access and duplicate policy logic.
+   - [x] **Auth:** Enforce editor assignment scope and read-only boundaries for
+     published and archived versions.
+   - [x] **Application/API:** Connect protected list, create, open, and save
+     operations to the shared draft and revision services with authorization
+     and optimistic-concurrency checks; keep handlers free of direct SQLite
+     access and duplicate policy logic.
   - [ ] **Backend integration tests:** Verify authorized success, unauthorized
     denial, stale-write safety, read-only published/archive behavior, and that
     public routes cannot resolve drafts.

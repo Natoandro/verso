@@ -6,6 +6,7 @@ pub fn createNextVersion(
     store: *documents.Store,
     allocator: std.mem.Allocator,
     request: domain.CreateNextVersion,
+    created_by: ?i64,
 ) !domain.NextVersion {
     const SourceVersion = struct {
         document_id: i64,
@@ -61,8 +62,8 @@ pub fn createNextVersion(
     try store.database.exec(
         \\INSERT INTO document_versions
         \\    (document_id, version_number, based_on_version_id, state, slug, title,
-        \\     description, language, series_id, series_position)
-        \\    VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+        \\     description, language, series_id, series_position, created_by)
+        \\    VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)
     ,
         .{},
         .{
@@ -75,6 +76,7 @@ pub fn createNextVersion(
             source.language,
             source.series_id,
             source.series_position,
+            created_by,
         },
     );
     const version_id = store.database.getLastInsertRowID();

@@ -1,5 +1,6 @@
 const std = @import("std");
 const documents = @import("documents.zig");
+const document_access = @import("document_access.zig");
 
 pub const MutationResult = struct {
     section_id: i64,
@@ -20,11 +21,12 @@ pub fn insertSection(
     expected_revision: u64,
     kind: []const u8,
     data: []const u8,
+    actor_user_id: ?i64,
 ) !MutationResult {
     try store.database.execMulti("BEGIN IMMEDIATE;", .{});
     errdefer store.database.execMulti("ROLLBACK;", .{}) catch {};
 
-    const snapshot = try beginMutation(store, version_id, expected_revision);
+    const snapshot = try beginMutation(store, version_id, expected_revision, actor_user_id);
     const target = try toDatabaseInteger(position);
     if (target > snapshot.section_count) return error.InvalidPosition;
 
@@ -45,11 +47,12 @@ pub fn updateSection(
     expected_revision: u64,
     kind: []const u8,
     data: []const u8,
+    actor_user_id: ?i64,
 ) !MutationResult {
     try store.database.execMulti("BEGIN IMMEDIATE;", .{});
     errdefer store.database.execMulti("ROLLBACK;", .{}) catch {};
 
-    const snapshot = try beginMutation(store, version_id, expected_revision);
+    const snapshot = try beginMutation(store, version_id, expected_revision, actor_user_id);
     try requireSection(store, version_id, section_id);
     try store.database.exec(
         "UPDATE sections SET kind = ?, data = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND version_id = ?",
@@ -65,11 +68,12 @@ pub fn moveSection(
     section_id: i64,
     position: u32,
     expected_revision: u64,
+    actor_user_id: ?i64,
 ) !MutationResult {
     try store.database.execMulti("BEGIN IMMEDIATE;", .{});
     errdefer store.database.execMulti("ROLLBACK;", .{}) catch {};
 
-    const snapshot = try beginMutation(store, version_id, expected_revision);
+    const snapshot = try beginMutation(store, version_id, expected_revision, actor_user_id);
     const current_position = try sectionPosition(store, version_id, section_id);
     const target = try toDatabaseInteger(position);
     if (target >= snapshot.section_count) return error.InvalidPosition;
@@ -94,11 +98,12 @@ pub fn duplicateSection(
     section_id: i64,
     position: u32,
     expected_revision: u64,
+    actor_user_id: ?i64,
 ) !MutationResult {
     try store.database.execMulti("BEGIN IMMEDIATE;", .{});
     errdefer store.database.execMulti("ROLLBACK;", .{}) catch {};
 
-    const snapshot = try beginMutation(store, version_id, expected_revision);
+    const snapshot = try beginMutation(store, version_id, expected_revision, actor_user_id);
     try requireSection(store, version_id, section_id);
     const target = try toDatabaseInteger(position);
     if (target > snapshot.section_count) return error.InvalidPosition;
@@ -120,11 +125,12 @@ pub fn deleteSection(
     version_id: i64,
     section_id: i64,
     expected_revision: u64,
+    actor_user_id: ?i64,
 ) !MutationResult {
     try store.database.execMulti("BEGIN IMMEDIATE;", .{});
     errdefer store.database.execMulti("ROLLBACK;", .{}) catch {};
 
-    const snapshot = try beginMutation(store, version_id, expected_revision);
+    const snapshot = try beginMutation(store, version_id, expected_revision, actor_user_id);
     const current_position = try sectionPosition(store, version_id, section_id);
 
     try store.database.exec(
@@ -145,6 +151,7 @@ fn beginMutation(
     store: *documents.Store,
     version_id: i64,
     expected_revision: u64,
+    actor_user_id: ?i64,
 ) !VersionSnapshot {
     if (try store.database.one(i64, "SELECT 1 FROM document_versions WHERE id = ?", .{}, .{version_id}) == null) {
         return error.VersionNotFound;
@@ -155,6 +162,11 @@ fn beginMutation(
         .{},
         .{version_id},
     ) == null) return error.VersionNotEditable;
+    if (actor_user_id) |user_id| {
+        if (!try document_access.hasVersionUpdateAccess(store.database, user_id, version_id)) {
+            return error.Forbidden;
+        }
+    }
 
     const revision_number = (try store.database.one(
         i64,
