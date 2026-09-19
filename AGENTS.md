@@ -48,6 +48,13 @@ assuming those exist.
 
 ## Web static delivery
 
+- Keep larger developer-authored HTML templates, CSS, and other static assets
+  in neighboring files and load them with `@embedFile`; keep Zig source files
+  focused on response and application logic.
+- Put shared visual tokens and reusable interface components in shared CSS
+  files instead of duplicating inline styles. Standalone embedded responses
+  should compose those styles at compile time rather than depend on a browser
+  `@import` request.
 - Use `web.EmbeddedStatic` for bytes embedded in the executable. Configure its
   content type and `web.ResponsePolicy` explicitly, and expose it through the
   shared `Layer` composition API rather than writing a bespoke response

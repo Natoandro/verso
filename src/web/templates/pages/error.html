@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#25333a">
+    <title>{{ status_code }} {{ phrase }} - Verso</title>
+    <style>{{{ theme_css }}}{{{ error_css }}}</style>
+  </head>
+  <body>
+    <main class="error-shell">
+      <div class="error-art" aria-hidden="true">
+        <div class="error-orbit error-orbit-one"></div>
+        <div class="error-orbit error-orbit-two"></div>
+        <span class="error-code">{{ status_code }}</span>
+      </div>
+      <div class="error-content">
+        <a class="brand" href="/" aria-label="Verso home"><span class="brand-mark">V</span> Verso</a>
+        <p class="eyebrow">Request interrupted</p>
+        <h1>{{ phrase }}</h1>
+        <p class="message">{{ description }}</p>
+        <div class="actions">
+          <a class="theme-button theme-button-primary home-link" href="/">Return home
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <span class="hint">The page may have moved.</span>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

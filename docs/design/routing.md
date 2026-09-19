@@ -196,6 +196,7 @@ static handler forms are:
 and response policy. It is appropriate for:
 
 - built-in HTML shells;
+- shared editor theme stylesheets and other built-in interface assets;
 - other binary or text assets shipped inside the executable.
 
 The handler does not inspect filesystem paths, access SQLite, or resolve a

@@ -9,8 +9,8 @@
           <p class="editor-heading">Compose document</p>
         </div>
         <div class="editor-header-actions">
-          <a class="quiet-button" href="/admin/editor">All drafts</a>
-          <a class="quiet-button" href="/admin/editor?document={{ document_id }}&details={{ details_toggle }}">{{ details_label }}</a>
+          <a class="theme-button theme-button-quiet" href="/admin/editor">All drafts</a>
+          <a class="theme-button theme-button-quiet" href="/admin/editor?document={{ document_id }}&details={{ details_toggle }}">{{ details_label }}</a>
         </div>
       </header>
 
@@ -33,7 +33,7 @@
                   <textarea name="description" rows="2" aria-label="Short description" placeholder="Short description">{{ description }}</textarea>
                 </div>
               </div>
-              <button class="save-button" type="submit">Save draft</button>
+              <button class="theme-button theme-button-primary save-button" type="submit">Save draft</button>
             </form>
             {{#if has_description}}<p class="article-description">{{ description }}</p>{{/if}}
           </div>

@@ -37,14 +37,14 @@
             URL slug
             <input name="slug" autocomplete="off" required>
           </label>
-          <button type="submit">Create draft</button>
+          <button class="theme-button theme-button-primary" type="submit">Create draft</button>
         </form>
       </section>
 
       <section class="admin-document-list" aria-labelledby="document-list-heading">
         <div class="admin-section-heading">
           <h2 id="document-list-heading">Your drafts</h2>
-          <a class="quiet-button" href="/admin/editor">Refresh</a>
+          <a class="theme-button theme-button-quiet" href="/admin/editor">Refresh</a>
         </div>
         {{#if has_documents}}
           <ul>

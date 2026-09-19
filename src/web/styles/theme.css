@@ -1,0 +1,93 @@
+:root {
+  color-scheme: light;
+  --verso-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --verso-ink: #25333a;
+  --verso-ink-rgb: 37, 51, 58;
+  --verso-muted: #687572;
+  --verso-subtle: #89928e;
+  --verso-label: #53615f;
+  --verso-page: #fbfaf7;
+  --verso-surface: #fff;
+  --verso-surface-soft: #f0f7f3;
+  --verso-border: #cfd8d4;
+  --verso-border-soft: #d6e4dc;
+  --verso-primary: #3f8b70;
+  --verso-primary-rgb: 63, 139, 112;
+  --verso-primary-hover: #32725d;
+  --verso-primary-shadow: #2d6955;
+  --verso-accent: #d18d46;
+  --verso-warm: #d59b55;
+  --verso-warm-soft: #d9c28c;
+  --verso-green-soft: #8bbca6;
+  --verso-danger: #a63d40;
+  --verso-danger-surface: #fff4f3;
+  --verso-radius-control: 8px;
+  --verso-shadow-control: 0 2px 0 var(--verso-primary);
+  font-family: var(--verso-font-sans);
+  color: var(--verso-ink);
+  background: var(--verso-page);
+  font-synthesis: none;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+button, a {
+  cursor: pointer;
+}
+
+.theme-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--verso-radius-control);
+  padding: 10px 14px;
+  font-size: .8rem;
+  font-weight: 750;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.theme-button-primary {
+  border-color: var(--verso-primary);
+  color: #fff;
+  background: var(--verso-primary);
+  box-shadow: 0 4px 0 var(--verso-primary-shadow);
+}
+
+.theme-button-primary:hover {
+  background: var(--verso-primary-hover);
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--verso-primary-shadow);
+}
+
+.theme-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--verso-primary) 30%, transparent);
+  outline-offset: 4px;
+}
+
+.theme-button-quiet {
+  border-color: var(--verso-border);
+  color: var(--verso-label);
+  background: transparent;
+  box-shadow: none;
+}
+
+.theme-button-quiet:hover {
+  border-color: var(--verso-primary);
+  color: var(--verso-primary-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-button {
+    transition: none;
+  }
+}

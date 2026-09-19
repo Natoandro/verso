@@ -36,6 +36,7 @@ const editor_template = tmpl.parse(@embedFile("templates/pages/editor.html"), .{
 const document_list_template = tmpl.parse(@embedFile("templates/pages/document_list.html"), .{
     .components = .{ .head = editor_head },
 });
+const theme_css = @embedFile("styles/theme.css");
 const editor_base_css = @embedFile("styles/editor/base.css");
 const editor_document_css = @embedFile("styles/editor/document.css");
 const editor_sections_css = @embedFile("styles/editor/sections.css");
@@ -88,6 +89,11 @@ const routes_table = route.routes(.{
     .{ "POST /admin/editor/create", createDraft },
     .{ "POST /admin/editor/document", saveDocument },
     .{ "POST /admin/editor/section", mutateSection },
+    .{ "GET /admin/theme.css", static_content.EmbeddedStatic.handler(
+        theme_css,
+        "text/css; charset=utf-8",
+        .{ .status = .ok, .cache_control = "no-store" },
+    ) },
     .{ "GET /admin/editor-base.css", static_content.EmbeddedStatic.handler(
         editor_base_css,
         "text/css; charset=utf-8",
@@ -398,10 +404,11 @@ test "editor routes expose page, mutation, and embedded stylesheet endpoints" {
     try std.testing.expectEqual(@as(?usize, 1), route.resolve(routes, .POST, "/admin/editor/create"));
     try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .POST, "/admin/editor/document"));
     try std.testing.expectEqual(@as(?usize, 3), route.resolve(routes, .POST, "/admin/editor/section"));
-    try std.testing.expectEqual(@as(?usize, 4), route.resolve(routes, .GET, "/admin/editor-base.css"));
-    try std.testing.expectEqual(@as(?usize, 5), route.resolve(routes, .GET, "/admin/editor-document.css"));
-    try std.testing.expectEqual(@as(?usize, 6), route.resolve(routes, .GET, "/admin/editor-sections.css"));
-    try std.testing.expectEqual(@as(?usize, 7), route.resolve(routes, .GET, "/admin/editor-documents.css"));
-    try std.testing.expectEqual(@as(?usize, 8), route.resolve(routes, .GET, "/admin/editor-responsive.css"));
+    try std.testing.expectEqual(@as(?usize, 4), route.resolve(routes, .GET, "/admin/theme.css"));
+    try std.testing.expectEqual(@as(?usize, 5), route.resolve(routes, .GET, "/admin/editor-base.css"));
+    try std.testing.expectEqual(@as(?usize, 6), route.resolve(routes, .GET, "/admin/editor-document.css"));
+    try std.testing.expectEqual(@as(?usize, 7), route.resolve(routes, .GET, "/admin/editor-sections.css"));
+    try std.testing.expectEqual(@as(?usize, 8), route.resolve(routes, .GET, "/admin/editor-documents.css"));
+    try std.testing.expectEqual(@as(?usize, 9), route.resolve(routes, .GET, "/admin/editor-responsive.css"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .POST, "/admin/editor"));
 }
