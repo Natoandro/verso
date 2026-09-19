@@ -2,6 +2,7 @@ const std = @import("std");
 const domain = @import("../domain/document.zig");
 const section_domain = @import("../domain/sections.zig");
 const storage = @import("../storage/documents.zig");
+const version_storage = @import("../storage/document_versions.zig");
 const section_storage = @import("../storage/sections.zig");
 
 pub const Actor = enum {
@@ -39,6 +40,16 @@ pub const Service = struct {
         const section_data = try buildTextSection(self.allocator, request.markdown);
         defer self.allocator.free(section_data);
         return self.store.createDraft(request, section_data);
+    }
+
+    pub fn createNextVersion(
+        self: *Service,
+        actor: Actor,
+        request: domain.CreateNextVersion,
+    ) !domain.NextVersion {
+        try authorizeCreateNextVersion(actor);
+        try domain.validateCreateNextVersion(request);
+        return version_storage.createNextVersion(self.store, self.allocator, request);
     }
 
     pub fn saveDraft(
@@ -201,6 +212,12 @@ pub const Service = struct {
 };
 
 fn authorizeCreateDraft(actor: Actor) !void {
+    return switch (actor) {
+        .local_operator => {},
+    };
+}
+
+fn authorizeCreateNextVersion(actor: Actor) !void {
     return switch (actor) {
         .local_operator => {},
     };

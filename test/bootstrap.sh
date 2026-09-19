@@ -307,6 +307,7 @@ if (
 fi
 grep -F 'MutableDraftExists' "$default_directory/duplicate.err" >/dev/null || fail "duplicate draft failure was not reported"
 python3 -c 'import sqlite3, sys; connection = sqlite3.connect(sys.argv[1]); connection.execute("UPDATE document_versions SET state = '"'"'published'"'"', published_at = '"'"'2026-01-01T00:00:00Z'"'"' WHERE id = 1"); connection.commit(); connection.close()' "$default_directory/data/verso.db"
+python3 -c 'import sqlite3, sys; connection = sqlite3.connect(sys.argv[1]); connection.execute("UPDATE documents SET current_published_version_id = 1 WHERE id = 1"); connection.commit(); connection.close()' "$default_directory/data/verso.db"
 if (
     cd "$default_directory"
     env -i \
@@ -318,6 +319,26 @@ if (
     fail "published section mutation was accepted"
 fi
 grep -F 'VersionNotEditable' "$default_directory/published.err" >/dev/null || fail "published section failure was not reported"
+(
+    cd "$default_directory"
+    env -i \
+        "PATH=${PATH:-/usr/bin:/bin}" \
+        VERSO_MIGRATIONS_PATH="$migrations_directory" \
+        "$binary" document create-next-version \
+        --version-id 1 >"$default_directory/next-version.out" 2>"$default_directory/next-version.err"
+)
+grep -F 'document_id=1 version_id=2 version=2 based_on_version_id=1 state=draft' "$default_directory/next-version.out" >/dev/null || fail "next document version was not created"
+if (
+    cd "$default_directory"
+    env -i \
+        "PATH=${PATH:-/usr/bin:/bin}" \
+        VERSO_MIGRATIONS_PATH="$migrations_directory" \
+        "$binary" document create-next-version \
+        --version-id 1 >"$default_directory/duplicate-next-version.out" 2>"$default_directory/duplicate-next-version.err"
+); then
+    fail "duplicate next document version was accepted"
+fi
+grep -F 'MutableDraftExists' "$default_directory/duplicate-next-version.err" >/dev/null || fail "duplicate next version failure was not reported"
 
 file_directory="$temporary_directory/file-backed"
 mkdir "$file_directory"

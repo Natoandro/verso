@@ -169,22 +169,22 @@ migration task.
   - [x] **CLI:** Provide a small verification surface for section mutations
     and exercise valid operations alongside malformed and non-draft cases.
 
-- [ ] **DOC-003 — Create the next document version**
+- [x] **DOC-003 — Create the next document version**
 
   `create_next_version` deep-copies a current published document's
   version-owned metadata, sections, and nested objects into exactly one next
   draft; source versions remain immutable. The service rejects unpublished
   parents and atomically enforces the one-mutable-version rule.
 
-  - [ ] **Domain:** Define lineage, current-publication, immutable-source,
+  - [x] **Domain:** Define lineage, current-publication, immutable-source,
     and next-version invariants.
-  - [ ] **Application:** Implement the next-version use case and reject
+  - [x] **Application:** Implement the next-version use case and reject
     unpublished parents or an existing mutable version before any partial
     mutation is visible.
-  - [ ] **SQLite storage:** Deep-copy all version-owned records in one
+  - [x] **SQLite storage:** Deep-copy all version-owned records in one
     transaction while preserving source immutability and enforcing lineage
     uniqueness.
-  - [ ] **CLI:** Add a focused way to create and inspect a next draft, including
+  - [x] **CLI:** Add a focused way to create and inspect a next draft, including
     checks for copied nested content and rejected duplicate or invalid forks.
 
 - [ ] **DOC-004 — Save and restore working revisions**

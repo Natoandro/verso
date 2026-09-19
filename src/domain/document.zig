@@ -39,6 +39,18 @@ pub const Draft = struct {
     state: DraftState,
 };
 
+pub const CreateNextVersion = struct {
+    source_version_id: i64,
+};
+
+pub const NextVersion = struct {
+    document_id: i64,
+    version_id: i64,
+    version_number: u32,
+    based_on_version_id: i64,
+    state: DraftState,
+};
+
 pub const DraftSection = struct {
     id: ?i64 = null,
     payload: sections.Payload,
@@ -80,6 +92,10 @@ pub fn validateCreateDraft(request: CreateDraft) !void {
     }
     try validateMetadata(request.document_type, request.title, request.slug, request.description, request.language);
     if (std.mem.indexOfScalar(u8, request.markdown, 0) != null) return error.InvalidMarkdown;
+}
+
+pub fn validateCreateNextVersion(request: CreateNextVersion) !void {
+    if (request.source_version_id <= 0) return error.InvalidVersionId;
 }
 
 pub fn validateSaveDraft(request: SaveDraft) !void {

@@ -6,6 +6,7 @@ const command_support = @import("support.zig");
 
 const DocumentCommand = enum {
     create_draft,
+    create_next_version,
     section,
 };
 
@@ -25,7 +26,7 @@ const document_help =
     "    --description <TEXT>   Optional draft description.\n" ++
     "    --language <LANG>      Draft language (default: en).\n" ++
     "    --text <MARKDOWN>      Initial Markdown text.\n" ++
-    "    --version-id <ID>      Draft version ID for a section operation.\n" ++
+    "    --version-id <ID>      Version ID for next-version or section operation.\n" ++
     "    --section-id <ID>      Existing section ID for a section operation.\n" ++
     "    --position <POSITION>  Zero-based section position.\n" ++
     "    --revision <REVISION> Expected draft revision.\n" ++
@@ -33,7 +34,7 @@ const document_help =
     "    --alt <TEXT>           Image alternative text.\n" ++
     "    --caption <TEXT>       Optional image caption.\n" ++
     "    --display <DISPLAY>    Image display: inline, wide, or full.\n" ++
-    "<command>                 Document command: create-draft or section.\n" ++
+    "<command>                 Document command: create-draft, create-next-version, or section.\n" ++
     "<operation>               Section operation: insert, update, move, duplicate, or delete.\n";
 
 pub fn run(
@@ -63,6 +64,7 @@ pub fn run(
     );
     switch (command) {
         .create_draft => try createDraft(init, parsed_args.args, cli_overrides),
+        .create_next_version => try createNextVersion(init, parsed_args.args, cli_overrides),
         .section => try section(
             init,
             try parseSectionOperation(parsed_args.positionals[1] orelse return error.InvalidArguments),
@@ -74,6 +76,7 @@ pub fn run(
 
 fn parseDocumentCommand(command_name: []const u8) error{InvalidCommand}!DocumentCommand {
     if (std.mem.eql(u8, command_name, "create-draft")) return .create_draft;
+    if (std.mem.eql(u8, command_name, "create-next-version")) return .create_next_version;
     if (std.mem.eql(u8, command_name, "section")) return .section;
     return error.InvalidCommand;
 }
@@ -156,6 +159,75 @@ fn createDraft(
     try output_writer.interface.print(
         "document_id={d} version_id={d} version={d} section_id={d} state={s}\n",
         .{ draft.document_id, draft.version_id, draft.version_number, draft.section_id, draft.state.text() },
+    );
+    try output_writer.flush();
+}
+
+fn createNextVersion(
+    init: std.process.Init,
+    args: anytype,
+    cli_overrides: verso.config.CliOverrides,
+) !void {
+    const source_version_id = @field(args, "version-id") orelse return error.InvalidArguments;
+
+    var parsed_config = verso.config.loadFile(
+        init.io,
+        init.gpa,
+        "verso.toml",
+        .{ .envs = init.environ_map, .cli = cli_overrides },
+    ) catch |configuration_error| {
+        command_support.logConfigurationFailure(init, "document create-next-version", configuration_error);
+        return configuration_error;
+    };
+    defer parsed_config.deinit();
+    const app_config = parsed_config.value;
+    command_support.logConfigurationLoaded(init, "document create-next-version", app_config, cli_overrides);
+
+    try verso.application.bootstrap.prepareConfiguredDirectories(init.io, std.Io.Dir.cwd(), app_config);
+    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try verso.application.bootstrap.resolveDatabasePath(app_config, &database_path_buffer);
+    var database = try verso.storage.sqlite.Database.open(init.gpa, database_path);
+    defer database.close();
+
+    const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
+    var logger = verso.logging.Logger.initWithOptions(
+        init.gpa,
+        app_config.effectiveLoggingFormat(stderr_is_tty),
+        .{ .use_color = stderr_is_tty, .omit_null_fields = app_config.logging.omit_null_fields },
+    );
+    if (app_config.migrations.run_on_startup) {
+        const migration_path = try verso.storage.migration_directory.resolveMigrationDirectory(
+            init.io,
+            init.gpa,
+            app_config.migrations.path,
+        );
+        defer init.gpa.free(migration_path);
+        var migration_context = database.migrationContext(
+            init.io,
+            init.gpa,
+            migration_path,
+            &logger,
+        );
+        _ = try migration_context.migrateUp();
+    }
+
+    var document_store = verso.storage.documents.Store.init(database.sqliteHandle());
+    var document_service = verso.application.documents.Service.init(init.gpa, &document_store);
+    const next_version = try document_service.createNextVersion(.local_operator, .{
+        .source_version_id = source_version_id,
+    });
+
+    var output_buffer: [256]u8 = undefined;
+    var output_writer = std.Io.File.stdout().writer(init.io, &output_buffer);
+    try output_writer.interface.print(
+        "document_id={d} version_id={d} version={d} based_on_version_id={d} state={s}\n",
+        .{
+            next_version.document_id,
+            next_version.version_id,
+            next_version.version_number,
+            next_version.based_on_version_id,
+            next_version.state.text(),
+        },
     );
     try output_writer.flush();
 }
