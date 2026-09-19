@@ -46,6 +46,15 @@ flowchart TB
     fragment --> browser
 ```
 
+### Form placement
+
+Forms that collect editorial fields are presented in modal dialogs rather than
+being embedded in the article or draft-list content. This keeps the publication
+surface focused on content and gives each editing action a clear, bounded
+workspace. A form may occupy the full page when the page itself is dedicated
+to that operation, such as account setup or password recovery. Compact
+action-only controls may remain beside the content they operate on.
+
 ## 2. Section-oriented editing
 
 Documents are edited as ordered, typed sections. Sectioning is a content-model

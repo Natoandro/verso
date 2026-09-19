@@ -38,32 +38,25 @@
   border-top: 1px solid #dfe7e2;
   padding: 22px 0;
 }
-.admin-create-card form {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  align-items: end;
-  gap: 14px;
-  margin-top: 16px;
+.admin-create-card-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
 }
-.admin-create-card label {
-  display: grid;
-  gap: 6px;
+.admin-create-card-copy .eyebrow {
+  margin-bottom: 7px;
+}
+.admin-create-card-copy h2 {
+  margin: 0;
+}
+.admin-create-card-copy p:last-child {
+  margin: 9px 0 0;
   color: #687773;
-  font-size: .78rem;
-  font-weight: 700;
+  font-size: .88rem;
 }
-.admin-create-card input {
-  min-width: 0;
-  border: 0;
-  border-bottom: 1px solid #cfd8d4;
-  padding: 8px 0;
-  color: #25333a;
-  background: transparent;
-  outline: none;
-}
-.admin-create-card input:focus {
-  border-color: #3f8b70;
-  box-shadow: 0 2px 0 #3f8b70;
+.admin-create-card-copy .theme-button {
+  flex: 0 0 auto;
 }
 .admin-section-heading {
   display: flex;

@@ -45,10 +45,26 @@
 
   {{#if section.is_preview}}
     <div class="section-card-body section-preview">{{{ section.preview_html }}}</div>
-    <a class="section-mode-link" href="/admin/editor?document={{ document_id }}&details={{ details_value }}">Edit section</a>
+    <button class="theme-button theme-button-quiet section-edit-trigger" type="button" aria-haspopup="dialog" aria-controls="section-edit-dialog-{{ section.id }}" onclick="document.getElementById('section-edit-dialog-{{ section.id }}').showModal()">Edit section</button>
   {{#else}}
-    <div class="section-card-body section-editor">
-      <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <div class="section-card-body section-editor-summary">
+      <p class="section-summary-kind">{{ section.kind }} section</p>
+      <p>Open the section editor to add or update this content.</p>
+      <button class="theme-button theme-button-quiet section-edit-trigger" type="button" aria-haspopup="dialog" aria-controls="section-edit-dialog-{{ section.id }}" onclick="document.getElementById('section-edit-dialog-{{ section.id }}').showModal()">Edit section</button>
+    </div>
+  {{/if}}
+
+  <dialog class="theme-modal theme-modal-wide" id="section-edit-dialog-{{ section.id }}" aria-labelledby="section-edit-dialog-title-{{ section.id }}">
+    <div class="theme-modal-panel">
+      <div class="theme-modal-header">
+        <div>
+          <p class="eyebrow">{{ section.kind }} section</p>
+          <h2 id="section-edit-dialog-title-{{ section.id }}">Edit section</h2>
+          <p>Make a focused change, then save or preview it.</p>
+        </div>
+        <button class="theme-modal-close" type="button" aria-label="Close dialog" onclick="this.closest('dialog').close()">×</button>
+      </div>
+      <form class="theme-modal-form" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="document_id" value="{{ document_id }}">
         <input type="hidden" name="version_id" value="{{ version_id }}">
@@ -56,17 +72,27 @@
         <input type="hidden" name="expected_revision" value="{{ revision }}">
         <input type="hidden" name="kind" value="{{ section.kind }}">
         {{#if section.is_text}}
-          <div class="growing-textarea">
-            <textarea name="markdown" aria-label="Markdown content" spellcheck="false">{{ section.markdown }}</textarea>
-          </div>
+          <label>
+            Markdown content
+            <textarea class="theme-modal-textarea" name="markdown" spellcheck="false" required>{{ section.markdown }}</textarea>
+          </label>
         {{#else}}
           <div class="image-editor">
             <div class="asset-note">Image upload is not part of this draft editor yet. Use an existing asset name.</div>
             <div class="image-fields">
-              <input name="asset" value="{{ section.asset }}" placeholder="Asset name" aria-label="Asset name" required>
-              <input name="alt" value="{{ section.alt }}" placeholder="Alt text" aria-label="Alt text" required>
+              <label>
+                Asset name
+                <input name="asset" value="{{ section.asset }}" placeholder="Asset name" required>
+              </label>
+              <label>
+                Alt text
+                <input name="alt" value="{{ section.alt }}" placeholder="Alt text" required>
+              </label>
             </div>
-            <input name="caption" value="{{ section.caption }}" placeholder="Caption" aria-label="Caption">
+            <label>
+              Caption
+              <input name="caption" value="{{ section.caption }}" placeholder="Caption">
+            </label>
             <label class="display-field">Display
               <select name="display">
                 <option value="inline" {{#if section.display_inline}}selected{{/if}}>Inline</option>
@@ -76,11 +102,12 @@
             </label>
           </div>
         {{/if}}
-        <div class="section-form-actions">
-          <button class="theme-button theme-button-quiet" name="operation" value="update" type="submit">Save section</button>
+        <div class="theme-modal-actions">
+          <button class="theme-button theme-button-quiet" type="button" onclick="this.closest('dialog').close()">Cancel</button>
           <button class="theme-button theme-button-quiet" name="operation" value="preview" type="submit">Save and preview</button>
+          <button class="theme-button theme-button-primary" name="operation" value="update" type="submit">Save section</button>
         </div>
       </form>
     </div>
-  {{/if}}
+  </dialog>
 </article>

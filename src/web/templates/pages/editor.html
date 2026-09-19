@@ -10,7 +10,7 @@
         </div>
         <div class="editor-header-actions">
           <a class="theme-button theme-button-quiet" href="/admin/editor">All drafts</a>
-          <a class="theme-button theme-button-quiet" href="/admin/editor?document={{ document_id }}&details={{ details_toggle }}">{{ details_label }}</a>
+          <button class="theme-button theme-button-quiet" type="button" aria-haspopup="dialog" aria-controls="document-details-dialog" onclick="document.getElementById('document-details-dialog').showModal()">Document details</button>
         </div>
       </header>
 
@@ -21,20 +21,7 @@
       <section class="document-article" aria-labelledby="document-title">
         <div class="article-title-row">
           <div class="article-title-content">
-            <form method="post" action="/admin/editor/document" hx-post="/admin/editor/document" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <input type="hidden" name="document_id" value="{{ document_id }}">
-              <input type="hidden" name="version_id" value="{{ version_id }}">
-              <input id="document-revision" type="hidden" name="expected_revision" value="{{ revision }}">
-              <textarea id="document-title" class="document-title document-title-editor" name="title" rows="1" aria-label="Document title" required>{{ title }}</textarea>
-              <div class="details-panel" {{#if details_open}}{{#else}}hidden{{/if}}>
-                <div class="details-grid">
-                  <input name="slug" value="{{ slug }}" aria-label="URL slug" placeholder="URL slug" required>
-                  <textarea name="description" rows="2" aria-label="Short description" placeholder="Short description">{{ description }}</textarea>
-                </div>
-              </div>
-              <button class="theme-button theme-button-primary save-button" type="submit">Save draft</button>
-            </form>
+            <h1 id="document-title" class="document-title">{{ title }}</h1>
             {{#if has_description}}<p class="article-description">{{ description }}</p>{{/if}}
           </div>
         </div>
@@ -70,6 +57,43 @@
           </form>
         </div>
       </section>
+
+      <dialog class="theme-modal theme-modal-wide" id="document-details-dialog" aria-labelledby="document-details-dialog-title">
+        <div class="theme-modal-panel">
+          <div class="theme-modal-header">
+            <div>
+              <p class="eyebrow">Document details</p>
+              <h2 id="document-details-dialog-title">Edit your draft</h2>
+              <p>Update the title, address, and short introduction.</p>
+            </div>
+            <button class="theme-modal-close" type="button" aria-label="Close dialog" onclick="this.closest('dialog').close()">×</button>
+          </div>
+          <form class="theme-modal-form" method="post" action="/admin/editor/document" hx-post="/admin/editor/document" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="document_id" value="{{ document_id }}">
+            <input type="hidden" name="version_id" value="{{ version_id }}">
+            <input id="document-revision" type="hidden" name="expected_revision" value="{{ revision }}">
+            <label>
+              Title
+              <input name="title" value="{{ title }}" required>
+            </label>
+            <div class="details-grid">
+              <label>
+                URL slug
+                <input name="slug" value="{{ slug }}" placeholder="URL slug" required>
+              </label>
+              <label>
+                Short description
+                <textarea name="description" rows="2" placeholder="Short description">{{ description }}</textarea>
+              </label>
+            </div>
+            <div class="theme-modal-actions">
+              <button class="theme-button theme-button-quiet" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+              <button class="theme-button theme-button-primary" type="submit">Save draft</button>
+            </div>
+          </form>
+        </div>
+      </dialog>
 
       <footer class="editor-footer">
         <span class="status-dot" aria-hidden="true"></span>

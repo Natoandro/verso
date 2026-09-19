@@ -46,7 +46,9 @@ when the stated outcome and every nested division are complete.
     variables resolve with their compile-time Zig types without leaking outside
     their blocks.
   - [x] **Renderer:** Evaluate bools and optionals, unwrap optional captures,
-    and iterate arrays and slices without allocating a dynamic context.
+    and iterate arrays and slices without allocating a dynamic context. Runtime
+    lexical scopes use borrowed pointer links so nested scopes do not copy their
+    complete outer chain onto the worker stack.
   - [x] **Tests:** Cover true/false and else branches, present/absent optional
     captures, loops, nested loops, comments, invalid conditions, invalid
     iteration, malformed captures, and unmatched blocks.
@@ -109,9 +111,31 @@ when the stated outcome and every nested division are complete.
   - [x] **Tests:** Cover layout plus content, header/footer slots, reused
     components, and independent fragment rendering.
 
-## 3. Integration and Completion
+## 3. Runtime Execution and Integration
 
-- [ ] **TPL-006 — Integrate templates into server rendering**
+- [ ] **TPL-006 — Lower validated templates to bounded typed execution**
+
+  Preserve comptime parsing and type validation while replacing whole-template
+  inline expansion with a compact typed execution plan. Large templates and
+  components must render without allocating a stack frame proportional to their
+  source length. This execution change must not introduce runtime parsing,
+  string-based field lookup, untyped values, or runtime component-name
+  resolution.
+
+  - [ ] **Typed lowering:** Generate small operations or equivalent typed
+    continuations for text, scalar expressions, conditionals, loops, snippets,
+    and registered components.
+  - [ ] **Explicit frames:** Walk nested blocks with explicit runtime frames;
+    keep lexical scope references stable for the duration of each synchronous
+    render operation.
+  - [ ] **Stack regression:** Render a large component such as the editor
+    section card on a constrained worker stack and verify that generated
+    function frames remain small.
+  - [ ] **Compatibility tests:** Re-run all existing parser, compile-failure,
+    component, snippet, layout, escaping, and writer-error tests against the
+    lowered execution path.
+
+- [ ] **TPL-007 — Integrate templates into server rendering**
 
   Public, editorial, and HTMX renderers use developer-authored templates while
   preserving the existing document-content safety and cache boundaries. The

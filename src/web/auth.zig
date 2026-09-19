@@ -444,14 +444,7 @@ fn formatCookie(buffer: []u8, name: []const u8, value: []const u8, http_only: bo
 }
 
 pub fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
-    var result: ?[]const u8 = null;
-    var headers = request.request.iterateHeaders();
-    while (headers.next()) |header| {
-        if (!std.ascii.eqlIgnoreCase(header.name, name)) continue;
-        if (result != null) return null;
-        result = std.mem.trim(u8, header.value, " \t");
-    }
-    return result;
+    return request.cachedHeaderValue(name);
 }
 
 pub fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8 {

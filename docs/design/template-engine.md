@@ -37,6 +37,33 @@ runtime rendering directly to a Writer
 
 Normal HTTP requests must never parse, tokenize, load, or look up templates.
 
+Debug builds also emit temporary renderer diagnostics to stderr. Each template
+entry records the writer address and context type/size; loop and component
+entries record the scope address, outer-scope address, and component binding
+index. These records are intended to identify the last valid hand-off before a
+memory fault, not to replace application logging. They are excluded from
+comptime evaluation and release builds. Because requests may render on
+different worker threads, diagnostics should be captured together with the
+server's stderr and inspected around the failing request.
+
+### 1.1 Renderer stack invariant
+
+The renderer must not require a stack frame proportional to the size of the
+template source or the number of static template nodes. The first implementation
+uses comptime `inline while` expansion to preserve typed path resolution, which
+can turn a large component into a very large generated function and exhaust a
+worker thread's stack before its first output operation. This is a renderer
+implementation limitation, not a property of the template language.
+
+The planned renderer keeps parsing, AST construction, path resolution, component
+validation, and escaping decisions at comptime, but lowers the validated AST to
+a compact typed execution plan. Runtime rendering then walks that plan through
+small operations and explicit block frames. The plan must not introduce runtime
+template parsing, string-based field lookup, untyped dynamic values, or a
+component-name registry. Lexical scope storage must remain lifetime-safe; if
+runtime frames are allocated in an arena or heap, scope links should use stable
+frame references or indexes rather than pointers into movable storage.
+
 ## 2. Goals and Non-Goals
 
 The initial engine must:
@@ -50,6 +77,7 @@ The initial engine must:
 * support `if`, `else`, optional capture, `for`, comments, external components,
   lexical local snippets, and layout composition;
 * use a deliberately small language with no JSON or dynamic context model.
+* keep runtime stack usage bounded independently of template source length.
 
 The initial engine must not provide runtime or user-editable templates,
 arbitrary Zig execution, arithmetic, arbitrary calls, variables, assignment,
@@ -249,6 +277,15 @@ declarations may shadow an outer declaration or external component. This same
 rule applies to a declaration inside a loop or other block: its visibility is
 limited to that lexical body, regardless of whether the body executes at
 runtime.
+
+At runtime, the renderer represents these lexical scopes as a typed borrowed
+chain. A scope stores its captured value and a pointer to its outer scope
+rather than embedding the entire outer scope by value. This is an important
+implementation invariant: rendering is synchronous, so an outer scope pointer
+is valid only during the nested render call that created it; scopes must not be
+stored after that call returns or used by asynchronous work. The pointer-linked
+chain preserves the compile-time type checking above while avoiding large,
+repeated stack copies for nested loops, snippets, and component arguments.
 
 ### 4.3 Shared fragment representation
 

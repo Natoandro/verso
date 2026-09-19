@@ -287,13 +287,22 @@ fn handleHttpConnection(
     pipeline: *const web.Pipeline,
 ) std.Io.Cancelable!void {
     const io = server_context.io;
+    const allocator = server_context.allocator;
     defer connection.close(io);
 
     const started_at = std.Io.Clock.now(.awake, io);
-    var read_buffer: [8192]u8 = undefined;
-    var write_buffer: [8192]u8 = undefined;
-    var reader = connection.reader(io, &read_buffer);
-    var writer = connection.writer(io, &write_buffer);
+    const read_buffer = allocator.alloc(u8, 8192) catch |allocation_error| {
+        logConnectionFailure(server_context, started_at, allocation_error) catch {};
+        return;
+    };
+    defer allocator.free(read_buffer);
+    const write_buffer = allocator.alloc(u8, 8192) catch |allocation_error| {
+        logConnectionFailure(server_context, started_at, allocation_error) catch {};
+        return;
+    };
+    defer allocator.free(write_buffer);
+    var reader = connection.reader(io, read_buffer);
+    var writer = connection.writer(io, write_buffer);
     var http_server = std.http.Server.init(&reader.interface, &writer.interface);
     var request_head = http_server.receiveHead() catch |connection_error| {
         if (connection_error == error.Canceled) return error.Canceled;
@@ -316,7 +325,12 @@ fn handleHttpConnection(
         &request_head,
         started_at,
         remote_address,
-    );
+    ) catch |init_error| {
+        if (init_error == error.Canceled) return error.Canceled;
+        logConnectionFailure(server_context, started_at, init_error) catch {};
+        return;
+    };
+    defer http_request.deinit();
     pipeline.handle(&http_request) catch |request_error| {
         if (request_error == error.Canceled) return error.Canceled;
         return;

@@ -369,8 +369,9 @@ fn previewId(request: *const context.RequestContext) ?i64 {
 }
 
 fn queryParam(request: *const context.RequestContext, name: []const u8) ?[]const u8 {
-    const query_start = std.mem.indexOfScalar(u8, request.request.head.target, '?') orelse return null;
-    var pairs = std.mem.splitScalar(u8, request.request.head.target[query_start + 1 ..], '&');
+    const target = request.requestTarget();
+    const query_start = std.mem.indexOfScalar(u8, target, '?') orelse return null;
+    var pairs = std.mem.splitScalar(u8, target[query_start + 1 ..], '&');
     while (pairs.next()) |pair| {
         const separator = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
         if (std.mem.eql(u8, pair[0..separator], name)) return pair[separator + 1 ..];
@@ -411,4 +412,51 @@ test "editor routes expose page, mutation, and embedded stylesheet endpoints" {
     try std.testing.expectEqual(@as(?usize, 8), route.resolve(routes, .GET, "/admin/editor-documents.css"));
     try std.testing.expectEqual(@as(?usize, 9), route.resolve(routes, .GET, "/admin/editor-responsive.css"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .POST, "/admin/editor"));
+}
+
+test "editor template renders a text section" {
+    const sections = [_]views.SectionItem{.{
+        .id = 1,
+        .kind = "text",
+        .is_text = true,
+        .is_preview = false,
+        .is_first = true,
+        .is_last = true,
+        .markdown = "",
+        .asset = "",
+        .alt = "",
+        .caption = "",
+        .display_inline = true,
+        .display_wide = false,
+        .display_full = false,
+        .preview_html = "",
+    }};
+    const page = views.Page{
+        .page_title = "Draft",
+        .kind = .editor,
+        .csrf_token = "csrf",
+        .has_notice = false,
+        .notice_is_error = false,
+        .notice = "",
+        .documents = &.{},
+        .has_documents = false,
+        .document_id = 1,
+        .version_id = 2,
+        .revision = 1,
+        .title = "Draft",
+        .slug = "draft",
+        .description = "",
+        .has_description = false,
+        .details_open = false,
+        .details_toggle = "1",
+        .details_value = "0",
+        .details_label = "Document details",
+        .sections = &sections,
+        .has_sections = true,
+        .has_multiple = false,
+        .section_count = 1,
+    };
+    const rendered = try editor_template.renderAlloc(std.testing.allocator, page);
+    defer std.testing.allocator.free(rendered);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "section-edit-dialog-1") != null);
 }

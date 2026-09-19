@@ -1,6 +1,7 @@
 const std = @import("std");
 const parser = @import("parser.zig");
 const renderer = @import("render.zig");
+const diagnostics = @import("diagnostics.zig");
 
 pub const escape = @import("escape.zig");
 
@@ -34,6 +35,12 @@ pub fn Template(comptime source: []const u8, comptime options: anytype) type {
             context: anytype,
         ) !void {
             _ = self;
+            if (!@inComptime()) {
+                diagnostics.log(
+                    "template source_len={d} writer=0x{x} context_type={s} context_size={d}",
+                    .{ source.len, @intFromPtr(writer), @typeName(@TypeOf(context)), @sizeOf(@TypeOf(context)) },
+                );
+            }
             const parsed = comptime parser.parse(source);
             if (comptime @hasField(@TypeOf(options), "components")) {
                 try renderer.renderNodes(writer, parsed.nodes, parsed.count, options.components, context);

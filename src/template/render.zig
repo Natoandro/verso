@@ -3,6 +3,7 @@ const escape = @import("escape.zig");
 const expression = @import("expression.zig");
 const parser = @import("parser.zig");
 const component_renderer = @import("component_renderer.zig");
+const diagnostics = @import("diagnostics.zig");
 
 const EmptyContext = struct {};
 
@@ -74,7 +75,7 @@ fn renderIf(
             if (value) |unwrapped| {
                 if (block.capture) |name| {
                     const Scoped = expression.Scope(@TypeOf(context), name, optional.child);
-                    const scoped: Scoped = .{ .outer = context, .value = unwrapped };
+                    const scoped: Scoped = .{ .outer = &context, .value = unwrapped };
                     try renderRange(writer, nodes, components, block.body_start, block.body_end, scoped);
                 } else {
                     try renderRange(writer, nodes, components, block.body_start, block.body_end, context);
@@ -114,7 +115,21 @@ fn renderFor(
     switch (@typeInfo(Collection)) {
         .array, .pointer => {
             for (collection) |item| {
-                const scoped: Scoped = .{ .outer = context, .value = item };
+                const scoped: Scoped = .{ .outer = &context, .value = item };
+                if (!@inComptime()) {
+                    diagnostics.log(
+                        "for capture={s} context_type={s} context_size={d} context_addr=0x{x} scope_type={s} scope_size={d} scope_addr=0x{x}",
+                        .{
+                            block.capture,
+                            @typeName(@TypeOf(context)),
+                            @sizeOf(@TypeOf(context)),
+                            @intFromPtr(&context),
+                            @typeName(Scoped),
+                            @sizeOf(Scoped),
+                            @intFromPtr(&scoped),
+                        },
+                    );
+                }
                 try renderRange(writer, nodes, components, block.body_start, block.body_end, scoped);
             }
         },
@@ -292,7 +307,7 @@ fn bindSnippetValue(
     value: anytype,
 ) !void {
     const Scoped = expression.Scope(@TypeOf(scope), declaration.parameters[index], @TypeOf(value));
-    const scoped: Scoped = .{ .outer = scope, .value = value };
+    const scoped: Scoped = .{ .outer = &scope, .value = value };
     try bindSnippetParameters(writer, nodes, components, declaration, call, bindings, index + 1, parent, scoped);
 }
 

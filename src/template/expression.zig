@@ -7,7 +7,11 @@ pub fn Scope(comptime Outer: type, comptime name: []const u8, comptime Value: ty
         pub const capture_type = Value;
         pub const outer_type = Outer;
 
-        outer: Outer,
+        // Scope chains are borrowed, not owned. Keeping the outer context as
+        // a pointer avoids copying the complete lexical chain into every
+        // nested scope. The renderer is synchronous, so the pointed-to scope
+        // remains alive until the recursive render call returns.
+        outer: *const Outer,
         value: Value,
     };
 }
@@ -16,12 +20,13 @@ pub fn resolvePathType(comptime Context: type, comptime path: anytype, comptime 
     if (index == path.count) return Context;
 
     if (comptime isScope(Context) and index == 0) {
+        const ScopeType = unwrapScopePointer(Context);
         const segment = path.segments[index];
         const name = path.source[segment.start .. segment.start + segment.len];
-        if (comptime std.mem.eql(u8, name, Context.capture_name)) {
-            return resolvePathType(Context.capture_type, path, index + 1);
+        if (comptime std.mem.eql(u8, name, ScopeType.capture_name)) {
+            return resolvePathType(ScopeType.capture_type, path, index + 1);
         }
-        return resolvePathType(Context.outer_type, path, index);
+        return resolvePathType(ScopeType.outer_type, path, index);
     }
 
     const Struct = structType(Context, path.source);
@@ -38,9 +43,10 @@ fn resolvePathAt(comptime path: anytype, comptime index: usize, value: anytype) 
     if (index == path.count) return value;
 
     if (comptime isScope(@TypeOf(value)) and index == 0) {
+        const ScopeType = unwrapScopePointer(@TypeOf(value));
         const segment = path.segments[index];
         const name = path.source[segment.start .. segment.start + segment.len];
-        if (comptime std.mem.eql(u8, name, @TypeOf(value).capture_name)) {
+        if (comptime std.mem.eql(u8, name, ScopeType.capture_name)) {
             return resolvePathAt(path, index + 1, value.value);
         }
         return resolvePathAt(path, index, value.outer);
@@ -53,9 +59,17 @@ fn resolvePathAt(comptime path: anytype, comptime index: usize, value: anytype) 
 }
 
 fn isScope(comptime Value: type) bool {
-    return switch (@typeInfo(Value)) {
-        .@"struct" => @hasDecl(Value, "template_scope"),
+    const Candidate = unwrapScopePointer(Value);
+    return switch (@typeInfo(Candidate)) {
+        .@"struct" => @hasDecl(Candidate, "template_scope"),
         else => false,
+    };
+}
+
+fn unwrapScopePointer(comptime Value: type) type {
+    return switch (@typeInfo(Value)) {
+        .pointer => |pointer| if (pointer.size == .one) pointer.child else Value,
+        else => Value,
     };
 }
 

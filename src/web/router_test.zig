@@ -99,6 +99,8 @@ test "a compiled route table is a layer and preserves composed handler delegatio
     var request: RequestContext = undefined;
     request.request = &http_request;
     request.response_status = null;
+    request.route_capture_storage = try std.testing.allocator.alloc(u8, 16 * 1024);
+    defer std.testing.allocator.free(request.route_capture_storage);
 
     try mutable_table.handle(&request, .{ .layers = &fallback_layers, .index = 0 });
     try std.testing.expectEqual(@as(?u16, 2), request.response_status);

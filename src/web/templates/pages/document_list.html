@@ -19,26 +19,58 @@
       {{/if}}
 
       <section class="admin-create-card" aria-labelledby="create-draft-heading">
-        <h2 id="create-draft-heading">Create a draft</h2>
-        <form
-          method="post"
-          action="/admin/editor/create"
-          hx-post="/admin/editor/create"
-          hx-target="#document-list"
-          hx-swap="outerHTML"
-          hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'
-        >
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <label>
-            Title
-            <input name="title" autocomplete="off" required>
-          </label>
-          <label>
-            URL slug
-            <input name="slug" autocomplete="off" required>
-          </label>
-          <button class="theme-button theme-button-primary" type="submit">Create draft</button>
-        </form>
+        <div class="admin-create-card-copy">
+          <div>
+            <p class="eyebrow">New draft</p>
+            <h2 id="create-draft-heading">Start something new</h2>
+            <p>Create a blank article and open it in the editorial workspace.</p>
+          </div>
+          <button
+            class="theme-button theme-button-primary"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="create-draft-dialog"
+            onclick="document.getElementById('create-draft-dialog').showModal()"
+          >
+            Create draft
+          </button>
+        </div>
+
+        <dialog class="theme-modal" id="create-draft-dialog" aria-labelledby="create-draft-dialog-title">
+          <div class="theme-modal-panel">
+            <div class="theme-modal-header">
+              <div>
+                <p class="eyebrow">New draft</p>
+                <h2 id="create-draft-dialog-title">Create a draft</h2>
+                <p>Give your next article a working title and URL.</p>
+              </div>
+              <button class="theme-modal-close" type="button" aria-label="Close dialog" onclick="this.closest('dialog').close()">×</button>
+            </div>
+            <form
+              class="theme-modal-form"
+              method="post"
+              action="/admin/editor/create"
+              hx-post="/admin/editor/create"
+              hx-target="#document-list"
+              hx-swap="outerHTML"
+              hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'
+            >
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label>
+                Title
+                <input name="title" autocomplete="off" placeholder="A working title" required autofocus>
+              </label>
+              <label>
+                URL slug
+                <input name="slug" autocomplete="off" placeholder="a-working-title" required>
+              </label>
+              <div class="theme-modal-actions">
+                <button class="theme-button theme-button-quiet" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+                <button class="theme-button theme-button-primary" type="submit">Create draft</button>
+              </div>
+            </form>
+          </div>
+        </dialog>
       </section>
 
       <section class="admin-document-list" aria-labelledby="document-list-heading">

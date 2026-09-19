@@ -46,8 +46,10 @@
     display: inline-block;
     margin-top: 20px;
   }
-  .admin-create-card form {
-    grid-template-columns: 1fr;
+  .admin-create-card-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
   }
   .admin-document-list li {
     align-items: flex-start;
