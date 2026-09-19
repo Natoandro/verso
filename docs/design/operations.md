@@ -269,9 +269,7 @@ HTTP listener. Environment overrides are applied before validation, followed by
 command-line overrides.
 
 The focused `migrate up` command surface accepts the global `--config`
-selector, database URL, migration path, and logging overrides. The temporary
-document bootstrap commands retain their broader configuration options until
-their DOC-001/DOC-002 surfaces are replaced.
+selector, database URL, migration path, and logging overrides.
 
 This startup default is appropriate for the initial SQLite, single-service
 deployment. If Verso later targets a shared database or supports multiple
@@ -471,11 +469,9 @@ preferred place for deployment-specific credentials once non-SQLite adapters
 exist.
 
 For now, this generated source-of-truth contract applies primarily to
-`verso serve`. The document bootstrap commands belong to DOC-001 and DOC-002;
-they are temporary local verification interfaces and are not part of this
-configuration-schema design. The migration command may consume the same
-generated configuration metadata later, but its command-specific surface is
-not required to define the initial `serve` contract.
+`verso serve`. The migration command may consume the same generated
+configuration metadata later, but its command-specific surface is not
+required to define the initial `serve` contract.
 
 Boolean values must be exactly `true` or `false`; enum and integer values use
 the same lowercase names and decimal representation as the configuration

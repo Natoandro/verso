@@ -2,13 +2,12 @@ const std = @import("std");
 const clap = @import("clap");
 const auth_command = @import("commands/auth.zig");
 const config_command = @import("commands/config.zig");
-const document_command = @import("commands/document.zig");
 const migrate_command = @import("commands/migrate.zig");
 const command_options = @import("commands/options.zig");
 const serve_command = @import("commands/serve.zig");
 
 pub fn main(init: std.process.Init) !void {
-    const params = comptime clap.parseParamsComptime(command_options.global_help ++ "\n<command>    Command to run: serve, config, document, migrate, or auth.\n");
+    const params = comptime clap.parseParamsComptime(command_options.global_help ++ "\n<command>    Command to run: serve, config, migrate, or auth.\n");
 
     var command_args = try init.minimal.args.iterateAllocator(init.gpa);
     defer command_args.deinit();
@@ -33,9 +32,6 @@ pub fn main(init: std.process.Init) !void {
     const inherited_overrides = command_options.overrides(parsed_top_level_args.args);
     if (std.mem.eql(u8, command_name, "config")) {
         return config_command.run(init, &command_args, inherited_overrides);
-    }
-    if (std.mem.eql(u8, command_name, "document")) {
-        return document_command.run(init, &command_args, inherited_overrides);
     }
     if (std.mem.eql(u8, command_name, "migrate")) {
         return migrate_command.run(init, &command_args, inherited_overrides);

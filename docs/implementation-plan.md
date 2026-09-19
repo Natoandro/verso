@@ -103,8 +103,7 @@ starting `DOC-001`.
   Metadata must be allowed to omit fields, must not define configuration
   values or types, and must fail comptime validation when it names an unknown
   `Config` path. Document generated environment-reference output without
-  maintaining a separate environment allowlist. Leave document bootstrap
-  command surfaces under DOC-001 and DOC-002.
+  maintaining a separate environment allowlist.
 
   - [x] **Schema reflection:** Generate `serve` CLI names, parser types,
     override transport, and ordinary environment names from `config.Config`.
@@ -135,12 +134,10 @@ migration task.
 
 - [x] **DOC-001 — Create a bootstrap text draft**
 
-  A local operator can create a new, unlisted text document draft through a
-  narrow bootstrap command that calls the ordinary document application
-  service. The draft has a stable document ID, version 1, metadata, and a
-  text section; invalid types and duplicate mutable drafts are rejected. This
-  temporary bootstrap surface is removed from normal use once protected
-  editorial creation is delivered in `IAM-003`.
+  The document application service can create a new, unlisted text document
+  draft. The draft has a stable document ID, version 1, metadata, and a text
+  section; invalid types and duplicate mutable drafts are rejected. Protected
+  editorial integration is tracked separately under the web-editor work.
 
   - [x] **Domain:** Define the draft and version invariants, including stable
     document identity, version 1, supported document types, and the one
@@ -150,8 +147,8 @@ migration task.
   - [x] **SQLite storage:** Persist the document, initial version, metadata,
     and text section atomically while enforcing uniqueness and foreign-key
     constraints.
-  - [x] **CLI:** Add the narrow local bootstrap command and verify its success,
-    invalid-input failures, and duplicate-draft behavior.
+  - [x] **Application/integration:** Verify creation, invalid-input failures,
+    and duplicate-draft behavior through the shared service.
 
 - [x] **DOC-002 — Edit typed draft sections**
 
@@ -166,8 +163,8 @@ migration task.
     payload, draft-state, and expected-revision validation.
   - [x] **SQLite storage:** Store ordered section records and implement
     transaction-safe insert, move, duplicate, update, and delete operations.
-  - [x] **CLI:** Provide a small verification surface for section mutations
-    and exercise valid operations alongside malformed and non-draft cases.
+  - [x] **Application/integration:** Exercise valid section mutations alongside
+    malformed, stale, and non-draft cases through the shared service.
 
 - [x] **DOC-003 — Create the next document version**
 
@@ -184,7 +181,7 @@ migration task.
   - [x] **SQLite storage:** Deep-copy all version-owned records in one
     transaction while preserving source immutability and enforcing lineage
     uniqueness.
-  - [x] **CLI:** Add a focused way to create and inspect a next draft, including
+  - [x] **Application/integration:** Create and inspect a next draft, including
     checks for copied nested content and rejected duplicate or invalid forks.
 
 - [ ] **DOC-004 — Save and restore working revisions**
@@ -200,8 +197,8 @@ migration task.
     optimistic-concurrency checks and safe failure behavior.
   - [ ] **SQLite storage:** Persist immutable revision snapshots and apply
     restores atomically without changing published or archived versions.
-  - [ ] **CLI:** Exercise successful checkpoints, stale saves, listing, and
-    restoration through a verification command or integration fixture.
+  - [ ] **Application/integration:** Exercise successful checkpoints, stale
+    saves, listing, and restoration through a verification fixture.
 
 - [ ] **DOC-005 — Validate draft metadata**
 
@@ -216,8 +213,9 @@ migration task.
     collection mapping is read from deployment configuration.
   - [ ] **SQLite storage:** Persist normalized metadata and relationships with
     the constraints needed for valid series positions and immutable types.
-  - [ ] **CLI:** Verify valid metadata changes, rejected malformed values, and
-    the inability to edit the logical type or bypass configured collections.
+  - [ ] **Application/integration:** Verify valid metadata changes, rejected
+    malformed values, and the inability to edit the logical type or bypass
+    configured collections.
 
 - [x] **DOC-006 — Persist and load complete draft documents**
 
@@ -228,7 +226,7 @@ migration task.
   changes. A load round-trips the complete draft aggregate for later editor,
   preview, MCP, and publication use cases. This ticket adds no public route
   and no unauthenticated server mutation path; its verification surface is a
-  local application-service or CLI/integration fixture using an explicit
+  local application-service or integration fixture using an explicit
   trusted bootstrap actor. Authorization policy is deliberately wired in by
   `IAM-003` and later interfaces.
 
@@ -239,7 +237,7 @@ migration task.
     document metadata, the active draft version, and all ordered typed
     sections while preserving foreign-key, uniqueness, and revision
     constraints.
-  - [x] **CLI/integration:** Verify create-or-load, complete round-trip,
+  - [x] **Application/integration:** Verify create-or-load, complete round-trip,
     repeated saves, stale-save rejection, rollback on failure, and the absence
     of any public or unauthenticated mutation route.
 

@@ -139,9 +139,7 @@ configuration schema plus sparse CLI metadata; it does not maintain a second
 list of configuration fields. Typed values are strict: booleans are
 `true` or `false`, enums use their documented lowercase names, and integers
 use decimal notation. Database URLs may be supplied with `--database-url`,
-but are never included in configuration diagnostics. The temporary document
-bootstrap commands are specified by DOC-001 and DOC-002 rather than by this
-CLI schema.
+but are never included in configuration diagnostics.
 
 See [`docs/design/operations.md`](docs/design/operations.md) for migration,
 configuration, deployment, and logging details.

@@ -86,15 +86,6 @@ fn makeMigrationHelp() [migrationHelpLength()]u8 {
 pub const migration_help_text = makeMigrationHelp();
 pub const migration_help = migration_help_text[0..];
 
-pub const document_help = migration_help ++
-    migrationHelpLine("runtime.environment", "Runtime environment: development or production.") ++
-    migrationHelpLine("site.base_url", "Public site URL for validation.") ++
-    migrationHelpLine("migrations.run_on_startup", "Run pending migrations at startup.");
-
-// These are temporary document-command fields. Config fields below are
-// reflected from Config and are not duplicated in this parser table.
-const DocumentParserCount = 18;
-
 fn serveParserCount() usize {
     var count: usize = 0;
     inline for (verso.config.serve_cli_metadata) |metadata| {
@@ -126,30 +117,14 @@ fn configParser(comptime T: type) configParserType(T) {
 }
 
 fn parserSetType() type {
-    var names: [DocumentParserCount + serveParserCount()][]const u8 = undefined;
+    var names: [2 + serveParserCount()][]const u8 = undefined;
     var field_types: [names.len]type = undefined;
     var attrs: [names.len]std.builtin.Type.StructField.Attributes = @splat(.{});
     var index: usize = 0;
 
     inline for (.{
         .{ "command", @TypeOf(clap.parsers.string) },
-        .{ "operation", @TypeOf(clap.parsers.string) },
         .{ "PATH", @TypeOf(clap.parsers.string) },
-        .{ "ID", @TypeOf(clap.parsers.int(i64, 10)) },
-        .{ "VERSION_ID", @TypeOf(clap.parsers.int(i64, 10)) },
-        .{ "SECTION_ID", @TypeOf(clap.parsers.int(i64, 10)) },
-        .{ "POSITION", @TypeOf(clap.parsers.int(u32, 10)) },
-        .{ "REVISION", @TypeOf(clap.parsers.int(u64, 10)) },
-        .{ "TYPE", @TypeOf(clap.parsers.string) },
-        .{ "TITLE", @TypeOf(clap.parsers.string) },
-        .{ "SLUG", @TypeOf(clap.parsers.string) },
-        .{ "TEXT", @TypeOf(clap.parsers.string) },
-        .{ "MARKDOWN", @TypeOf(clap.parsers.string) },
-        .{ "LANG", @TypeOf(clap.parsers.string) },
-        .{ "ASSET", @TypeOf(clap.parsers.string) },
-        .{ "ALT", @TypeOf(clap.parsers.string) },
-        .{ "CAPTION", @TypeOf(clap.parsers.string) },
-        .{ "DISPLAY", @TypeOf(clap.parsers.string) },
     }) |entry| {
         names[index] = entry[0];
         field_types[index] = entry[1];
@@ -171,23 +146,7 @@ const ParserSet = parserSetType();
 fn makeParsers() ParserSet {
     var result: ParserSet = undefined;
     result.command = clap.parsers.string;
-    result.operation = clap.parsers.string;
     result.PATH = clap.parsers.string;
-    result.ID = clap.parsers.int(i64, 10);
-    result.VERSION_ID = clap.parsers.int(i64, 10);
-    result.SECTION_ID = clap.parsers.int(i64, 10);
-    result.POSITION = clap.parsers.int(u32, 10);
-    result.REVISION = clap.parsers.int(u64, 10);
-    result.TYPE = clap.parsers.string;
-    result.TITLE = clap.parsers.string;
-    result.SLUG = clap.parsers.string;
-    result.TEXT = clap.parsers.string;
-    result.MARKDOWN = clap.parsers.string;
-    result.LANG = clap.parsers.string;
-    result.ASSET = clap.parsers.string;
-    result.ALT = clap.parsers.string;
-    result.CAPTION = clap.parsers.string;
-    result.DISPLAY = clap.parsers.string;
     inline for (verso.config.serve_cli_metadata) |metadata| {
         if (metadata.cli_enabled) {
             const placeholder = verso.config.cliPlaceholderName(metadata.config_field);
@@ -232,7 +191,6 @@ test "migration help exposes only migration inputs" {
     try std.testing.expect(std.mem.indexOf(u8, migration_help, "--runtime-environment") == null);
     try std.testing.expect(std.mem.indexOf(u8, migration_help, "--site-base-url") == null);
     try std.testing.expect(std.mem.indexOf(u8, migration_help, "--migrations-run-on-startup") == null);
-    try std.testing.expect(std.mem.indexOf(u8, document_help, "--migrations-run-on-startup") != null);
 }
 
 test "unset CLI options do not override configuration values" {
