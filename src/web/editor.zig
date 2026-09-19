@@ -132,10 +132,10 @@ fn getEditor(request: *context.RequestContext, _: layer.Next) anyerror!void {
 fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
     const actor = try currentActor(request);
     var parsed = form.extract(CreateDraftForm, request) catch return auth.respondText(request, "Invalid draft form\n", .bad_request);
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
-    const draft = request.server.document_service.createDraft(actor, .{
+    const draft = request.server.document_service.createDraftWithAllocator(request.allocator(), actor, .{
         .document_type = .article,
         .title = parsed.value.title,
         .slug = parsed.value.slug,
@@ -149,22 +149,21 @@ fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
 fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
     const actor = try currentActor(request);
     var parsed = form.extract(SaveDocumentForm, request) catch return auth.respondText(request, "Invalid document form\n", .bad_request);
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
     const document_id = parsed.value.document_id;
     const version_id = parsed.value.version_id;
     const expected_revision = parsed.value.expected_revision;
-    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| {
+    var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
     defer loaded.deinit();
     if (loaded.document.document_id != document_id) return renderDocumentById(request, csrf, document_id, "The draft identity did not match.", true);
-    const draft_sections = try request.server.allocator.alloc(domain.DraftSection, loaded.document.sections.len);
-    defer request.server.allocator.free(draft_sections);
+    const draft_sections = try request.allocator().alloc(domain.DraftSection, loaded.document.sections.len);
     for (loaded.document.sections, 0..) |section, index| draft_sections[index] = section;
     const description_value = parsed.value.description orelse "";
-    _ = request.server.document_service.saveDraft(actor, .{
+    _ = request.server.document_service.saveDraftWithAllocator(request.allocator(), actor, .{
         .document_id = document_id,
         .version_id = version_id,
         .expected_revision = expected_revision,
@@ -181,7 +180,7 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
 fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void {
     const actor = try currentActor(request);
     var parsed = form.extract(SectionForm, request) catch return auth.respondText(request, "Invalid section form\n", .bad_request);
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try requireEditorCsrf(request, parsed.value.csrf_token)) return;
     const csrf = try csrfToken(request);
     const document_id = parsed.value.document_id;
@@ -194,7 +193,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
             .{ .text = .{ .markdown = "" } }
         else
             .{ .image = .{ .asset = "placeholder.png", .alt = "Image placeholder", .caption = null, .display = .inline_display } };
-        _ = request.server.document_service.insertSection(actor, .{
+        _ = request.server.document_service.insertSectionWithAllocator(request.allocator(), actor, .{
             .version_id = version_id,
             .position = sectionCount(request, version_id) catch 0,
             .expected_revision = expected_revision,
@@ -205,7 +204,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
 
     const section_id = parsed.value.section_id orelse return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
     if (section_id <= 0) return renderDocumentById(request, csrf, document_id, "Invalid section.", true);
-    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| {
+    var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| {
         return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
     };
     defer loaded.deinit();
@@ -229,7 +228,7 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
     }
 
     const payload = sectionPayload(parsed.value) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
-    _ = request.server.document_service.updateSection(actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
+    _ = request.server.document_service.updateSectionWithAllocator(request.allocator(), actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| return renderDocument(request, csrf, version_id, false, null, failureMessage(failure), true);
     const show_preview = std.mem.eql(u8, operation, "preview");
     if (isHtmx(request)) return renderSection(request, csrf, version_id, section_id, if (show_preview) section_id else null) catch return renderDocument(request, csrf, version_id, false, null, "The section was saved, but could not be rendered.", true);
     return renderDocument(request, csrf, version_id, false, if (show_preview) section_id else null, if (show_preview) "Section saved and previewed." else "Section saved.", false);
@@ -237,14 +236,9 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
 
 fn renderList(request: *context.RequestContext, csrf: []const u8, notice: []const u8, is_error: bool) !void {
     const actor = try currentActor(request);
-    const summaries = request.server.document_service.listDrafts(actor, request.server.allocator) catch |failure| return editorFailure(request, failure);
-    defer {
-        for (summaries) |*summary| summary.deinit(request.server.allocator);
-        request.server.allocator.free(summaries);
-    }
-    var arena = std.heap.ArenaAllocator.init(request.server.allocator);
-    defer arena.deinit();
-    const page = try views.list(arena.allocator(), csrf, summaries, notice, is_error);
+    const summaries = request.server.document_service.listDrafts(actor, request.allocator()) catch |failure| return editorFailure(request, failure);
+    defer for (summaries) |*summary| summary.deinit(request.allocator());
+    const page = try views.list(request.allocator(), csrf, summaries, notice, is_error);
     return respondPage(request, page);
 }
 
@@ -256,22 +250,18 @@ fn renderDocumentById(request: *context.RequestContext, csrf: []const u8, docume
 
 fn renderDocument(request: *context.RequestContext, csrf: []const u8, version_id: i64, details_open: bool, preview_id: ?i64, notice: []const u8, is_error: bool) !void {
     const actor = try currentActor(request);
-    var loaded = request.server.document_service.loadDraft(actor, version_id) catch |failure| return editorFailure(request, failure);
+    var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| return editorFailure(request, failure);
     defer loaded.deinit();
-    var arena = std.heap.ArenaAllocator.init(request.server.allocator);
-    defer arena.deinit();
-    const page = try views.editor(arena.allocator(), csrf, loaded.document, details_open, preview_id, notice, is_error);
+    const page = try views.editor(request.allocator(), csrf, loaded.document, details_open, preview_id, notice, is_error);
     return respondPage(request, page);
 }
 
 fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id: i64, section_id: i64, preview_id: ?i64) !void {
     const actor = try currentActor(request);
-    var loaded = try request.server.document_service.loadDraft(actor, version_id);
+    var loaded = try request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id);
     defer loaded.deinit();
-    var arena = std.heap.ArenaAllocator.init(request.server.allocator);
-    defer arena.deinit();
-    const page = try views.editor(arena.allocator(), csrf, loaded.document, false, preview_id, "", false);
-    var output: std.Io.Writer.Allocating = .init(request.server.allocator);
+    const page = try views.editor(request.allocator(), csrf, loaded.document, false, preview_id, "", false);
+    var output: std.Io.Writer.Allocating = .init(request.allocator());
     defer output.deinit();
     try editor_revision.render(&output.writer, .{ .revision = page.revision });
     for (page.sections) |section| {
@@ -287,9 +277,9 @@ fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id:
         });
     }
     const content = try output.toOwnedSlice();
-    defer request.server.allocator.free(content);
-    var target_buffer: [64]u8 = undefined;
-    const target = try std.fmt.bufPrint(&target_buffer, "#section-{d}", .{section_id});
+    defer request.allocator().free(content);
+    const target_buffer = try request.allocator().alloc(u8, 64);
+    const target = try std.fmt.bufPrint(target_buffer, "#section-{d}", .{section_id});
     const headers = [_]std.http.Header{
         .{ .name = "cache-control", .value = "no-store" },
         .{ .name = "HX-Retarget", .value = target },
@@ -310,10 +300,10 @@ fn editorFailure(request: *context.RequestContext, failure: anyerror) !void {
 
 fn respondPage(request: *context.RequestContext, page: views.Page) !void {
     const content = try switch (page.kind) {
-        .editor => editor_template.renderAlloc(request.server.allocator, page),
-        .document_list => document_list_template.renderAlloc(request.server.allocator, page),
+        .editor => editor_template.renderAlloc(request.allocator(), page),
+        .document_list => document_list_template.renderAlloc(request.allocator(), page),
     };
-    defer request.server.allocator.free(content);
+    defer request.allocator().free(content);
     return auth.respond(request, content, "text/html; charset=utf-8", &.{.{ .name = "cache-control", .value = "no-store" }}, .ok);
 }
 
@@ -332,7 +322,7 @@ fn sectionPayload(values: SectionForm) !section_domain.Payload {
 
 fn sectionCount(request: *context.RequestContext, version_id: i64) !u32 {
     const actor = try currentActor(request);
-    var loaded = try request.server.document_service.loadDraft(actor, version_id);
+    var loaded = try request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id);
     defer loaded.deinit();
     return std.math.cast(u32, loaded.document.sections.len) orelse error.SectionLimitExceeded;
 }

@@ -13,11 +13,11 @@ pub const Actor = union(enum) {
 };
 
 pub const LoadedDraft = struct {
-    arena: std.heap.ArenaAllocator,
+    arena: ?std.heap.ArenaAllocator,
     document: domain.DraftDocument,
 
     pub fn deinit(self: *LoadedDraft) void {
-        self.arena.deinit();
+        if (self.arena) |*arena| arena.deinit();
         self.* = undefined;
     }
 };
@@ -50,11 +50,20 @@ pub const Service = struct {
         actor: Actor,
         request: domain.CreateDraft,
     ) !domain.Draft {
+        return self.createDraftWithAllocator(self.allocator, actor, request);
+    }
+
+    pub fn createDraftWithAllocator(
+        self: *Service,
+        allocator: std.mem.Allocator,
+        actor: Actor,
+        request: domain.CreateDraft,
+    ) !domain.Draft {
         try authorizeCreateDraft(self, actor, request.document_id);
         try domain.validateCreateDraft(request);
 
-        const section_data = try buildTextSection(self.allocator, request.markdown);
-        defer self.allocator.free(section_data);
+        const section_data = try buildTextSection(allocator, request.markdown);
+        defer allocator.free(section_data);
         return self.store.createDraft(request, section_data, userId(actor));
     }
 
@@ -73,19 +82,28 @@ pub const Service = struct {
         actor: Actor,
         request: domain.SaveDraft,
     ) !domain.SaveResult {
+        return self.saveDraftWithAllocator(self.allocator, actor, request);
+    }
+
+    pub fn saveDraftWithAllocator(
+        self: *Service,
+        allocator: std.mem.Allocator,
+        actor: Actor,
+        request: domain.SaveDraft,
+    ) !domain.SaveResult {
         try authorizeDraftMutation(self, actor, request.version_id);
         try domain.validateSaveDraft(request);
 
-        const encoded = try self.allocator.alloc(storage.EncodedSection, request.sections.len);
-        defer self.allocator.free(encoded);
+        const encoded = try allocator.alloc(storage.EncodedSection, request.sections.len);
+        defer allocator.free(encoded);
         var encoded_count: usize = 0;
-        defer for (encoded[0..encoded_count]) |section| self.allocator.free(section.data);
+        defer for (encoded[0..encoded_count]) |section| allocator.free(section.data);
 
         for (request.sections, 0..) |section, index| {
             encoded[index] = .{
                 .id = section.id,
                 .kind = section.payload.kind().name(),
-                .data = try encodeSection(self.allocator, section.payload),
+                .data = try encodeSection(allocator, section.payload),
             };
             encoded_count += 1;
         }
@@ -93,40 +111,58 @@ pub const Service = struct {
     }
 
     pub fn loadDraft(self: *Service, actor: Actor, version_id: i64) !LoadedDraft {
-        try authorizeDraftRead(self, actor, version_id);
-
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         errdefer arena.deinit();
-        const arena_allocator = arena.allocator();
-        const record = try self.store.loadDraft(arena_allocator, version_id);
+        const document = try self.loadDraftDocument(actor, version_id, arena.allocator());
+        return .{ .arena = arena, .document = document };
+    }
+
+    pub fn loadDraftWithAllocator(
+        self: *Service,
+        allocator: std.mem.Allocator,
+        actor: Actor,
+        version_id: i64,
+    ) !LoadedDraft {
+        return .{
+            .arena = null,
+            .document = try self.loadDraftDocument(actor, version_id, allocator),
+        };
+    }
+
+    fn loadDraftDocument(
+        self: *Service,
+        actor: Actor,
+        version_id: i64,
+        allocator: std.mem.Allocator,
+    ) !domain.DraftDocument {
+        try authorizeDraftRead(self, actor, version_id);
+
+        const record = try self.store.loadDraft(allocator, version_id);
         const document_type = domain.DocumentType.parse(record.document_type) catch return error.InvalidStoredDocument;
         const version_number = std.math.cast(u32, record.version_number) orelse return error.InvalidStoredDocument;
         const revision_number = std.math.cast(u64, record.revision_number) orelse return error.InvalidStoredDocument;
-        const sections = try arena_allocator.alloc(domain.DraftSection, record.sections.len);
+        const sections = try allocator.alloc(domain.DraftSection, record.sections.len);
 
         for (record.sections, 0..) |section, index| {
             const position = std.math.cast(usize, section.position) orelse return error.InvalidStoredDocument;
             if (position != index) return error.InvalidStoredDocument;
             sections[index] = .{
                 .id = section.id,
-                .payload = try decodeSection(arena_allocator, section.kind, section.data),
+                .payload = try decodeSection(allocator, section.kind, section.data),
             };
         }
 
         return .{
-            .arena = arena,
-            .document = .{
-                .document_id = record.document_id,
-                .version_id = record.version_id,
-                .version_number = version_number,
-                .revision_number = revision_number,
-                .document_type = document_type,
-                .title = record.title,
-                .slug = record.slug,
-                .description = record.description,
-                .language = record.language,
-                .sections = sections,
-            },
+            .document_id = record.document_id,
+            .version_id = record.version_id,
+            .version_number = version_number,
+            .revision_number = revision_number,
+            .document_type = document_type,
+            .title = record.title,
+            .slug = record.slug,
+            .description = record.description,
+            .language = record.language,
+            .sections = sections,
         };
     }
 
@@ -155,10 +191,19 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Insert,
     ) !section_storage.MutationResult {
+        return self.insertSectionWithAllocator(self.allocator, actor, request);
+    }
+
+    pub fn insertSectionWithAllocator(
+        self: *Service,
+        allocator: std.mem.Allocator,
+        actor: Actor,
+        request: section_domain.Insert,
+    ) !section_storage.MutationResult {
         try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateInsert(request);
-        const data = try encodeSection(self.allocator, request.payload);
-        defer self.allocator.free(data);
+        const data = try encodeSection(allocator, request.payload);
+        defer allocator.free(data);
         return section_storage.insertSection(
             self.store,
             request.version_id,
@@ -175,10 +220,19 @@ pub const Service = struct {
         actor: Actor,
         request: section_domain.Update,
     ) !section_storage.MutationResult {
+        return self.updateSectionWithAllocator(self.allocator, actor, request);
+    }
+
+    pub fn updateSectionWithAllocator(
+        self: *Service,
+        allocator: std.mem.Allocator,
+        actor: Actor,
+        request: section_domain.Update,
+    ) !section_storage.MutationResult {
         try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateUpdate(request);
-        const data = try encodeSection(self.allocator, request.payload);
-        defer self.allocator.free(data);
+        const data = try encodeSection(allocator, request.payload);
+        defer allocator.free(data);
         return section_storage.updateSection(
             self.store,
             request.version_id,

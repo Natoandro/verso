@@ -140,10 +140,10 @@ fn getRegister(request: *RequestContext, _: Next) Error!void {
     };
     if (!setup_available) return redirectToLogin(request);
     var token = try auth_crypto.newSecret(request.server.io);
-    var html_buffer: [4096]u8 = undefined;
-    const html = try std.fmt.bufPrint(&html_buffer, register_html_template, .{&token});
-    var cookie_buffer: [192]u8 = undefined;
-    const cookie = try formatCookie(&cookie_buffer, setup_csrf_cookie_name, &token, false);
+    const html_buffer = try request.allocator().alloc(u8, 4096);
+    const html = try std.fmt.bufPrint(html_buffer, register_html_template, .{&token});
+    const cookie_buffer = try request.allocator().alloc(u8, 192);
+    const cookie = try formatCookie(cookie_buffer, setup_csrf_cookie_name, &token, false);
     return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
         .{ .name = "cache-control", .value = "no-store" },
         .{ .name = "set-cookie", .value = cookie },
@@ -157,7 +157,7 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(RegistrationForm, request) catch {
         return errors.respond(request, .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try requireSetupCsrf(setup_cookie, parsed.value.csrf_token, request)) return;
     if (!std.mem.eql(u8, parsed.value.password, parsed.value.password_confirmation)) {
         return errors.respond(request, .bad_request);
@@ -190,7 +190,7 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(LoginForm, request) catch {
         return errors.respond(request, .unauthorized);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     const credentials = request.server.identity_service.startLocalSession(
         parsed.value.login,
         parsed.value.password,
@@ -224,8 +224,8 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
     _ = request.server.identity_service.authenticate(token) catch return redirectToLogin(request);
     const csrf_token = cookieValue(request, csrf_cookie_name) orelse
         return errors.respond(request, .forbidden);
-    var html_buffer: [4096]u8 = undefined;
-    const html = try std.fmt.bufPrint(&html_buffer,
+    const html_buffer = try request.allocator().alloc(u8, 4096);
+    const html = try std.fmt.bufPrint(html_buffer,
         \\<!doctype html>
         \\<html lang="en"><head><meta charset="utf-8"><title>Change password</title></head>
         \\<body><main><h1>Change password</h1>
@@ -250,7 +250,7 @@ fn postPassword(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(PasswordForm, request) catch {
         return errors.respond(request, .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try requireCsrf(request, token, parsed.value.csrf_token)) return;
     const credentials = request.server.identity_service.changePassword(token, parsed.value.current_password, parsed.value.new_password) catch |change_error| switch (change_error) {
         error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
@@ -271,7 +271,7 @@ fn postRecovery(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(RecoveryForm, request) catch {
         return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (parsed.value.login) |login| {
         _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch {};
     }
@@ -290,7 +290,7 @@ fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(RecoveryCompleteForm, request) catch {
         return errors.respond(request, .unauthorized);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     const credentials = request.server.identity_service.completePasswordReset(parsed.value.token, parsed.value.new_password) catch |reset_error| switch (reset_error) {
         error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
         else => return errors.respond(request, .internal_server_error),
@@ -331,10 +331,10 @@ fn establishSession(
     credentials: application_identity.SessionCredentials,
     location: []const u8,
 ) Error!void {
-    var session_cookie_buffer: [192]u8 = undefined;
-    var csrf_cookie_buffer: [192]u8 = undefined;
-    const session_cookie = try formatCookie(&session_cookie_buffer, session_cookie_name, &credentials.token, true);
-    const csrf_cookie = try formatCookie(&csrf_cookie_buffer, csrf_cookie_name, &credentials.csrf_token, false);
+    const session_cookie_buffer = try request.allocator().alloc(u8, 192);
+    const csrf_cookie_buffer = try request.allocator().alloc(u8, 192);
+    const session_cookie = try formatCookie(session_cookie_buffer, session_cookie_name, &credentials.token, true);
+    const csrf_cookie = try formatCookie(csrf_cookie_buffer, csrf_cookie_name, &credentials.csrf_token, false);
     return respond(request, &.{}, "text/plain; charset=utf-8", &.{
         .{ .name = "location", .value = location },
         .{ .name = "set-cookie", .value = session_cookie },

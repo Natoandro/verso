@@ -14,9 +14,9 @@ const error_page_template = tmpl.parse(@embedFile("templates/pages/error.html"),
 /// field-level feedback. This page is for request-level failures that do not
 /// have a more useful application response.
 pub fn respond(request: *RequestContext, status: std.http.Status) Error!void {
-    var body_buffer: [32768]u8 = undefined;
+    const body_buffer = try request.allocator().alloc(u8, 32768);
     const phrase = status.phrase() orelse "Request Error";
-    var writer = std.Io.Writer.fixed(&body_buffer);
+    var writer = std.Io.Writer.fixed(body_buffer);
     try error_page_template.render(&writer, .{
         .status_code = @intFromEnum(status),
         .phrase = phrase,

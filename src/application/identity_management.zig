@@ -35,21 +35,25 @@ pub const Service = struct {
     }
 
     pub fn list(self: *Service, token: []const u8) !Snapshot {
+        return self.listWithAllocator(self.allocator, token);
+    }
+
+    pub fn listWithAllocator(self: *Service, allocator: std.mem.Allocator, token: []const u8) !Snapshot {
         try self.identity_service.requireCapability(token, .author_manage);
         try self.identity_service.requireCapability(token, .document_assign_editor);
 
-        const authors = try self.store.listAuthors(self.allocator);
-        errdefer query_storage.Store.freeAuthors(self.allocator, authors);
-        const editors = try self.store.listEditors(self.allocator);
-        errdefer query_storage.Store.freeEditors(self.allocator, editors);
-        const assignments = try self.store.listActiveAssignments(self.allocator);
-        errdefer query_storage.Store.freeAssignments(self.allocator, assignments);
+        const authors = try self.store.listAuthors(allocator);
+        errdefer query_storage.Store.freeAuthors(allocator, authors);
+        const editors = try self.store.listEditors(allocator);
+        errdefer query_storage.Store.freeEditors(allocator, editors);
+        const assignments = try self.store.listActiveAssignments(allocator);
+        errdefer query_storage.Store.freeAssignments(allocator, assignments);
 
         return .{
             .authors = authors,
             .editors = editors,
             .assignments = assignments,
-            .allocator = self.allocator,
+            .allocator = allocator,
         };
     }
 };

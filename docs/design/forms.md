@@ -50,7 +50,7 @@ const LoginForm = struct {
 };
 
 var parsed = try form.extract(LoginForm, request);
-defer parsed.deinit(request.server.allocator);
+defer parsed.deinit(request.allocator());
 
 const credentials = request.server.identity_service.startLocalSession(
     parsed.value.login,
@@ -134,10 +134,11 @@ including the distinction between a missing field and a submitted empty value.
 
 ## 4. Ownership and failure boundaries
 
-Decoded text values point into the allocated request body. The extracted
-wrapper owns that allocation and must be cleaned up on every successful or
-failed handler path. Numeric values are parsed into the schema and do not borrow
-the body.
+Decoded text values point into the allocated request body. The request arena
+owns that allocation and reclaims it at request completion. The extracted
+wrapper keeps a cleanup method for standalone parsing and API symmetry; request
+handlers may still defer it, but it uses `request.allocator()`. Numeric values
+are parsed into the schema and do not borrow the body.
 
 Extraction errors are transport/input errors. They must not call application
 services, change canonical state, or bypass authentication and authorization.

@@ -217,6 +217,12 @@ delegates to `next`, final handlers terminate the pipeline, and services may
 perform work before or after delegation. This is a small request-pipeline
 boundary, not a general dependency-injection container; concrete dependencies
 should be added when the corresponding application service is implemented.
+Each `RequestContext` owns an arena allocator for request-lifetime data and
+exposes it through `request.allocator()`. Request metadata, parsed inputs,
+rendering buffers, and request-scoped service results use that allocator and
+are reclaimed together after the pipeline. Server-owned state remains on the
+server allocator. See [request memory management](memory-management.md) for
+the full ownership and future-limit policy.
 Request logging is one such layer and surrounds the request pipeline so it can
 record both successful responses and downstream failures. It uses the shared
 structured logging framework, which accepts arbitrary record structs and

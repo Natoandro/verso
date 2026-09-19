@@ -67,6 +67,8 @@ The initial system should deliberately avoid generalizing for hypothetical futur
 
 - [System architecture](design/system.md) — deployment model, technology
   direction, SQLite, internal layering, and representative request paths.
+- [Request memory management](design/memory-management.md) — request-scoped
+  arena ownership, allocator boundaries, lifecycle, and future memory limits.
 - [Routing and static delivery](design/routing.md) — comptime route patterns,
   composable routing layers, matching precedence, and static handlers.
 - [Typed web form extraction](design/forms.md) — endpoint-owned form schemas,

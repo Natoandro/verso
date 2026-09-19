@@ -120,17 +120,17 @@ pub const FilesystemStatic = struct {
             return respondStatus(request, .not_found);
         if (!isSafeRelativePath(relative_path)) return respondStatus(request, .not_found);
 
-        const content = self.readFile(relative_path) catch |read_error| switch (read_error) {
+        const content = self.readFileWithAllocator(request.allocator(), relative_path) catch |read_error| switch (read_error) {
             error.StreamTooLong => return respondStatus(request, .payload_too_large),
             error.Canceled => return error.Canceled,
             error.OutOfMemory => return error.OutOfMemory,
             else => return respondStatus(request, .not_found),
         };
-        defer self.allocator.free(content);
+        defer request.allocator().free(content);
 
-        var etag_buffer: [24]u8 = undefined;
+        const etag_buffer = try request.allocator().alloc(u8, 24);
         const etag = if (self.generate_etag)
-            std.fmt.bufPrint(&etag_buffer, "\"{x}\"", .{std.hash.Wyhash.hash(0, content)}) catch unreachable
+            std.fmt.bufPrint(etag_buffer, "\"{x}\"", .{std.hash.Wyhash.hash(0, content)}) catch unreachable
         else
             null;
         var policy = self.policy;
@@ -139,6 +139,10 @@ pub const FilesystemStatic = struct {
     }
 
     fn readFile(self: *FilesystemStatic, relative_path: []const u8) ![]u8 {
+        return self.readFileWithAllocator(self.allocator, relative_path);
+    }
+
+    fn readFileWithAllocator(self: *FilesystemStatic, allocator: std.mem.Allocator, relative_path: []const u8) ![]u8 {
         if (!isSafeRelativePath(relative_path)) return error.InvalidPath;
         var file = try self.root.openFile(self.io, relative_path, .{
             .allow_directory = false,
@@ -151,7 +155,7 @@ pub const FilesystemStatic = struct {
         if (stat.kind != .file) return error.NotAFile;
 
         var reader = file.reader(self.io, &.{});
-        return reader.interface.allocRemaining(self.allocator, .limited(self.max_bytes + 1));
+        return reader.interface.allocRemaining(allocator, .limited(self.max_bytes + 1));
     }
 };
 

@@ -20,14 +20,13 @@ pub fn extract(comptime Schema: type, request: *context.RequestContext) !Extract
     try validateContentType(request.request.head.content_type);
     try validateContentLength(request.request.head.content_length);
 
-    var read_buffer: [4096]u8 = undefined;
-    const reader = try request.request.readerExpectContinue(&read_buffer);
-    const body = try reader.allocRemaining(request.server.allocator, .limited(max_body_bytes + 1));
+    const read_buffer = try request.allocator().alloc(u8, 4096);
+    const reader = try request.request.readerExpectContinue(read_buffer);
+    const body = try reader.allocRemaining(request.allocator(), .limited(max_body_bytes + 1));
     if (body.len > max_body_bytes) {
-        request.server.allocator.free(body);
         return error.BodyTooLarge;
     }
-    return parseBody(Schema, body, request.server.allocator);
+    return parseBody(Schema, body, request.allocator());
 }
 
 fn validateContentType(content_type: ?[]const u8) !void {

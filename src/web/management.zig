@@ -48,7 +48,7 @@ const routes_table = routing.routes(.{
 
 fn getAuthors(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    var snapshot = request.server.identity_management_service.list(token) catch |list_error| {
+    var snapshot = request.server.identity_management_service.listWithAllocator(request.allocator(), token) catch |list_error| {
         return managementError(request, list_error);
     };
     defer snapshot.deinit();
@@ -60,7 +60,7 @@ fn postCreateAuthor(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(AuthorForm, request) catch {
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
     const display_name = parsed.value.display_name;
@@ -81,7 +81,7 @@ fn postUpdateAuthor(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(AuthorForm, request) catch {
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
     const display_name = parsed.value.display_name;
@@ -100,7 +100,7 @@ fn postCreateAssignment(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(AssignmentForm, request) catch {
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
     const editor_user_id = validateId(parsed.value.editor_user_id) catch
@@ -130,7 +130,7 @@ fn postRevokeAssignment(request: *RequestContext, _: Next) Error!void {
     var parsed = form.extract(RevokeAssignmentForm, request) catch {
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    defer parsed.deinit(request.server.allocator);
+    defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
     const expected_revision = validateRevision(parsed.value.expected_revision) catch
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
@@ -174,7 +174,7 @@ fn managerToken(request: *RequestContext) Error!?[]const u8 {
 }
 
 fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!void {
-    var output: std.Io.Writer.Allocating = .init(request.server.allocator);
+    var output: std.Io.Writer.Allocating = .init(request.allocator());
     defer output.deinit();
     const writer = &output.writer;
     try writer.writeAll(
@@ -238,7 +238,7 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
         \\<button type="submit">Assign</button></form></main></body></html>
     );
     const body = try output.toOwnedSlice();
-    defer request.server.allocator.free(body);
+    defer request.allocator().free(body);
     return auth.respond(request, body, "text/html; charset=utf-8", &.{.{ .name = "cache-control", .value = "no-store" }}, .ok);
 }
 

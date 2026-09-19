@@ -37,6 +37,7 @@ const CachedHeader = struct {
 
 pub const RequestContext = struct {
     server: *ServerContext,
+    arena: std.heap.ArenaAllocator,
     stream: *const std.Io.net.Stream,
     request: *std.http.Server.Request,
     started_at: std.Io.Timestamp,
@@ -61,22 +62,22 @@ pub const RequestContext = struct {
         started_at: std.Io.Timestamp,
         remote_address: []const u8,
     ) !RequestContext {
-        const allocator = server.allocator;
-        const route_capture_storage = try allocator.alloc(u8, route_capture_storage_size);
-        errdefer allocator.free(route_capture_storage);
-        const request_target_storage = try allocator.alloc(u8, request_target_storage_size);
-        errdefer allocator.free(request_target_storage);
-        const cached_headers = try allocator.alloc(CachedHeader, max_cached_headers);
-        errdefer allocator.free(cached_headers);
-        const cached_header_storage = try allocator.alloc(u8, cached_header_storage_size);
-        errdefer allocator.free(cached_header_storage);
+        var arena = std.heap.ArenaAllocator.init(server.allocator);
+        errdefer arena.deinit();
+        const request_allocator = arena.allocator();
+        const route_capture_storage = try request_allocator.alloc(u8, route_capture_storage_size);
+        const request_target_storage = try request_allocator.alloc(u8, request_target_storage_size);
+        const cached_headers = try request_allocator.alloc(CachedHeader, max_cached_headers);
+        const cached_header_storage = try request_allocator.alloc(u8, cached_header_storage_size);
+        const owned_remote_address = try request_allocator.dupe(u8, remote_address);
 
         var result: RequestContext = .{
             .server = server,
+            .arena = arena,
             .stream = stream,
             .request = request,
             .started_at = started_at,
-            .remote_address = remote_address,
+            .remote_address = owned_remote_address,
             .route_capture_storage = route_capture_storage,
             .request_target_storage = request_target_storage,
             .cached_headers = cached_headers,
@@ -87,11 +88,14 @@ pub const RequestContext = struct {
     }
 
     pub fn deinit(self: *RequestContext) void {
-        self.server.allocator.free(self.route_capture_storage);
-        self.server.allocator.free(self.request_target_storage);
-        self.server.allocator.free(self.cached_headers);
-        self.server.allocator.free(self.cached_header_storage);
+        self.arena.deinit();
         self.* = undefined;
+    }
+
+    /// Returns the allocator for data whose lifetime is bounded by this
+    /// request. The arena is released when `deinit` runs after the pipeline.
+    pub fn allocator(self: *RequestContext) std.mem.Allocator {
+        return self.arena.allocator();
     }
 
     pub fn requestTarget(self: *const RequestContext) []const u8 {
