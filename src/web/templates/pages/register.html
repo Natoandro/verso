@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#fbfaf7">
+    <title>Create owner account — Verso</title>
+    <link rel="stylesheet" href="/admin/theme.css">
+    <link rel="stylesheet" href="/admin/auth.css">
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell auth-shell-register">
+      <section class="auth-intro" aria-label="About Verso">
+        <a class="auth-brand" href="/" aria-label="Verso home">
+          <span class="auth-brand-mark">V</span>
+          <span>Verso</span>
+        </a>
+        <div class="auth-intro-copy">
+          <p class="auth-eyebrow">Your publication starts here</p>
+          <h1>A better home for your point of view.</h1>
+          <p>Create the owner account for this Verso installation, then start shaping your first draft.</p>
+        </div>
+        <div class="auth-visual" aria-hidden="true">
+          <div class="auth-orbit auth-orbit-one"></div>
+          <div class="auth-orbit auth-orbit-two"></div>
+          <div class="auth-paper auth-paper-back"></div>
+          <div class="auth-paper auth-paper-front">
+            <span></span><span></span><span></span>
+          </div>
+          <i class="auth-spark auth-spark-one"></i>
+          <i class="auth-spark auth-spark-two"></i>
+        </div>
+        <p class="auth-aside-note"><span class="auth-status-dot"></span> One owner account opens the editorial desk.</p>
+      </section>
+
+      <section class="auth-card" aria-labelledby="auth-title">
+        <div class="auth-card-header">
+          <p class="auth-eyebrow">First-time setup</p>
+          <h2 id="auth-title">Create the owner account</h2>
+          <p>This one-time step gives you full control of this publication.</p>
+        </div>
+        <form class="auth-form" method="post" action="/admin/register">
+          <input type="hidden" name="csrf_token" value="{s}">
+          <div class="auth-form-grid">
+            <div class="auth-field">
+              <label for="display-name">Display name</label>
+              <input id="display-name" name="display_name" autocomplete="name" placeholder="Ada Lovelace" required autofocus>
+            </div>
+            <div class="auth-field">
+              <label for="email">Email <span class="auth-optional">Optional</span></label>
+              <input id="email" type="email" name="email" autocomplete="email" placeholder="ada@example.com">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="login">Login</label>
+            <input id="login" name="login" autocomplete="username" placeholder="Choose a login" required>
+          </div>
+          <div class="auth-field">
+            <label for="password">Password</label>
+            <input id="password" type="password" name="password" autocomplete="new-password" placeholder="Create a strong password" required>
+          </div>
+          <div class="auth-field">
+            <label for="password-confirmation">Confirm password</label>
+            <input id="password-confirmation" type="password" name="password_confirmation" autocomplete="new-password" placeholder="Enter the password again" required>
+          </div>
+          <button class="theme-button theme-button-primary auth-submit" type="submit">
+            <span>Create owner account</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </button>
+        </form>
+        <p class="auth-card-footer"><span>Already set up?</span><a href="/admin/login">Go to sign in</a></p>
+      </section>
+    </main>
+  </body>
+</html>

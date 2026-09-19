@@ -7,11 +7,17 @@ const errors = @import("errors.zig");
 const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
+const static_content = @import("static.zig");
 
 const RequestContext = context.RequestContext;
 const Next = layer.Next;
 const Layer = layer.Layer;
 const Error = anyerror;
+
+const theme_css = @embedFile("styles/theme.css");
+const auth_css = @embedFile("styles/auth.css");
+const login_html = @embedFile("templates/pages/login.html");
+const register_html_template = @embedFile("templates/pages/register.html");
 
 pub const session_cookie_name = "__Host-verso_session";
 pub const csrf_cookie_name = "__Host-verso_csrf";
@@ -23,6 +29,7 @@ const RegistrationForm = struct {
     email: ?[]const u8,
     login: []const u8,
     password: []const u8,
+    password_confirmation: []const u8,
 };
 
 const LoginForm = struct {
@@ -96,6 +103,16 @@ const routes_table = route.routes(.{
     .{ "POST /admin/recover", postRecovery },
     .{ "GET /admin/recover/complete", getRecoveryComplete },
     .{ "POST /admin/recover/complete", postRecoveryComplete },
+    .{ "GET /admin/theme.css", static_content.EmbeddedStatic.handler(
+        theme_css,
+        "text/css; charset=utf-8",
+        .{ .status = .ok, .cache_control = "no-store" },
+    ) },
+    .{ "GET /admin/auth.css", static_content.EmbeddedStatic.handler(
+        auth_css,
+        "text/css; charset=utf-8",
+        .{ .status = .ok, .cache_control = "no-store" },
+    ) },
 });
 
 fn getLogin(request: *RequestContext, _: Next) Error!void {
@@ -142,6 +159,9 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
     };
     defer parsed.deinit(request.server.allocator);
     if (!try requireSetupCsrf(setup_cookie, parsed.value.csrf_token, request)) return;
+    if (!std.mem.eql(u8, parsed.value.password, parsed.value.password_confirmation)) {
+        return errors.respond(request, .bad_request);
+    }
     const credentials = request.server.identity_service.registerInitialLocalOwner(
         .{ .display_name = parsed.value.display_name, .email = parsed.value.email },
         parsed.value.login,
@@ -450,33 +470,6 @@ pub fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8
     }
     return null;
 }
-
-const login_html =
-    \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><title>Sign in</title></head>
-    \\<body><main><h1>Sign in</h1>
-    \\<form method="post" action="/admin/login">
-    \\<label>Login <input name="login" autocomplete="username" required></label>
-    \\<label>Password <input type="password" name="password" autocomplete="current-password" required></label>
-    \\<button type="submit">Sign in</button></form>
-    \\<p><a href="/admin/recover">Forgot your password?</a></p>
-    \\</main></body></html>
-;
-
-const register_html_template =
-    \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><title>Create owner account</title></head>
-    \\<body><main><h1>Create the owner account</h1>
-    \\<p>This one-time registration is available because no user exists yet.</p>
-    \\<form method="post" action="/admin/register">
-    \\<input type="hidden" name="csrf_token" value="{s}">
-    \\<label>Display name <input name="display_name" autocomplete="name" required></label>
-    \\<label>Email <input type="email" name="email" autocomplete="email"></label>
-    \\<label>Login <input name="login" autocomplete="username" required></label>
-    \\<label>Password <input type="password" name="password" autocomplete="new-password" required></label>
-    \\<button type="submit">Create owner account</button></form>
-    \\</main></body></html>
-;
 
 const recovery_html =
     \\<!doctype html>

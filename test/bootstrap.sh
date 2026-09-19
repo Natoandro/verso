@@ -103,7 +103,7 @@ run_server() {
         register_headers=$(curl --silent --dump-header - --output /dev/null \
             -H "Cookie: __Host-verso_setup_csrf=$register_csrf_token" \
             -H "Origin: http://127.0.0.1:$port" \
-            --data "csrf_token=$register_csrf_token&display_name=Site+Owner&email=owner%40example.test&login=owner%40example.test&password=correct+horse+battery+staple" \
+            --data "csrf_token=$register_csrf_token&display_name=Site+Owner&email=owner%40example.test&login=owner%40example.test&password=correct+horse+battery+staple&password_confirmation=correct+horse+battery+staple" \
             "http://127.0.0.1:$port/admin/register") || {
             sed -n '1,180p' "$stderr_file" >&2 || true
             fail "initial registration request failed"

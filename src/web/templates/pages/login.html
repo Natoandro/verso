@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#fbfaf7">
+    <title>Sign in — Verso</title>
+    <link rel="stylesheet" href="/admin/theme.css">
+    <link rel="stylesheet" href="/admin/auth.css">
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="auth-intro" aria-label="About Verso">
+        <a class="auth-brand" href="/" aria-label="Verso home">
+          <span class="auth-brand-mark">V</span>
+          <span>Verso</span>
+        </a>
+        <div class="auth-intro-copy">
+          <p class="auth-eyebrow">Editorial workspace</p>
+          <h1>Make space for ideas worth sharing.</h1>
+          <p>Shape thoughtful publications with a calm, structured writing desk built for the web.</p>
+        </div>
+        <div class="auth-visual" aria-hidden="true">
+          <div class="auth-orbit auth-orbit-one"></div>
+          <div class="auth-orbit auth-orbit-two"></div>
+          <div class="auth-paper auth-paper-back"></div>
+          <div class="auth-paper auth-paper-front">
+            <span></span><span></span><span></span>
+          </div>
+          <i class="auth-spark auth-spark-one"></i>
+          <i class="auth-spark auth-spark-two"></i>
+        </div>
+        <p class="auth-aside-note"><span class="auth-status-dot"></span> A focused place for your next draft.</p>
+      </section>
+
+      <section class="auth-card" aria-labelledby="auth-title">
+        <div class="auth-card-header">
+          <p class="auth-eyebrow">Welcome back</p>
+          <h2 id="auth-title">Sign in to Verso</h2>
+          <p>Continue to your editorial workspace.</p>
+        </div>
+        <form class="auth-form" method="post" action="/admin/login">
+          <div class="auth-field">
+            <label for="login">Login</label>
+            <input id="login" name="login" autocomplete="username" placeholder="you@example.com" required autofocus>
+          </div>
+          <div class="auth-field">
+            <div class="auth-label-row">
+              <label for="password">Password</label>
+              <a href="/admin/recover">Forgot password?</a>
+            </div>
+            <input id="password" type="password" name="password" autocomplete="current-password" placeholder="Enter your password" required>
+          </div>
+          <button class="theme-button theme-button-primary auth-submit" type="submit">
+            <span>Sign in</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </button>
+        </form>
+        <p class="auth-card-footer"><span>Verso keeps your publication in your hands.</span><a href="/">Return home</a></p>
+      </section>
+    </main>
+  </body>
+</html>
