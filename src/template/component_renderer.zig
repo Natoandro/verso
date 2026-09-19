@@ -1,7 +1,6 @@
 const std = @import("std");
 const expression = @import("expression.zig");
 const parser = @import("parser.zig");
-const diagnostics = @import("diagnostics.zig");
 
 const EmptyContext = struct {};
 
@@ -11,12 +10,6 @@ pub fn renderRegisteredComponent(
     comptime call: anytype,
     context: anytype,
 ) !void {
-    if (!@inComptime()) {
-        diagnostics.log(
-            "component={s} enter writer=0x{x} context_type={s} context_size={d}",
-            .{ call.name, @intFromPtr(writer), @typeName(@TypeOf(context)), @sizeOf(@TypeOf(context)) },
-        );
-    }
     const Options = @TypeOf(@TypeOf(child).template_options);
     if (comptime @hasField(Options, "parameters")) {
         const parameters = @TypeOf(child).template_options.parameters;
@@ -95,28 +88,7 @@ fn bindParameters(
     scope: anytype,
 ) !void {
     const fields = @typeInfo(@TypeOf(parameters)).@"struct".fields;
-    if (!@inComptime()) {
-        diagnostics.log(
-            "component={s} bind index={d}/{d} writer=0x{x} parent_type={s} parent_size={d} scope_type={s} scope_size={d}",
-            .{
-                call.name,
-                index,
-                fields.len,
-                @intFromPtr(writer),
-                @typeName(@TypeOf(parent)),
-                @sizeOf(@TypeOf(parent)),
-                @typeName(@TypeOf(scope)),
-                @sizeOf(@TypeOf(scope)),
-            },
-        );
-    }
     if (index == fields.len) {
-        if (!@inComptime()) {
-            diagnostics.log(
-                "component={s} child.render writer=0x{x} scope_addr=0x{x} scope_type={s} scope_size={d}",
-                .{ call.name, @intFromPtr(writer), @intFromPtr(&scope), @typeName(@TypeOf(scope)), @sizeOf(@TypeOf(scope)) },
-            );
-        }
         try child.render(writer, scope);
         return;
     }
@@ -147,19 +119,5 @@ fn bindValue(
     const fields = @typeInfo(@TypeOf(parameters)).@"struct".fields;
     const Scoped = expression.Scope(@TypeOf(scope), fields[index].name, @TypeOf(value));
     const scoped: Scoped = .{ .outer = &scope, .value = value };
-    if (!@inComptime()) {
-        diagnostics.log(
-            "component={s} value index={d} value_type={s} scope_addr=0x{x} new_scope_addr=0x{x} outer_addr=0x{x} new_scope_size={d}",
-            .{
-                call.name,
-                index,
-                @typeName(@TypeOf(value)),
-                @intFromPtr(&scope),
-                @intFromPtr(&scoped),
-                @intFromPtr(scoped.outer),
-                @sizeOf(Scoped),
-            },
-        );
-    }
     try bindParameters(writer, child, parameters, call, bindings, index + 1, parent, scoped);
 }

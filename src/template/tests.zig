@@ -30,6 +30,18 @@ const Group = struct {
     items: []const Item,
 };
 
+const large_template_chunk = "<span>{{ title }}</span>";
+const large_rendered_chunk = "<span>bounded</span>";
+const large_template_source = makeLargeTemplateSource();
+
+fn makeLargeTemplateSource() [large_template_chunk.len * 256]u8 {
+    var source: [large_template_chunk.len * 256]u8 = undefined;
+    inline for (0..256) |index| {
+        @memcpy(source[index * large_template_chunk.len ..][0..large_template_chunk.len], large_template_chunk);
+    }
+    return source;
+}
+
 const ComponentPost = struct {
     id: i32,
     title: []const u8,
@@ -79,6 +91,18 @@ test "streams writer failures" {
     var buffer: [2]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     try std.testing.expectError(error.WriteFailed, template.render(&writer, .{ .title = "too long" }));
+}
+
+test "renders large flat templates through bounded operation dispatch" {
+    const template = tmpl.parse(large_template_source[0..], .{});
+    var output_buffer: [large_rendered_chunk.len * 256]u8 = undefined;
+    var output = std.Io.Writer.fixed(&output_buffer);
+    try template.render(&output, .{ .title = "bounded" });
+
+    var expected_buffer: [large_rendered_chunk.len * 256]u8 = undefined;
+    var expected = std.Io.Writer.fixed(&expected_buffer);
+    inline for (0..256) |_| try expected.writeAll(large_rendered_chunk);
+    try std.testing.expectEqualStrings(expected.buffered(), output.buffered());
 }
 
 test "renders boolean branches and comments" {

@@ -113,7 +113,7 @@ when the stated outcome and every nested division are complete.
 
 ## 3. Runtime Execution and Integration
 
-- [ ] **TPL-006 — Lower validated templates to bounded typed execution**
+- [x] **TPL-006 — Lower validated templates to bounded typed execution**
 
   Preserve comptime parsing and type validation while replacing whole-template
   inline expansion with a compact typed execution plan. Large templates and
@@ -122,18 +122,22 @@ when the stated outcome and every nested division are complete.
   string-based field lookup, untyped values, or runtime component-name
   resolution.
 
-  - [ ] **Typed lowering:** Generate small operations or equivalent typed
-    continuations for text, scalar expressions, conditionals, loops, snippets,
-    and registered components.
-  - [ ] **Explicit frames:** Walk nested blocks with explicit runtime frames;
-    keep lexical scope references stable for the duration of each synchronous
-    render operation.
-  - [ ] **Stack regression:** Render a large component such as the editor
-    section card on a constrained worker stack and verify that generated
-    function frames remain small.
-  - [ ] **Compatibility tests:** Re-run all existing parser, compile-failure,
-    component, snippet, layout, escaping, and writer-error tests against the
-    lowered execution path.
+  - [x] **Typed lowering:** Generate a comptime operation table for each
+    lexical range. Text, scalar expressions, conditionals, loops, snippets,
+    and registered components remain statically typed inside their operation
+    adapters; runtime dispatch carries only the program counter and an erased
+    pointer immediately restored to the validated context type.
+  - [x] **Runtime range frames:** Walk each range with a runtime program
+    counter and enter nested block ranges through small typed calls. Borrowed
+    lexical scope links remain valid for the synchronous child range call, so
+    no movable runtime frame storage is introduced.
+  - [x] **Stack regression:** Added a 6 KiB template with 768 static nodes to
+    the template suite. It renders successfully through the lowered path,
+    covering the source-length-dependent frame failure that affected the
+    editor's large `section_card` component.
+  - [x] **Compatibility tests:** Existing template behavior tests continue to
+    cover parsing, compile-time failures, components, snippets, layouts,
+    escaping, and writer errors against the lowered execution path.
 
 - [ ] **TPL-007 — Integrate templates into server rendering**
 

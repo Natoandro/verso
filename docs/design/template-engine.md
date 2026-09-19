@@ -37,14 +37,8 @@ runtime rendering directly to a Writer
 
 Normal HTTP requests must never parse, tokenize, load, or look up templates.
 
-Debug builds also emit temporary renderer diagnostics to stderr. Each template
-entry records the writer address and context type/size; loop and component
-entries record the scope address, outer-scope address, and component binding
-index. These records are intended to identify the last valid hand-off before a
-memory fault, not to replace application logging. They are excluded from
-comptime evaluation and release builds. Because requests may render on
-different worker threads, diagnostics should be captured together with the
-server's stderr and inspected around the failing request.
+The stack-overflow incident that prompted the bounded execution plan is recorded
+in [the template renderer stack incident](../template-renderer-stack-overflow-incident.md).
 
 ### 1.1 Renderer stack invariant
 
@@ -55,14 +49,22 @@ can turn a large component into a very large generated function and exhaust a
 worker thread's stack before its first output operation. This is a renderer
 implementation limitation, not a property of the template language.
 
-The planned renderer keeps parsing, AST construction, path resolution, component
-validation, and escaping decisions at comptime, but lowers the validated AST to
-a compact typed execution plan. Runtime rendering then walks that plan through
-small operations and explicit block frames. The plan must not introduce runtime
-template parsing, string-based field lookup, untyped dynamic values, or a
-component-name registry. Lexical scope storage must remain lifetime-safe; if
-runtime frames are allocated in an arena or heap, scope links should use stable
-frame references or indexes rather than pointers into movable storage.
+The renderer keeps parsing, AST construction, path resolution, component
+validation, and escaping decisions at comptime, but lowers each lexical AST
+range to a compact typed operation table. Each operation is a comptime-generated
+function with a small erased dispatch boundary; it immediately casts its
+context pointer back to the exact validated Zig type before resolving paths.
+Runtime rendering walks the table with a program counter, while block bodies
+enter their own typed range. This keeps the operation loop and its context
+storage small even for large flat components. Nested block calls are limited to
+the template's lexical nesting depth, not its total node count. The parsed AST
+is passed into the renderer as a comptime argument rather than copied into each
+runtime render frame.
+
+This execution plan must not introduce runtime template parsing, string-based
+field lookup, untyped dynamic values, or a component-name registry. Lexical
+scope storage remains lifetime-safe: the existing scope links are borrowed and
+remain valid for the synchronous child range call.
 
 ## 2. Goals and Non-Goals
 

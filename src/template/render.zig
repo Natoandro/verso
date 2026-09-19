@@ -3,9 +3,27 @@ const escape = @import("escape.zig");
 const expression = @import("expression.zig");
 const parser = @import("parser.zig");
 const component_renderer = @import("component_renderer.zig");
-const diagnostics = @import("diagnostics.zig");
+const execution = @import("execution.zig");
 
 const EmptyContext = struct {};
+
+const RenderOps = struct {
+    pub fn write_path(writer: *std.Io.Writer, comptime path: anytype, context: anytype, comptime escaped: bool) !void {
+        return writePath(writer, path, context, escaped);
+    }
+
+    pub fn if_block(writer: *std.Io.Writer, comptime nodes: anytype, comptime components: anytype, comptime block: anytype, context: anytype) !void {
+        return renderIf(writer, nodes, components, block, context);
+    }
+
+    pub fn for_block(writer: *std.Io.Writer, comptime nodes: anytype, comptime components: anytype, comptime block: anytype, context: anytype) !void {
+        return renderFor(writer, nodes, components, block, context);
+    }
+
+    pub fn component(writer: *std.Io.Writer, comptime nodes: anytype, comptime components: anytype, comptime call: anytype, context: anytype) !void {
+        return renderComponent(writer, nodes, components, call, context);
+    }
+};
 
 pub fn writePath(writer: *std.Io.Writer, comptime path: anytype, context: anytype, comptime escaped: bool) !void {
     const Value = expression.resolvePathType(@TypeOf(context), path, 0);
@@ -15,12 +33,11 @@ pub fn writePath(writer: *std.Io.Writer, comptime path: anytype, context: anytyp
 
 pub fn renderNodes(
     writer: *std.Io.Writer,
-    comptime nodes: anytype,
-    comptime count: usize,
+    comptime parsed: anytype,
     comptime components: anytype,
     context: anytype,
 ) !void {
-    try renderRange(writer, nodes, components, 0, count, context);
+    try renderRange(writer, parsed.nodes, components, 0, parsed.count, context);
 }
 
 fn renderRange(
@@ -31,24 +48,7 @@ fn renderRange(
     comptime end: usize,
     context: anytype,
 ) !void {
-    comptime var index = start;
-    inline while (index < end) : (index += 1) {
-        switch (nodes[index]) {
-            .text => |text| try writer.writeAll(text),
-            .expression => |path| try writePath(writer, path, context, true),
-            .raw_expression => |path| try writePath(writer, path, context, false),
-            .if_block => |block| {
-                try renderIf(writer, nodes, components, block, context);
-                index = block.node_end - 1;
-            },
-            .for_block => |block| {
-                try renderFor(writer, nodes, components, block, context);
-                index = block.node_end - 1;
-            },
-            .component => |call| try renderComponent(writer, nodes, components, call, context),
-            .snippet_declaration => |snippet| index = snippet.node_end - 1,
-        }
-    }
+    return execution.renderRange(writer, nodes, components, start, end, RenderOps, context);
 }
 
 fn renderIf(
@@ -116,20 +116,6 @@ fn renderFor(
         .array, .pointer => {
             for (collection) |item| {
                 const scoped: Scoped = .{ .outer = &context, .value = item };
-                if (!@inComptime()) {
-                    diagnostics.log(
-                        "for capture={s} context_type={s} context_size={d} context_addr=0x{x} scope_type={s} scope_size={d} scope_addr=0x{x}",
-                        .{
-                            block.capture,
-                            @typeName(@TypeOf(context)),
-                            @sizeOf(@TypeOf(context)),
-                            @intFromPtr(&context),
-                            @typeName(Scoped),
-                            @sizeOf(Scoped),
-                            @intFromPtr(&scoped),
-                        },
-                    );
-                }
                 try renderRange(writer, nodes, components, block.body_start, block.body_end, scoped);
             }
         },
