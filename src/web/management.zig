@@ -2,6 +2,7 @@ const std = @import("std");
 const domain = @import("../domain/identity.zig");
 const auth = @import("auth.zig");
 const context = @import("context.zig");
+const errors = @import("errors.zig");
 const escape = @import("tmpl").escape;
 const form = @import("form.zig");
 const layer = @import("layer.zig");
@@ -151,20 +152,20 @@ fn managerToken(request: *RequestContext) Error!?[]const u8 {
         return null;
     };
     if (auth.cookieValue(request, auth.csrf_cookie_name) == null) {
-        try auth.respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return null;
     }
     request.authenticated_user_id = session.user_id;
     request.server.identity_service.requireCapability(token, .author_manage) catch |capability_error| switch (capability_error) {
         error.Forbidden => {
-            try auth.respondText(request, "Forbidden\n", .forbidden);
+            try errors.respond(request, .forbidden);
             return null;
         },
         else => return capability_error,
     };
     request.server.identity_service.requireCapability(token, .document_assign_editor) catch |capability_error| switch (capability_error) {
         error.Forbidden => {
-            try auth.respondText(request, "Forbidden\n", .forbidden);
+            try errors.respond(request, .forbidden);
             return null;
         },
         else => return capability_error,
@@ -275,13 +276,13 @@ fn validateRevision(value: i64) !i64 {
 
 fn managementError(request: *RequestContext, failure: anyerror) Error!void {
     return switch (failure) {
-        error.Forbidden => auth.respondText(request, "Forbidden\n", .forbidden),
+        error.Forbidden => errors.respond(request, .forbidden),
         error.AuthorNotFound,
         error.VersionNotFound,
         error.AssignmentNotFound,
         error.TargetNotEditor,
         error.DocumentNotFound,
-        => auth.respondText(request, "Not found\n", .not_found),
+        => errors.respond(request, .not_found),
         error.InvalidAuthor,
         error.InvalidDisplayName,
         error.InvalidAuthorSlug,
@@ -294,7 +295,7 @@ fn managementError(request: *RequestContext, failure: anyerror) Error!void {
         error.StaleAssignment,
         error.ConstraintViolation,
         => auth.respondText(request, "Invalid management request\n", .bad_request),
-        else => auth.respondText(request, "Management operation failed\n", .internal_server_error),
+        else => errors.respond(request, .internal_server_error),
     };
 }
 

@@ -85,6 +85,12 @@ run_server() {
     }
     [ "$response" = "Verso is running" ] || fail "unexpected HTTP response: $response"
 
+    not_found_body="$case_directory/not-found.body"
+    not_found_headers=$(curl --silent --dump-header - --output "$not_found_body" "http://127.0.0.1:$port/does-not-exist") || fail "not-found request failed"
+    printf '%s\n' "$not_found_headers" | grep -F 'HTTP/1.1 404' >/dev/null || fail "not-found response had the wrong status"
+    printf '%s\n' "$not_found_headers" | grep -Fi 'content-type: text/html; charset=utf-8' >/dev/null || fail "not-found response was not HTML"
+    grep -F '<h1>Not Found</h1>' "$not_found_body" >/dev/null || fail "not-found page was incomplete"
+
     if [ "$check_initial_setup" = true ]; then
         login_body_file="$case_directory/login.body"
         login_headers=$(curl --silent --dump-header - --output "$login_body_file" "http://127.0.0.1:$port/admin/login") || fail "login route was not served"
@@ -131,6 +137,10 @@ run_server() {
         fi
         editor_post_status=$(curl --silent --output "$case_directory/editor-post.body" --write-out '%{http_code}' -X POST "http://127.0.0.1:$port/admin/editor")
         [ "$editor_post_status" = "403" ] || fail "editor method did not enforce origin protection"
+        grep -F '<h1>Forbidden</h1>' "$case_directory/editor-post.body" >/dev/null || fail "forbidden response was not the HTML error page"
+        if grep -F 'Origin rejected' "$case_directory/editor-post.body" >/dev/null; then
+            fail "forbidden response exposed the origin rejection reason"
+        fi
     fi
 
     case "$shutdown_signal" in

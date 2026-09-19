@@ -342,19 +342,7 @@ const StatusHandler = struct {
 
 const NotFoundHandler = struct {
     pub fn handle(http_request: *web.RequestContext, _: web.Next) anyerror!void {
-        http_request.request.respond("Not Found\n", .{
-            .status = .not_found,
-            .keep_alive = false,
-            .extra_headers = &.{.{
-                .name = "content-type",
-                .value = "text/plain; charset=utf-8",
-            }},
-        }) catch |response_error| {
-            if (response_error == error.Canceled) return error.Canceled;
-            return response_error;
-        };
-
-        http_request.response_status = @intFromEnum(std.http.Status.not_found);
+        return web.respondError(http_request, .not_found);
     }
 };
 

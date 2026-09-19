@@ -5,6 +5,7 @@ const domain = @import("../domain/document.zig");
 const section_domain = @import("../domain/sections.zig");
 const auth = @import("auth.zig");
 const context = @import("context.zig");
+const errors = @import("errors.zig");
 const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
@@ -288,12 +289,12 @@ fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id:
 
 fn requireEditorCapability(request: *context.RequestContext, capability: auth_identity.Capability) !bool {
     const token = auth.cookieValue(request, auth.session_cookie_name) orelse {
-        try auth.respondText(request, "Authentication required\n", .unauthorized);
+        try errors.respond(request, .unauthorized);
         return false;
     };
     request.server.identity_service.requireCapability(token, capability) catch |failure| switch (failure) {
         error.Forbidden => {
-            try auth.respondText(request, "Forbidden\n", .forbidden);
+            try errors.respond(request, .forbidden);
             return false;
         },
         else => return failure,
@@ -341,7 +342,7 @@ fn requireEditorCsrf(request: *context.RequestContext, token: ?[]const u8) !bool
 
 fn csrfToken(request: *context.RequestContext) ![]const u8 {
     return auth.cookieValue(request, auth.csrf_cookie_name) orelse {
-        try auth.respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return error.ResponseAlreadySent;
     };
 }

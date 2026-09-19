@@ -3,6 +3,7 @@ const auth_crypto = @import("../auth/crypto.zig");
 const auth_security = @import("../auth/security.zig");
 const application_identity = @import("../application/identity.zig");
 const context = @import("context.zig");
+const errors = @import("errors.zig");
 const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
@@ -70,12 +71,12 @@ pub const SessionGuard = struct {
             // an application service.
             if (headerValue(request, "x-csrf-token")) |csrf| {
                 request.server.identity_service.validateCsrf(token, csrf) catch {
-                    return respondText(request, "CSRF validation failed\n", .forbidden);
+                    return errors.respond(request, .forbidden);
                 };
             } else if (request.request.head.content_type == null or
                 !std.ascii.eqlIgnoreCase(request.request.head.content_type.?, "application/x-www-form-urlencoded"))
             {
-                return respondText(request, "CSRF validation failed\n", .forbidden);
+                return errors.respond(request, .forbidden);
             }
         }
         request.authenticated_user_id = session.user_id;
@@ -100,7 +101,7 @@ const routes_table = route.routes(.{
 fn getLogin(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     const setup_available = request.server.identity_service.initialSetupAvailable() catch {
-        return respondText(request, "Authentication unavailable\n", .internal_server_error);
+        return errors.respond(request, .internal_server_error);
     };
     if (setup_available) return redirectToRegistration(request);
     if (cookieValue(request, session_cookie_name)) |token| {
@@ -118,7 +119,7 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
 fn getRegister(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     const setup_available = request.server.identity_service.initialSetupAvailable() catch {
-        return respondText(request, "Authentication unavailable\n", .internal_server_error);
+        return errors.respond(request, .internal_server_error);
     };
     if (!setup_available) return redirectToLogin(request);
     var token = try auth_crypto.newSecret(request.server.io);
@@ -137,7 +138,7 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
     if (!try request.server.identity_service.initialSetupAvailable()) return redirectToLogin(request);
     const setup_cookie = cookieValue(request, setup_csrf_cookie_name);
     var parsed = form.extract(RegistrationForm, request) catch {
-        return respondText(request, "Invalid registration\n", .bad_request);
+        return errors.respond(request, .bad_request);
     };
     defer parsed.deinit(request.server.allocator);
     if (!try requireSetupCsrf(setup_cookie, parsed.value.csrf_token, request)) return;
@@ -148,8 +149,8 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
         request.remote_address,
     ) catch |registration_error| switch (registration_error) {
         error.OwnerAlreadyExists => return redirectToLogin(request),
-        error.InvalidRegistration => return respondText(request, "Invalid registration\n", .bad_request),
-        else => return respondText(request, "Registration failed\n", .internal_server_error),
+        error.InvalidRegistration => return errors.respond(request, .bad_request),
+        else => return errors.respond(request, .internal_server_error),
     };
     return establishSession(request, credentials, "/admin/editor");
 }
@@ -159,15 +160,15 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
     if (cookieValue(request, session_cookie_name)) |token| {
         if (request.server.identity_service.authenticate(token)) |_| {
             const csrf = headerValue(request, "x-csrf-token") orelse {
-                return respondText(request, "CSRF validation failed\n", .forbidden);
+                return errors.respond(request, .forbidden);
             };
             request.server.identity_service.validateCsrf(token, csrf) catch {
-                return respondText(request, "CSRF validation failed\n", .forbidden);
+                return errors.respond(request, .forbidden);
             };
         } else |_| {}
     }
     var parsed = form.extract(LoginForm, request) catch {
-        return respondText(request, "Invalid credentials\n", .unauthorized);
+        return errors.respond(request, .unauthorized);
     };
     defer parsed.deinit(request.server.allocator);
     const credentials = request.server.identity_service.startLocalSession(
@@ -175,8 +176,8 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
         parsed.value.password,
         request.remote_address,
     ) catch |login_error| switch (login_error) {
-        error.InvalidCredentials => return respondText(request, "Invalid credentials\n", .unauthorized),
-        else => return respondText(request, "Authentication failed\n", .internal_server_error),
+        error.InvalidCredentials => return errors.respond(request, .unauthorized),
+        else => return errors.respond(request, .internal_server_error),
     };
     return establishSession(request, credentials, "/admin/editor");
 }
@@ -184,15 +185,15 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
 fn postLogout(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     const token = cookieValue(request, session_cookie_name) orelse
-        return respondText(request, "Authentication required\n", .unauthorized);
+        return errors.respond(request, .unauthorized);
     const csrf = headerValue(request, "x-csrf-token") orelse {
-        return respondText(request, "CSRF validation failed\n", .forbidden);
+        return errors.respond(request, .forbidden);
     };
     request.server.identity_service.validateCsrf(token, csrf) catch {
-        return respondText(request, "CSRF validation failed\n", .forbidden);
+        return errors.respond(request, .forbidden);
     };
     request.server.identity_service.logout(token) catch {
-        return respondText(request, "Logout failed\n", .internal_server_error);
+        return errors.respond(request, .internal_server_error);
     };
     return clearSession(request);
 }
@@ -202,7 +203,7 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
     const token = cookieValue(request, session_cookie_name) orelse return redirectToLogin(request);
     _ = request.server.identity_service.authenticate(token) catch return redirectToLogin(request);
     const csrf_token = cookieValue(request, csrf_cookie_name) orelse
-        return respondText(request, "CSRF validation failed\n", .forbidden);
+        return errors.respond(request, .forbidden);
     var html_buffer: [4096]u8 = undefined;
     const html = try std.fmt.bufPrint(&html_buffer,
         \\<!doctype html>
@@ -223,17 +224,17 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
 fn postPassword(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     const token = cookieValue(request, session_cookie_name) orelse
-        return respondText(request, "Authentication required\n", .unauthorized);
+        return errors.respond(request, .unauthorized);
     _ = request.server.identity_service.authenticate(token) catch
-        return respondText(request, "Authentication required\n", .unauthorized);
+        return errors.respond(request, .unauthorized);
     var parsed = form.extract(PasswordForm, request) catch {
-        return respondText(request, "Invalid password\n", .bad_request);
+        return errors.respond(request, .bad_request);
     };
     defer parsed.deinit(request.server.allocator);
     if (!try requireCsrf(request, token, parsed.value.csrf_token)) return;
     const credentials = request.server.identity_service.changePassword(token, parsed.value.current_password, parsed.value.new_password) catch |change_error| switch (change_error) {
-        error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid password\n", .unauthorized),
-        else => return respondText(request, "Password change failed\n", .internal_server_error),
+        error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
+        else => return errors.respond(request, .internal_server_error),
     };
     return establishSession(request, credentials, "/admin/editor");
 }
@@ -267,23 +268,23 @@ fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
 fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     var parsed = form.extract(RecoveryCompleteForm, request) catch {
-        return respondText(request, "Invalid recovery request\n", .unauthorized);
+        return errors.respond(request, .unauthorized);
     };
     defer parsed.deinit(request.server.allocator);
     const credentials = request.server.identity_service.completePasswordReset(parsed.value.token, parsed.value.new_password) catch |reset_error| switch (reset_error) {
-        error.InvalidCredentials, error.InvalidPassword => return respondText(request, "Invalid recovery request\n", .unauthorized),
-        else => return respondText(request, "Recovery failed\n", .internal_server_error),
+        error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
+        else => return errors.respond(request, .internal_server_error),
     };
     return establishSession(request, credentials, "/admin/editor");
 }
 
 pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
     const csrf = headerValue(request, "x-csrf-token") orelse form_token orelse {
-        try respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     };
     request.server.identity_service.validateCsrf(token, csrf) catch {
-        try respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     };
     return true;
@@ -291,15 +292,15 @@ pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]c
 
 fn requireSetupCsrf(cookie: ?[]const u8, form_token: ?[]const u8, request: *RequestContext) Error!bool {
     const cookie_value = cookie orelse {
-        try respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     };
     const token = form_token orelse {
-        try respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     };
     if (!auth_crypto.constantTimeEqual(cookie_value, token)) {
-        try respondText(request, "CSRF validation failed\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     }
     return true;
@@ -324,7 +325,7 @@ fn establishSession(
 
 pub fn checkRequestOrigin(request: *RequestContext) !bool {
     const host = headerValue(request, "host") orelse {
-        try respondText(request, "Bad request\n", .bad_request);
+        try errors.respond(request, .bad_request);
         return false;
     };
     const forwarded_scheme = headerValue(request, "x-forwarded-proto");
@@ -338,7 +339,7 @@ pub fn checkRequestOrigin(request: *RequestContext) !bool {
         .forwarded_scheme = forwarded_scheme,
         .forwarded_host = forwarded_host,
     }) catch {
-        try respondText(request, "Origin rejected\n", .forbidden);
+        try errors.respond(request, .forbidden);
         return false;
     };
     return true;

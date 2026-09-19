@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const context = @import("context.zig");
+const errors = @import("errors.zig");
 const layer = @import("layer.zig");
 
 pub const RequestContext = context.RequestContext;
@@ -205,7 +206,7 @@ pub fn contentTypeForPath(path: []const u8) []const u8 {
 }
 
 fn respondStatus(request: *RequestContext, status: std.http.Status) Error!void {
-    return respond(request, &.{}, "text/plain; charset=utf-8", .{ .status = status });
+    return errors.respond(request, status);
 }
 
 fn respond(

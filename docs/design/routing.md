@@ -174,6 +174,12 @@ Separate route layers are useful for distinct concerns:
 - embedded application assets;
 - a final not-found response.
 
+Request-level failures use shared server-rendered HTML error pages. The initial
+status-page set covers 400, 401, 403, 404, 405, 413, 415, 429, and common 5xx
+statuses; the page keeps the HTTP status and uses generic wording. Form and
+HTMX mutations may still return a focused response when field-level feedback
+or a section-local update is more useful than replacing the page.
+
 Mounting, authentication, and authorization may wrap a route layer, but route
 matching itself does not grant permission. An authenticated admin layer must
 fail or delegate according to its authorization policy before any draft data is

@@ -1,4 +1,5 @@
 pub const context = @import("web/context.zig");
+pub const errors = @import("web/errors.zig");
 pub const layer = @import("web/layer.zig");
 pub const logging = @import("web/logging.zig");
 pub const router = @import("web/router.zig");
@@ -19,6 +20,7 @@ pub const FilesystemStatic = static_content.FilesystemStatic;
 pub const FilesystemStaticOptions = static_content.FilesystemStaticOptions;
 pub const ResponsePolicy = static_content.ResponsePolicy;
 pub const RequestLoggingLayer = logging.RequestLoggingLayer;
+pub const respondError = errors.respond;
 pub const Route = router.Route;
 pub const RouteCapture = router.RouteCapture;
 pub const Router = router.Router;
