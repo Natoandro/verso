@@ -130,6 +130,15 @@ read named parameters through the request context or a route context passed by
 the routing layer. Captures must not be stored in global state or reused across
 requests.
 
+Route captures have dynamic scope. A router pushes a capture frame only after
+it has selected a matching route, then keeps that frame active while the
+matched route layer runs. Nested routing may read captures from active parent
+frames; the nearest frame is searched first. A parameter name may appear only
+once across the active frame stack, so a nested route that reuses a parent
+parameter name is a routing error rather than an implicit shadowing case.
+The frame is popped when the matched route layer returns, including when it
+delegates through `next`. A router that finds no match does not create a frame.
+
 Percent-decoding, encoded separators, malformed targets, and normalization
 rules must be specified before wildcard routes are used for security-sensitive
 paths. Until then, route declarations should prefer literal paths and

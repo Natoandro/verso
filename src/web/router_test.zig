@@ -47,6 +47,41 @@ test "route matching decodes captures but rejects encoded separators and malform
     try std.testing.expectEqual(@as(?usize, null), router.resolve(route, .GET, "/articles/a/"));
 }
 
+test "route capture frames expose parents and reject name conflicts" {
+    var request_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer request_arena.deinit();
+
+    var request: RequestContext = undefined;
+    request.route_captures = .{
+        .allocator = request_arena.allocator(),
+        .frames = .empty,
+    };
+
+    const parent_names = [_][]const u8{"author_id"};
+    try request.pushRouteCaptureFrame(parent_names[0..]);
+
+    const conflicting_names = [_][]const u8{"author_id"};
+    try std.testing.expectError(
+        error.RouteCaptureNameConflict,
+        request.pushRouteCaptureFrame(conflicting_names[0..]),
+    );
+
+    try request.addRouteCapture("author_id", "42");
+
+    const child_names = [_][]const u8{"document_id"};
+    try request.pushRouteCaptureFrame(child_names[0..]);
+    try request.addRouteCapture("document_id", "7");
+    try std.testing.expectEqualStrings("7", request.routeParam("document_id").?);
+    try std.testing.expectEqualStrings("42", request.routeParam("author_id").?);
+
+    request.popRouteCaptureFrame();
+    try std.testing.expectEqualStrings("42", request.routeParam("author_id").?);
+    try std.testing.expect(request.routeParam("document_id") == null);
+
+    request.popRouteCaptureFrame();
+    try std.testing.expect(request.routeParam("author_id") == null);
+}
+
 test "literal routes preserve explicit trailing slash compatibility" {
     const handler = struct {
         fn handle(_: *RequestContext, _: Next) Error!void {}
@@ -96,17 +131,23 @@ test "a compiled route table is a layer and preserves composed handler delegatio
     var http_request: std.http.Server.Request = undefined;
     http_request.head.method = .GET;
     http_request.head.target = "/admin/drafts/42?preview=true";
+    var request_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer request_arena.deinit();
     var request: RequestContext = undefined;
     request.request = &http_request;
     request.response_status = null;
-    request.route_capture_storage = try std.testing.allocator.alloc(u8, 16 * 1024);
-    defer std.testing.allocator.free(request.route_capture_storage);
+    request.route_captures = .{
+        .allocator = request_arena.allocator(),
+        .frames = .empty,
+    };
 
     try mutable_table.handle(&request, .{ .layers = &fallback_layers, .index = 0 });
     try std.testing.expectEqual(@as(?u16, 2), request.response_status);
+    try std.testing.expect(request.routeParam("id") == null);
     request.response_status = null;
     try route_layer.handle(&request, .{ .layers = &fallback_layers, .index = 0 });
     try std.testing.expectEqual(@as(?u16, 2), request.response_status);
+    try std.testing.expect(request.routeParam("id") == null);
 
     http_request.head.method = .POST;
     request.response_status = null;

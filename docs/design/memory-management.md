@@ -28,11 +28,10 @@ service, cache, or canonical record. Values passed to application services are
 borrowed for the operation unless the service explicitly copies them into
 canonical storage or another independently owned result.
 
-Small fixed-size local values used only synchronously—such as a bounded header
-array or a route-matching scratch struct—are not allocator-backed ownership
-and may remain stack-resident. They must not be returned, stored in the
-`RequestContext`, or used to evade a future request-memory limit for
-variable-sized data.
+Small fixed-size local values used only synchronously—such as a route-matching
+scratch struct—are not allocator-backed ownership and may remain stack-
+resident. They must not be returned, stored in the `RequestContext`, or used
+to evade a future request-memory limit for variable-sized data.
 
 ## 2. Request lifecycle
 
@@ -53,9 +52,11 @@ RequestContext.deinit() -> arena.deinit()
 ```
 
 `RequestContext.init` allocates its request metadata through the new arena,
-including the bounded target/header backing storage and the owned remote
-address. `RequestContext.deinit` does not free individual request objects; it
-releases the arena once, including on handler failure.
+including the owned request target, cached header records, and remote address.
+Route capture frames and decoded capture values are also request-arena-owned
+and are released with the request. `RequestContext.deinit` does not free
+individual request objects; it releases the arena once, including on handler
+failure.
 
 Request-scoped values must not escape after `deinit`. A handler may pass them
 down to application/domain services, render them into the response, or use
@@ -74,7 +75,8 @@ const body = try allocator.alloc(u8, body_size);
 The initial implementation follows these rules:
 
 1. Form readers and decoded form bodies use the request allocator.
-2. Route and cached-header backing storage belongs to the request arena.
+2. Route capture frames, decoded capture values, and cached header records and
+   values belong to the request arena.
 3. HTML, Markdown preview, template, static-file, error, and other response
    buffers use the request allocator.
 4. Application service operations that create request-visible results or

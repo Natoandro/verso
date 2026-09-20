@@ -263,14 +263,32 @@ pub const Router = struct {
 };
 
 fn dispatch(routes_table: []const Route, request: *RequestContext, next: Next) Error!void {
-    request.clearRouteCaptures();
     const target = parseTarget(request.request.head.target) orelse return next.call(request);
     const index = findBest(routes_table, request.request.head.method, target) orelse
         return next.call(request);
-    defer request.clearRouteCaptures();
+
+    var capture_names: [max_route_segments][]const u8 = undefined;
+    const capture_count = routeCaptureNames(&routes_table[index], &capture_names);
+    const has_captures = capture_count != 0;
+    if (has_captures) {
+        try request.pushRouteCaptureFrame(capture_names[0..capture_count]);
+    }
+    defer if (has_captures) request.popRouteCaptureFrame();
 
     populateCaptures(&routes_table[index], target, request) catch |capture_error| return capture_error;
     return routes_table[index].handler.handle(request, next);
+}
+
+fn routeCaptureNames(route: *const Route, names: *[max_route_segments][]const u8) usize {
+    if (!route.compiled) return 0;
+
+    var count: usize = 0;
+    for (route.segments[0..route.segment_count]) |segment| {
+        if (segment.kind != .parameter) continue;
+        names[count] = segment.text;
+        count += 1;
+    }
+    return count;
 }
 
 pub fn resolve(routes_table: []const Route, method: std.http.Method, target: []const u8) ?usize {
@@ -326,18 +344,9 @@ fn populateCaptures(route: *const Route, target: Target, request: *RequestContex
     if (!route.compiled) return;
     for (route.segments[0..route.segment_count], target.segments[0..target.segment_count]) |route_segment, target_segment| {
         if (route_segment.kind != .parameter) continue;
-        if (request.route_capture_count == request.route_capture_entries.len) return error.TooManyRouteCaptures;
         var decoded: [max_decoded_segment]u8 = undefined;
         const value = try decodeSegment(target_segment.raw, &decoded);
-        if (request.route_capture_storage_used + value.len > request.route_capture_storage.len) return error.RouteCaptureTooLarge;
-        const start = request.route_capture_storage_used;
-        @memcpy(request.route_capture_storage[start .. start + value.len], value);
-        request.route_capture_storage_used += value.len;
-        request.route_capture_entries[request.route_capture_count] = .{
-            .name = route_segment.text,
-            .value = request.route_capture_storage[start .. start + value.len],
-        };
-        request.route_capture_count += 1;
+        try request.addRouteCapture(route_segment.text, value);
     }
 }
 

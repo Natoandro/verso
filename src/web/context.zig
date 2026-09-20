@@ -22,17 +22,113 @@ pub const RouteCapture = struct {
     value: []const u8,
 };
 
-const max_route_captures = 16;
-const route_capture_storage_size = 16 * 1024;
-const max_cached_headers = 16;
-const cached_header_storage_size = 16 * 1024;
-const request_target_storage_size = 8 * 1024;
-
 const CachedHeader = struct {
-    name_start: usize,
-    name_len: usize,
-    value_start: usize,
-    value_len: usize,
+    name: []const u8,
+    value: []const u8,
+};
+
+const RouteCaptureNames = std.ArrayList([]const u8);
+const RouteCaptureEntries = std.ArrayList(RouteCapture);
+
+const RouteCaptureFrame = struct {
+    names: RouteCaptureNames,
+    captures: RouteCaptureEntries,
+};
+
+const RouteCaptureStack = struct {
+    allocator: std.mem.Allocator,
+    frames: std.ArrayList(RouteCaptureFrame),
+
+    fn init(allocator: std.mem.Allocator) RouteCaptureStack {
+        return .{
+            .allocator = allocator,
+            .frames = .empty,
+        };
+    }
+
+    fn push(self: *RouteCaptureStack, names: []const []const u8) !void {
+        for (names, 0..) |name, index| {
+            for (names[0..index]) |previous_name| {
+                if (std.mem.eql(u8, previous_name, name)) return error.RouteCaptureNameConflict;
+            }
+            if (self.contains(name)) return error.RouteCaptureNameConflict;
+        }
+
+        var frame = RouteCaptureFrame{
+            .names = .empty,
+            .captures = .empty,
+        };
+        try frame.names.appendSlice(self.allocator, names);
+        try self.frames.append(self.allocator, frame);
+    }
+
+    fn pop(self: *RouteCaptureStack) void {
+        _ = self.frames.pop();
+    }
+
+    fn add(self: *RouteCaptureStack, name: []const u8, capture_value: []const u8) !void {
+        if (self.frames.items.len == 0) return error.RouteCaptureFrameMissing;
+        const frame = &self.frames.items[self.frames.items.len - 1];
+        try frame.captures.append(self.allocator, .{
+            .name = name,
+            .value = try self.allocator.dupe(u8, capture_value),
+        });
+    }
+
+    fn value(self: *const RouteCaptureStack, name: []const u8) ?[]const u8 {
+        var frame_index = self.frames.items.len;
+        while (frame_index > 0) : (frame_index -= 1) {
+            const captures = self.frames.items[frame_index - 1].captures.items;
+            var capture_index = captures.len;
+            while (capture_index > 0) : (capture_index -= 1) {
+                const capture = captures[capture_index - 1];
+                if (std.mem.eql(u8, capture.name, name)) return capture.value;
+            }
+        }
+        return null;
+    }
+
+    fn contains(self: *const RouteCaptureStack, name: []const u8) bool {
+        for (self.frames.items) |frame| {
+            for (frame.names.items) |capture_name| {
+                if (std.mem.eql(u8, capture_name, name)) return true;
+            }
+        }
+        return false;
+    }
+};
+
+const CachedHeaders = struct {
+    allocator: std.mem.Allocator,
+    headers: std.ArrayList(CachedHeader),
+
+    fn init(allocator: std.mem.Allocator) CachedHeaders {
+        return .{
+            .allocator = allocator,
+            .headers = .empty,
+        };
+    }
+
+    fn capture(self: *CachedHeaders, request: *std.http.Server.Request) !void {
+        var headers = request.iterateHeaders();
+        while (headers.next()) |header| {
+            if (!shouldCacheHeader(header.name)) continue;
+            try self.headers.append(self.allocator, .{
+                .name = try self.allocator.dupe(u8, header.name),
+                .value = try self.allocator.dupe(u8, header.value),
+            });
+        }
+    }
+
+    fn value(self: *const CachedHeaders, name: []const u8) ?[]const u8 {
+        var result: ?[]const u8 = null;
+        for (self.headers.items) |header| {
+            if (!std.ascii.eqlIgnoreCase(header.name, name)) continue;
+            if (result != null) return null;
+            result = std.mem.trim(u8, header.value, " \t");
+        }
+        return result;
+    }
 };
 
 pub const RequestContext = struct {
@@ -44,16 +140,9 @@ pub const RequestContext = struct {
     remote_address: []const u8 = "",
     response_status: ?u16 = null,
     authenticated_user_id: ?i64 = null,
-    route_capture_entries: [max_route_captures]RouteCapture = undefined,
-    route_capture_count: usize = 0,
-    route_capture_storage: []u8,
-    route_capture_storage_used: usize = 0,
-    request_target_storage: []u8,
-    request_target_len: usize = 0,
-    cached_headers: []CachedHeader,
-    cached_header_count: usize = 0,
-    cached_header_storage: []u8,
-    cached_header_storage_used: usize = 0,
+    route_captures: RouteCaptureStack,
+    request_target: []const u8 = "",
+    cached_headers: CachedHeaders,
 
     pub fn init(
         server: *ServerContext,
@@ -65,11 +154,8 @@ pub const RequestContext = struct {
         var arena = std.heap.ArenaAllocator.init(server.allocator);
         errdefer arena.deinit();
         const request_allocator = arena.allocator();
-        const route_capture_storage = try request_allocator.alloc(u8, route_capture_storage_size);
-        const request_target_storage = try request_allocator.alloc(u8, request_target_storage_size);
-        const cached_headers = try request_allocator.alloc(CachedHeader, max_cached_headers);
-        const cached_header_storage = try request_allocator.alloc(u8, cached_header_storage_size);
         const owned_remote_address = try request_allocator.dupe(u8, remote_address);
+        const owned_target = try request_allocator.dupe(u8, request.head.target);
 
         var result: RequestContext = .{
             .server = server,
@@ -78,12 +164,11 @@ pub const RequestContext = struct {
             .request = request,
             .started_at = started_at,
             .remote_address = owned_remote_address,
-            .route_capture_storage = route_capture_storage,
-            .request_target_storage = request_target_storage,
-            .cached_headers = cached_headers,
-            .cached_header_storage = cached_header_storage,
+            .route_captures = RouteCaptureStack.init(request_allocator),
+            .request_target = owned_target,
+            .cached_headers = CachedHeaders.init(request_allocator),
         };
-        result.cacheRequestMetadata();
+        try result.cacheRequestMetadata();
         return result;
     }
 
@@ -99,57 +184,31 @@ pub const RequestContext = struct {
     }
 
     pub fn requestTarget(self: *const RequestContext) []const u8 {
-        return self.request_target_storage[0..self.request_target_len];
+        return self.request_target;
     }
 
     pub fn cachedHeaderValue(self: *const RequestContext, name: []const u8) ?[]const u8 {
-        var result: ?[]const u8 = null;
-        for (self.cached_headers[0..self.cached_header_count]) |header| {
-            const header_name = self.cached_header_storage[header.name_start .. header.name_start + header.name_len];
-            if (!std.ascii.eqlIgnoreCase(header_name, name)) continue;
-            if (result != null) return null;
-            result = std.mem.trim(u8, self.cached_header_storage[header.value_start .. header.value_start + header.value_len], " \t");
-        }
-        return result;
+        return self.cached_headers.value(name);
     }
 
-    fn cacheRequestMetadata(self: *RequestContext) void {
-        const target_len = @min(self.request.head.target.len, self.request_target_storage.len);
-        @memcpy(self.request_target_storage[0..target_len], self.request.head.target[0..target_len]);
-        self.request_target_len = target_len;
-
-        var headers = self.request.iterateHeaders();
-        while (headers.next()) |header| {
-            if (!shouldCacheHeader(header.name)) continue;
-            if (self.cached_header_count == max_cached_headers) continue;
-            const required = header.name.len + header.value.len;
-            if (self.cached_header_storage_used + required > self.cached_header_storage.len) continue;
-
-            const name_start = self.cached_header_storage_used;
-            @memcpy(self.cached_header_storage[name_start .. name_start + header.name.len], header.name);
-            const value_start = name_start + header.name.len;
-            @memcpy(self.cached_header_storage[value_start .. value_start + header.value.len], header.value);
-            self.cached_header_storage_used += required;
-            self.cached_headers[self.cached_header_count] = .{
-                .name_start = name_start,
-                .name_len = header.name.len,
-                .value_start = value_start,
-                .value_len = header.value.len,
-            };
-            self.cached_header_count += 1;
-        }
+    fn cacheRequestMetadata(self: *RequestContext) !void {
+        try self.cached_headers.capture(self.request);
     }
 
     pub fn routeParam(self: *const RequestContext, name: []const u8) ?[]const u8 {
-        for (self.route_capture_entries[0..self.route_capture_count]) |capture| {
-            if (std.mem.eql(u8, capture.name, name)) return capture.value;
-        }
-        return null;
+        return self.route_captures.value(name);
     }
 
-    pub fn clearRouteCaptures(self: *RequestContext) void {
-        self.route_capture_count = 0;
-        self.route_capture_storage_used = 0;
+    pub fn addRouteCapture(self: *RequestContext, name: []const u8, value: []const u8) !void {
+        return self.route_captures.add(name, value);
+    }
+
+    pub fn pushRouteCaptureFrame(self: *RequestContext, names: []const []const u8) !void {
+        return self.route_captures.push(names);
+    }
+
+    pub fn popRouteCaptureFrame(self: *RequestContext) void {
+        self.route_captures.pop();
     }
 };
 
