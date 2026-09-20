@@ -45,18 +45,20 @@ receive request head
 create RequestContext + ArenaAllocator(server allocator)
         |
         v
-cache request metadata and run layers/handlers
+initialize request metadata and run layers/handlers
         |
         v
 RequestContext.deinit() -> arena.deinit()
 ```
 
-`RequestContext.init` allocates its request metadata through the new arena,
-including the owned request target, cached header records, and remote address.
-Route capture frames and decoded capture values are also request-arena-owned
-and are released with the request. `RequestContext.deinit` does not free
-individual request objects; it releases the arena once, including on handler
-failure.
+`RequestContext.init` allocates its base request metadata through the new
+arena, including the owned request target and remote address. The explicit
+`HeaderCacheLayer` runs at the start of the application pipeline and copies
+its configured header fields into the same request arena before downstream
+layers run. Route capture frames, decoded capture values, and cached header
+records and values are also request-arena-owned and are released with the
+request. `RequestContext.deinit` does not free individual request objects; it
+releases the arena once, including on handler failure.
 
 Request-scoped values must not escape after `deinit`. A handler may pass them
 down to application/domain services, render them into the response, or use

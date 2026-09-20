@@ -101,23 +101,47 @@ const RouteCaptureStack = struct {
 const CachedHeaders = struct {
     allocator: std.mem.Allocator,
     headers: std.ArrayList(CachedHeader),
+    captured_names: std.ArrayList([]const u8),
 
     fn init(allocator: std.mem.Allocator) CachedHeaders {
         return .{
             .allocator = allocator,
             .headers = .empty,
+            .captured_names = .empty,
         };
     }
 
-    fn capture(self: *CachedHeaders, request: *std.http.Server.Request) !void {
+    fn capture(
+        self: *CachedHeaders,
+        request: *std.http.Server.Request,
+        names: []const []const u8,
+    ) !void {
         var headers = request.iterateHeaders();
         while (headers.next()) |header| {
-            if (!shouldCacheHeader(header.name)) continue;
+            if (!self.isUncapturedName(names, header.name)) continue;
             try self.headers.append(self.allocator, .{
                 .name = try self.allocator.dupe(u8, header.name),
                 .value = try self.allocator.dupe(u8, header.value),
             });
         }
+
+        for (names, 0..) |name, index| {
+            if (containsHeaderName(names[0..index], name)) continue;
+            if (self.isCaptured(name)) continue;
+            try self.captured_names.append(self.allocator, try self.allocator.dupe(u8, name));
+        }
+    }
+
+    fn isUncapturedName(self: *const CachedHeaders, names: []const []const u8, name: []const u8) bool {
+        for (names) |requested_name| {
+            if (self.isCaptured(requested_name)) continue;
+            if (std.ascii.eqlIgnoreCase(requested_name, name)) return true;
+        }
+        return false;
+    }
+
+    fn isCaptured(self: *const CachedHeaders, name: []const u8) bool {
+        return containsHeaderName(self.captured_names.items, name);
     }
 
     fn value(self: *const CachedHeaders, name: []const u8) ?[]const u8 {
@@ -157,7 +181,7 @@ pub const RequestContext = struct {
         const owned_remote_address = try request_allocator.dupe(u8, remote_address);
         const owned_target = try request_allocator.dupe(u8, request.head.target);
 
-        var result: RequestContext = .{
+        const result: RequestContext = .{
             .server = server,
             .arena = arena,
             .stream = stream,
@@ -168,7 +192,6 @@ pub const RequestContext = struct {
             .request_target = owned_target,
             .cached_headers = CachedHeaders.init(request_allocator),
         };
-        try result.cacheRequestMetadata();
         return result;
     }
 
@@ -191,8 +214,8 @@ pub const RequestContext = struct {
         return self.cached_headers.value(name);
     }
 
-    fn cacheRequestMetadata(self: *RequestContext) !void {
-        try self.cached_headers.capture(self.request);
+    pub fn cacheHeaders(self: *RequestContext, names: []const []const u8) !void {
+        try self.cached_headers.capture(self.request, names);
     }
 
     pub fn routeParam(self: *const RequestContext, name: []const u8) ?[]const u8 {
@@ -212,14 +235,76 @@ pub const RequestContext = struct {
     }
 };
 
-fn shouldCacheHeader(name: []const u8) bool {
-    return std.ascii.eqlIgnoreCase(name, "host") or
-        std.ascii.eqlIgnoreCase(name, "origin") or
-        std.ascii.eqlIgnoreCase(name, "cookie") or
-        std.ascii.eqlIgnoreCase(name, "x-csrf-token") or
-        std.ascii.eqlIgnoreCase(name, "hx-request") or
-        std.ascii.eqlIgnoreCase(name, "x-forwarded-proto") or
-        std.ascii.eqlIgnoreCase(name, "x-forwarded-host");
+fn containsHeaderName(names: []const []const u8, name: []const u8) bool {
+    for (names) |candidate| {
+        if (std.ascii.eqlIgnoreCase(candidate, name)) return true;
+    }
+    return false;
 }
 
 pub const Context = RequestContext;
+
+test "cached headers follow the requested allowlist and are idempotent" {
+    const request_bytes =
+        "GET / HTTP/1.1\r\n" ++
+        "Host: example.test\r\n" ++
+        "X-Trace-Id: abc123\r\n" ++
+        "Cookie: ignored=1\r\n\r\n";
+
+    var server: std.http.Server = .{
+        .reader = .{
+            .in = undefined,
+            .state = .received_head,
+            .interface = undefined,
+            .max_head_len = 4096,
+        },
+        .out = undefined,
+    };
+    var request: std.http.Server.Request = .{
+        .server = &server,
+        .head = undefined,
+        .head_buffer = @constCast(request_bytes),
+    };
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var cached = CachedHeaders.init(arena.allocator());
+
+    try cached.capture(&request, &.{ "HOST", "x-trace-id" });
+    try cached.capture(&request, &.{ "host", "X-TRACE-ID" });
+
+    try std.testing.expectEqualStrings("example.test", cached.value("host").?);
+    try std.testing.expectEqualStrings("abc123", cached.value("x-trace-id").?);
+    try std.testing.expect(cached.value("cookie") == null);
+    try std.testing.expectEqual(@as(usize, 2), cached.headers.items.len);
+    try std.testing.expectEqual(@as(usize, 2), cached.captured_names.items.len);
+}
+
+test "cached headers reject ambiguous repeated fields" {
+    const request_bytes =
+        "GET / HTTP/1.1\r\n" ++
+        "X-Trace-Id: first\r\n" ++
+        "x-trace-id: second\r\n\r\n";
+
+    var server: std.http.Server = .{
+        .reader = .{
+            .in = undefined,
+            .state = .received_head,
+            .interface = undefined,
+            .max_head_len = 4096,
+        },
+        .out = undefined,
+    };
+    var request: std.http.Server.Request = .{
+        .server = &server,
+        .head = undefined,
+        .head_buffer = @constCast(request_bytes),
+    };
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var cached = CachedHeaders.init(arena.allocator());
+
+    try cached.capture(&request, &.{"x-trace-id"});
+
+    try std.testing.expect(cached.value("X-Trace-Id") == null);
+    try std.testing.expectEqual(@as(usize, 2), cached.headers.items.len);
+}

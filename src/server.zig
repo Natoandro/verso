@@ -240,7 +240,19 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     );
     var status_router = web.routes(.{.{ "GET /", StatusHandler.handle }}).router();
     var request_logging = web.RequestLoggingLayer{};
+    var header_cache = web.HeaderCacheLayer{
+        .names = &.{
+            "host",
+            "origin",
+            "cookie",
+            "x-csrf-token",
+            "hx-request",
+            "x-forwarded-proto",
+            "x-forwarded-host",
+        },
+    };
     const layers = [_]web.Layer{
+        .init(&header_cache),
         .init(&request_logging),
         .init(&admin_mount),
         .init(&status_router),
