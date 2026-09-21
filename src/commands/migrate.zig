@@ -17,17 +17,30 @@ pub fn run(
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
-        try diagnostics.reportToFile(init.io, .stderr(), parse_error);
+        command_support.logCommandFailure(init, "migrate", "argument_parse", "warn", parse_error);
+        diagnostics.reportToFile(init.io, .stderr(), parse_error) catch |failure| {
+            command_support.logCommandFailure(init, "migrate", "argument_diagnostic", "error", failure);
+            return failure;
+        };
         return parse_error;
     };
     defer parsed_args.deinit();
 
     if (parsed_args.args.help != 0) {
-        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
+        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{}) catch |failure| {
+            command_support.logCommandFailure(init, "migrate", "help_output", "error", failure);
+            return failure;
+        };
     }
 
-    const command_name = parsed_args.positionals[0] orelse return error.InvalidArguments;
-    if (!std.mem.eql(u8, command_name, "up")) return error.InvalidCommand;
+    const command_name = parsed_args.positionals[0] orelse {
+        command_support.logCommandFailure(init, "migrate", "command_selection", "warn", error.InvalidArguments);
+        return error.InvalidArguments;
+    };
+    if (!std.mem.eql(u8, command_name, "up")) {
+        command_support.logCommandFailure(init, "migrate", "command_selection", "warn", error.InvalidCommand);
+        return error.InvalidCommand;
+    }
     try runUp(init, command_options.merge(
         inherited_overrides,
         command_options.overrides(parsed_args.args),
@@ -48,17 +61,26 @@ fn runUp(init: std.process.Init, cli_overrides: verso.config.CliOverrides) !void
     const app_config = parsed_config.value;
     command_support.logConfigurationLoaded(init, "migrate up", app_config, cli_overrides);
 
-    try verso.application.bootstrap.prepareDatabaseParentDirectory(
+    verso.application.bootstrap.prepareDatabaseParentDirectory(
         init.io,
         std.Io.Dir.cwd(),
         app_config,
-    );
+    ) catch |failure| {
+        command_support.logCommandFailure(init, "migrate up", "database_directory", "error", failure);
+        return failure;
+    };
     var database_path_buffer: [1024]u8 = undefined;
-    const database_path = try verso.application.bootstrap.resolveDatabasePath(
+    const database_path = verso.application.bootstrap.resolveDatabasePath(
         app_config,
         &database_path_buffer,
-    );
-    var database = try verso.storage.sqlite.Database.open(init.gpa, database_path);
+    ) catch |failure| {
+        command_support.logCommandFailure(init, "migrate up", "database_path", "error", failure);
+        return failure;
+    };
+    var database = verso.storage.sqlite.Database.open(init.gpa, database_path) catch |failure| {
+        command_support.logCommandFailure(init, "migrate up", "database_open", "error", failure);
+        return failure;
+    };
     defer database.close();
 
     const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
@@ -70,11 +92,14 @@ fn runUp(init: std.process.Init, cli_overrides: verso.config.CliOverrides) !void
             .omit_null_fields = app_config.logging.omit_null_fields,
         },
     );
-    const migration_directory_path = try verso.storage.migration_directory.resolveMigrationDirectory(
+    const migration_directory_path = verso.storage.migration_directory.resolveMigrationDirectory(
         init.io,
         init.gpa,
         app_config.migrations.path,
-    );
+    ) catch |failure| {
+        command_support.logCommandFailure(init, "migrate up", "migration_directory", "error", failure);
+        return failure;
+    };
     defer init.gpa.free(migration_directory_path);
     var migration_context = database.migrationContext(
         init.io,
@@ -82,7 +107,10 @@ fn runUp(init: std.process.Init, cli_overrides: verso.config.CliOverrides) !void
         migration_directory_path,
         &logger,
     );
-    const applied_migration_count = try migration_context.migrateUp();
+    const applied_migration_count = migration_context.migrateUp() catch |failure| {
+        command_support.logCommandFailure(init, "migrate up", "migrations", "error", failure);
+        return failure;
+    };
     var output_buffer: [128]u8 = undefined;
     var output_writer = std.Io.File.stdout().writer(init.io, &output_buffer);
     if (applied_migration_count == 0) {

@@ -64,5 +64,6 @@ test {
     _ = @import("web.zig");
     _ = @import("web/form.zig");
     _ = @import("web/static.zig");
+    _ = @import("web/auth_test.zig");
     _ = @import("web/router_test.zig");
 }

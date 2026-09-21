@@ -92,8 +92,8 @@ pub const Service = struct {
         remote_address: []const u8,
     ) !SessionCredentials {
         var login_buffer: [320]u8 = undefined;
-        const normalized_login = password.normalizeLogin(&login_buffer, login) catch {
-            return error.InvalidRegistration;
+        const normalized_login = password.normalizeLogin(&login_buffer, login) catch |failure| {
+            return failure;
         };
         const identifier_hash = rateKey("registration-identifier:", normalized_login);
         const address_hash = rateKey("registration-address:", remote_address);
@@ -110,9 +110,10 @@ pub const Service = struct {
             error.OwnerAlreadyExists => return error.OwnerAlreadyExists,
             error.InvalidDisplayName,
             error.InvalidEmail,
+            error.InvalidLogin,
             error.InvalidPassword,
             error.InvalidPasswordHash,
-            => return error.InvalidRegistration,
+            => return registration_error,
             else => return registration_error,
         };
         try self.local_store.clearRateLimit(&identifier_hash, &address_hash);

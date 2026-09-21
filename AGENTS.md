@@ -45,6 +45,19 @@ assuming those exist.
   and use `inline for` over `@typeInfo(...).@"struct".fields` for genuinely
   runtime field names. Avoid manually maintained if/else chains or field tables
   for reflected structs.
+- Emit a structured diagnostic log before returning or converting a runtime
+  error at the first boundary that has useful operational context. This applies
+  to external-call failures, internal failures, validation failures, rejected
+  requests, and intentionally swallowed errors. Routine control-flow outcomes
+  such as an expired session redirect may use `info`; rejected client input,
+  authentication, CSRF, and authorization failures should use `warn` with a
+  safe reason. Unexpected failures should include `@errorName` and be logged
+  at error level. Do not log
+  passwords, session or CSRF tokens, reset tokens, password hashes, or complete
+  request bodies. Lower-level pure domain and parsing functions do not need a
+  logger when their caller logs the returned error at the relevant boundary.
+  Logging failures themselves may be swallowed after a best-effort attempt to
+  avoid recursive logging failures.
 
 ## Web static delivery
 

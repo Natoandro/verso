@@ -16,13 +16,20 @@ pub fn run(
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
-        try diagnostics.reportToFile(init.io, .stderr(), parse_error);
+        command_support.logCommandFailure(init, "serve", "argument_parse", "warn", parse_error);
+        diagnostics.reportToFile(init.io, .stderr(), parse_error) catch |failure| {
+            command_support.logCommandFailure(init, "serve", "argument_diagnostic", "error", failure);
+            return failure;
+        };
         return parse_error;
     };
     defer parsed_args.deinit();
 
     if (parsed_args.args.help != 0) {
-        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
+        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{}) catch |failure| {
+            command_support.logCommandFailure(init, "serve", "help_output", "error", failure);
+            return failure;
+        };
     }
 
     const cli_overrides = command_options.merge(

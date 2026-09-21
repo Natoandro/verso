@@ -252,8 +252,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         },
     };
     const layers = [_]web.Layer{
-        .init(&header_cache),
         .init(&request_logging),
+        .init(&header_cache),
         .init(&admin_mount),
         .init(&status_router),
         web.Layer.initFn(NotFoundHandler.handle),
@@ -328,7 +328,10 @@ fn handleHttpConnection(
 
     var remote_address_buffer: [64]u8 = undefined;
     var remote_address_writer = std.Io.Writer.fixed(&remote_address_buffer);
-    connection.socket.address.format(&remote_address_writer) catch return;
+    connection.socket.address.format(&remote_address_writer) catch |address_error| {
+        logConnectionFailure(server_context, started_at, address_error) catch {};
+        return;
+    };
     const formatted_remote_address = remote_address_writer.buffered();
     const remote_address = formatted_remote_address[0 .. std.mem.lastIndexOfScalar(
         u8,
@@ -363,6 +366,7 @@ const StatusHandler = struct {
             }},
         }) catch |response_error| {
             if (response_error == error.Canceled) return error.Canceled;
+            web.logging.logDiagnostic(http_request, "error", "http.response_failed", "failed to write status response", .ok, response_error, null);
             return response_error;
         };
 
@@ -372,6 +376,7 @@ const StatusHandler = struct {
 
 const NotFoundHandler = struct {
     pub fn handle(http_request: *web.RequestContext, _: web.Next) anyerror!void {
+        web.logging.logDiagnostic(http_request, "info", "http.request_rejected", "no route matched request", .not_found, error.NotFound, "route not found");
         return web.respondError(http_request, .not_found);
     }
 };

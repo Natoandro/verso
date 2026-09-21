@@ -2,6 +2,29 @@ const std = @import("std");
 const verso = @import("verso");
 const logging = verso.logging;
 
+pub fn logCommandFailure(
+    init: std.process.Init,
+    command_name: []const u8,
+    stage: []const u8,
+    level: []const u8,
+    failure: anyerror,
+) void {
+    const stderr_is_tty = std.Io.File.stderr().isTty(init.io) catch false;
+    var logger = logging.Logger.initWithOptions(
+        init.gpa,
+        if (stderr_is_tty) .pretty else .text,
+        .{ .use_color = stderr_is_tty, .omit_null_fields = true },
+    );
+    logger.log(init.io, .{
+        .level = level,
+        .event = "command.failed",
+        .message = "command failed",
+        .command = command_name,
+        .stage = stage,
+        .error_name = @errorName(failure),
+    }) catch {};
+}
+
 pub fn logConfigurationFailure(
     init: std.process.Init,
     command_name: []const u8,

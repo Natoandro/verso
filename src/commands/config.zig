@@ -2,6 +2,7 @@ const std = @import("std");
 const clap = @import("clap");
 const verso = @import("verso");
 const command_options = @import("options.zig");
+const command_support = @import("support.zig");
 
 pub fn run(
     init: std.process.Init,
@@ -17,31 +18,54 @@ pub fn run(
         .diagnostic = &diagnostics,
         .allocator = init.gpa,
     }) catch |parse_error| {
-        try diagnostics.reportToFile(init.io, .stderr(), parse_error);
+        command_support.logCommandFailure(init, "config", "argument_parse", "warn", parse_error);
+        diagnostics.reportToFile(init.io, .stderr(), parse_error) catch |failure| {
+            command_support.logCommandFailure(init, "config", "argument_diagnostic", "error", failure);
+            return failure;
+        };
         return parse_error;
     };
     defer parsed_args.deinit();
 
     if (parsed_args.args.help != 0) {
-        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{});
+        return clap.helpToFile(init.io, .stdout(), clap.Help, &params, .{}) catch |failure| {
+            command_support.logCommandFailure(init, "config", "help_output", "error", failure);
+            return failure;
+        };
     }
 
-    const command_name = parsed_args.positionals[0] orelse return error.InvalidArguments;
-    if (std.mem.eql(u8, command_name, "dump-default")) return writeDefaultConfig(init.io);
-    if (std.mem.eql(u8, command_name, "env-reference")) return writeEnvironmentReference(init.io);
+    const command_name = parsed_args.positionals[0] orelse {
+        command_support.logCommandFailure(init, "config", "command_selection", "warn", error.InvalidArguments);
+        return error.InvalidArguments;
+    };
+    if (std.mem.eql(u8, command_name, "dump-default")) return writeDefaultConfig(init);
+    if (std.mem.eql(u8, command_name, "env-reference")) return writeEnvironmentReference(init);
+    command_support.logCommandFailure(init, "config", "command_selection", "warn", error.InvalidCommand);
     return error.InvalidCommand;
 }
 
-fn writeDefaultConfig(io: std.Io) !void {
+fn writeDefaultConfig(init: std.process.Init) !void {
     var output_buffer: [4096]u8 = undefined;
-    var output_writer = std.Io.File.stdout().writer(io, &output_buffer);
-    try verso.config.Config.writeDefault(&output_writer.interface);
-    try output_writer.flush();
+    var output_writer = std.Io.File.stdout().writer(init.io, &output_buffer);
+    verso.config.Config.writeDefault(&output_writer.interface) catch |failure| {
+        command_support.logCommandFailure(init, "config dump-default", "stdout", "error", failure);
+        return failure;
+    };
+    output_writer.flush() catch |failure| {
+        command_support.logCommandFailure(init, "config dump-default", "stdout", "error", failure);
+        return failure;
+    };
 }
 
-fn writeEnvironmentReference(io: std.Io) !void {
+fn writeEnvironmentReference(init: std.process.Init) !void {
     var output_buffer: [4096]u8 = undefined;
-    var output_writer = std.Io.File.stdout().writer(io, &output_buffer);
-    try output_writer.interface.writeAll(verso.config.environment_reference[0..]);
-    try output_writer.flush();
+    var output_writer = std.Io.File.stdout().writer(init.io, &output_buffer);
+    output_writer.interface.writeAll(verso.config.environment_reference[0..]) catch |failure| {
+        command_support.logCommandFailure(init, "config env-reference", "stdout", "error", failure);
+        return failure;
+    };
+    output_writer.flush() catch |failure| {
+        command_support.logCommandFailure(init, "config env-reference", "stdout", "error", failure);
+        return failure;
+    };
 }

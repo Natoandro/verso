@@ -2,13 +2,26 @@ const std = @import("std");
 const context = @import("context.zig");
 const layer = @import("layer.zig");
 
+pub const DiagnosticLogRecord = struct {
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    method: []const u8,
+    target: []const u8,
+    status: u16,
+    error_name: ?[]const u8,
+    reason: ?[]const u8,
+    user_id: ?i64,
+};
+
 pub const RequestLoggingLayer = struct {
     pub fn handle(_: *@This(), request: *context.RequestContext, next: layer.Next) layer.Error!void {
         const method = @tagName(request.request.head.method);
         const protocol = @tagName(request.request.head.version);
         var target_storage: [4096]u8 = undefined;
-        const target_length = @min(request.request.head.target.len, target_storage.len);
-        @memcpy(target_storage[0..target_length], request.request.head.target[0..target_length]);
+        const request_target = request.requestTarget();
+        const target_length = @min(request_target.len, target_storage.len);
+        @memcpy(target_storage[0..target_length], request_target[0..target_length]);
         const target = target_storage[0..target_length];
         next.call(request) catch |request_error| {
             if (request_error == error.Canceled) return error.Canceled;
@@ -19,6 +32,31 @@ pub const RequestLoggingLayer = struct {
         try logCompletedRequest(request, method, target, protocol);
     }
 };
+
+/// Logs a request failure without exposing credentials, form bodies, or query
+/// values. Call this before returning or converting a failure at a web boundary.
+pub fn logDiagnostic(
+    request: *const context.RequestContext,
+    level: []const u8,
+    event: []const u8,
+    message: []const u8,
+    status: std.http.Status,
+    failure: ?anyerror,
+    reason: ?[]const u8,
+) void {
+    var target_buffer: [max_logged_target_length]u8 = undefined;
+    request.server.logger.log(request.server.io, DiagnosticLogRecord{
+        .level = level,
+        .event = event,
+        .message = message,
+        .method = @tagName(request.request.head.method),
+        .target = sanitizedTarget(request.requestTarget(), &target_buffer),
+        .status = @intFromEnum(status),
+        .error_name = if (failure) |value| @errorName(value) else null,
+        .reason = reason,
+        .user_id = request.authenticated_user_id,
+    }) catch {};
+}
 
 pub fn durationMilliseconds(duration: std.Io.Duration) f32 {
     return @as(f32, @floatFromInt(duration.toNanoseconds())) / 1_000_000.0;

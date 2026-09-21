@@ -45,7 +45,7 @@
           <div class="auth-form-grid">
             <div class="auth-field">
               <label for="display-name">Display name</label>
-              <input id="display-name" name="display_name" autocomplete="name" placeholder="Ada Lovelace" required autofocus>
+              <input id="display-name" name="display_name" autocomplete="name" placeholder="Ada Lovelace" minlength="1" maxlength="256" required autofocus>
             </div>
             <div class="auth-field">
               <label for="email">Email <span class="auth-optional">Optional</span></label>
@@ -54,21 +54,31 @@
           </div>
           <div class="auth-field">
             <label for="login">Login</label>
-            <input id="login" name="login" autocomplete="username" placeholder="Choose a login" required>
+            <input id="login" name="login" autocomplete="username" placeholder="Choose a login" maxlength="320" required>
           </div>
           <div class="auth-field">
             <label for="password">Password</label>
-            <input id="password" type="password" name="password" autocomplete="new-password" placeholder="Create a strong password" required>
+            <input id="password" type="password" name="password" autocomplete="new-password" placeholder="Create a strong password" minlength="12" maxlength="1024" required>
           </div>
           <div class="auth-field">
             <label for="password-confirmation">Confirm password</label>
-            <input id="password-confirmation" type="password" name="password_confirmation" autocomplete="new-password" placeholder="Enter the password again" required>
+            <input id="password-confirmation" type="password" name="password_confirmation" autocomplete="new-password" placeholder="Enter the password again" minlength="12" maxlength="1024" required>
           </div>
           <button class="theme-button theme-button-primary auth-submit" type="submit">
             <span>Create owner account</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
           </button>
         </form>
+        <script>
+          const password = document.getElementById("password");
+          const confirmation = document.getElementById("password-confirmation");
+          const validateConfirmation = () => {{
+            const mismatch = confirmation.value.length > 0 && password.value !== confirmation.value;
+            confirmation.setCustomValidity(mismatch ? "Passwords do not match." : "");
+          }};
+          password.addEventListener("input", validateConfirmation);
+          confirmation.addEventListener("input", validateConfirmation);
+        </script>
         <p class="auth-card-footer"><span>Already set up?</span><a href="/admin/login">Go to sign in</a></p>
       </section>
     </main>

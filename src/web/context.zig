@@ -35,18 +35,22 @@ const RouteCaptureFrame = struct {
     captures: RouteCaptureEntries,
 };
 
+// RequestContext is returned by value, so these containers resolve the arena
+// allocator at mutation time instead of retaining a pointer into a temporary.
 const RouteCaptureStack = struct {
-    allocator: std.mem.Allocator,
     frames: std.ArrayList(RouteCaptureFrame),
 
-    fn init(allocator: std.mem.Allocator) RouteCaptureStack {
+    fn init() RouteCaptureStack {
         return .{
-            .allocator = allocator,
             .frames = .empty,
         };
     }
 
-    fn push(self: *RouteCaptureStack, names: []const []const u8) !void {
+    fn push(
+        self: *RouteCaptureStack,
+        allocator: std.mem.Allocator,
+        names: []const []const u8,
+    ) !void {
         for (names, 0..) |name, index| {
             for (names[0..index]) |previous_name| {
                 if (std.mem.eql(u8, previous_name, name)) return error.RouteCaptureNameConflict;
@@ -58,20 +62,25 @@ const RouteCaptureStack = struct {
             .names = .empty,
             .captures = .empty,
         };
-        try frame.names.appendSlice(self.allocator, names);
-        try self.frames.append(self.allocator, frame);
+        try frame.names.appendSlice(allocator, names);
+        try self.frames.append(allocator, frame);
     }
 
     fn pop(self: *RouteCaptureStack) void {
         _ = self.frames.pop();
     }
 
-    fn add(self: *RouteCaptureStack, name: []const u8, capture_value: []const u8) !void {
+    fn add(
+        self: *RouteCaptureStack,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        capture_value: []const u8,
+    ) !void {
         if (self.frames.items.len == 0) return error.RouteCaptureFrameMissing;
         const frame = &self.frames.items[self.frames.items.len - 1];
-        try frame.captures.append(self.allocator, .{
+        try frame.captures.append(allocator, .{
             .name = name,
-            .value = try self.allocator.dupe(u8, capture_value),
+            .value = try allocator.dupe(u8, capture_value),
         });
     }
 
@@ -99,13 +108,11 @@ const RouteCaptureStack = struct {
 };
 
 const CachedHeaders = struct {
-    allocator: std.mem.Allocator,
     headers: std.ArrayList(CachedHeader),
     captured_names: std.ArrayList([]const u8),
 
-    fn init(allocator: std.mem.Allocator) CachedHeaders {
+    fn init() CachedHeaders {
         return .{
-            .allocator = allocator,
             .headers = .empty,
             .captured_names = .empty,
         };
@@ -113,22 +120,23 @@ const CachedHeaders = struct {
 
     fn capture(
         self: *CachedHeaders,
+        allocator: std.mem.Allocator,
         request: *std.http.Server.Request,
         names: []const []const u8,
     ) !void {
         var headers = request.iterateHeaders();
         while (headers.next()) |header| {
             if (!self.isUncapturedName(names, header.name)) continue;
-            try self.headers.append(self.allocator, .{
-                .name = try self.allocator.dupe(u8, header.name),
-                .value = try self.allocator.dupe(u8, header.value),
+            try self.headers.append(allocator, .{
+                .name = try allocator.dupe(u8, header.name),
+                .value = try allocator.dupe(u8, header.value),
             });
         }
 
         for (names, 0..) |name, index| {
             if (containsHeaderName(names[0..index], name)) continue;
             if (self.isCaptured(name)) continue;
-            try self.captured_names.append(self.allocator, try self.allocator.dupe(u8, name));
+            try self.captured_names.append(allocator, try allocator.dupe(u8, name));
         }
     }
 
@@ -188,9 +196,9 @@ pub const RequestContext = struct {
             .request = request,
             .started_at = started_at,
             .remote_address = owned_remote_address,
-            .route_captures = RouteCaptureStack.init(request_allocator),
+            .route_captures = RouteCaptureStack.init(),
             .request_target = owned_target,
-            .cached_headers = CachedHeaders.init(request_allocator),
+            .cached_headers = CachedHeaders.init(),
         };
         return result;
     }
@@ -215,7 +223,7 @@ pub const RequestContext = struct {
     }
 
     pub fn cacheHeaders(self: *RequestContext, names: []const []const u8) !void {
-        try self.cached_headers.capture(self.request, names);
+        try self.cached_headers.capture(self.allocator(), self.request, names);
     }
 
     pub fn routeParam(self: *const RequestContext, name: []const u8) ?[]const u8 {
@@ -223,11 +231,11 @@ pub const RequestContext = struct {
     }
 
     pub fn addRouteCapture(self: *RequestContext, name: []const u8, value: []const u8) !void {
-        return self.route_captures.add(name, value);
+        return self.route_captures.add(self.allocator(), name, value);
     }
 
     pub fn pushRouteCaptureFrame(self: *RequestContext, names: []const []const u8) !void {
-        return self.route_captures.push(names);
+        return self.route_captures.push(self.allocator(), names);
     }
 
     pub fn popRouteCaptureFrame(self: *RequestContext) void {
@@ -267,10 +275,10 @@ test "cached headers follow the requested allowlist and are idempotent" {
     };
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var cached = CachedHeaders.init(arena.allocator());
+    var cached = CachedHeaders.init();
 
-    try cached.capture(&request, &.{ "HOST", "x-trace-id" });
-    try cached.capture(&request, &.{ "host", "X-TRACE-ID" });
+    try cached.capture(arena.allocator(), &request, &.{ "HOST", "x-trace-id" });
+    try cached.capture(arena.allocator(), &request, &.{ "host", "X-TRACE-ID" });
 
     try std.testing.expectEqualStrings("example.test", cached.value("host").?);
     try std.testing.expectEqualStrings("abc123", cached.value("x-trace-id").?);
@@ -301,10 +309,50 @@ test "cached headers reject ambiguous repeated fields" {
     };
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var cached = CachedHeaders.init(arena.allocator());
+    var cached = CachedHeaders.init();
 
-    try cached.capture(&request, &.{"x-trace-id"});
+    try cached.capture(arena.allocator(), &request, &.{"x-trace-id"});
 
     try std.testing.expect(cached.value("X-Trace-Id") == null);
     try std.testing.expectEqual(@as(usize, 2), cached.headers.items.len);
+}
+
+test "request context keeps its allocator valid after init returns" {
+    const request_bytes =
+        "GET /posts/42 HTTP/1.1\r\n" ++
+        "X-Trace-Id: abc123\r\n\r\n";
+
+    var server: std.http.Server = .{
+        .reader = .{
+            .in = undefined,
+            .state = .received_head,
+            .interface = undefined,
+            .max_head_len = 4096,
+        },
+        .out = undefined,
+    };
+    var request: std.http.Server.Request = .{
+        .server = &server,
+        .head = try std.http.Server.Request.Head.parse(request_bytes),
+        .head_buffer = @constCast(request_bytes),
+    };
+    var server_context: ServerContext = undefined;
+    server_context.allocator = std.testing.allocator;
+    var stream: std.Io.net.Stream = undefined;
+
+    var request_context = try RequestContext.init(
+        &server_context,
+        &stream,
+        &request,
+        undefined,
+        "127.0.0.1",
+    );
+    defer request_context.deinit();
+
+    try request_context.cacheHeaders(&.{"x-trace-id"});
+    try request_context.pushRouteCaptureFrame(&.{"id"});
+    try request_context.addRouteCapture("id", "42");
+
+    try std.testing.expectEqualStrings("abc123", request_context.cachedHeaderValue("X-Trace-Id").?);
+    try std.testing.expectEqualStrings("42", request_context.routeParam("id").?);
 }

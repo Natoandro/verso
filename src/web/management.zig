@@ -8,6 +8,7 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const management = @import("../application/identity_management.zig");
 const routing = @import("router.zig");
+const web_logging = @import("logging.zig");
 
 const RequestContext = context.RequestContext;
 const Next = layer.Next;
@@ -57,7 +58,8 @@ fn getAuthors(request: *RequestContext, _: Next) Error!void {
 
 fn postCreateAuthor(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    var parsed = form.extract(AuthorForm, request) catch {
+    var parsed = form.extract(AuthorForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "author form was rejected", .bad_request, failure, "invalid author form");
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
     defer parsed.deinit(request.allocator());
@@ -75,10 +77,12 @@ fn postCreateAuthor(request: *RequestContext, _: Next) Error!void {
 
 fn postUpdateAuthor(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    const author_id = parseId(request.routeParam("id") orelse "") catch {
+    const author_id = parseId(request.routeParam("id") orelse "") catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "author identifier was rejected", .bad_request, failure, "invalid author id");
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
-    var parsed = form.extract(AuthorForm, request) catch {
+    var parsed = form.extract(AuthorForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "author form was rejected", .bad_request, failure, "invalid author form");
         return auth.respondText(request, "Invalid author form\n", .bad_request);
     };
     defer parsed.deinit(request.allocator());
@@ -97,23 +101,30 @@ fn postUpdateAuthor(request: *RequestContext, _: Next) Error!void {
 
 fn postCreateAssignment(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    var parsed = form.extract(AssignmentForm, request) catch {
+    var parsed = form.extract(AssignmentForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment form was rejected", .bad_request, failure, "invalid assignment form");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
     defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
 
-    const editor_user_id = validateId(parsed.value.editor_user_id) catch
+    const editor_user_id = validateId(parsed.value.editor_user_id) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "editor identifier was rejected", .bad_request, failure, "invalid editor id");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
+    };
     const scope_type = parsed.value.scope_type;
-    const scope_id = validateId(parsed.value.scope_id) catch
+    const scope_id = validateId(parsed.value.scope_id) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment scope identifier was rejected", .bad_request, failure, "invalid scope id");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
+    };
     const scope: domain.AssignmentScope = if (std.mem.eql(u8, scope_type, "author"))
         .{ .author = scope_id }
     else if (std.mem.eql(u8, scope_type, "document"))
         .{ .document = scope_id }
-    else
+    else {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment scope type was rejected", .bad_request, error.InvalidAssignmentScope, "invalid assignment scope type");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
+    };
 
     _ = request.server.identity_service.createAssignment(token, .{
         .editor_user_id = editor_user_id,
@@ -124,16 +135,20 @@ fn postCreateAssignment(request: *RequestContext, _: Next) Error!void {
 
 fn postRevokeAssignment(request: *RequestContext, _: Next) Error!void {
     const token = (try managerToken(request)) orelse return;
-    const assignment_id = parseId(request.routeParam("id") orelse "") catch {
+    const assignment_id = parseId(request.routeParam("id") orelse "") catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment identifier was rejected", .bad_request, failure, "invalid assignment id");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
-    var parsed = form.extract(RevokeAssignmentForm, request) catch {
+    var parsed = form.extract(RevokeAssignmentForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment revoke form was rejected", .bad_request, failure, "invalid revoke form");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
     };
     defer parsed.deinit(request.allocator());
     if (!try auth.requireCsrf(request, token, parsed.value.csrf_token)) return;
-    const expected_revision = validateRevision(parsed.value.expected_revision) catch
+    const expected_revision = validateRevision(parsed.value.expected_revision) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "management.request_rejected", "assignment revision was rejected", .bad_request, failure, "invalid assignment revision");
         return auth.respondText(request, "Invalid assignment form\n", .bad_request);
+    };
     _ = request.server.identity_service.revokeAssignment(token, .{
         .assignment_id = assignment_id,
         .expected_revision = expected_revision,
@@ -147,28 +162,47 @@ fn managerToken(request: *RequestContext) Error!?[]const u8 {
         try auth.redirectToLogin(request);
         return null;
     };
-    const session = request.server.identity_service.authenticate(token) catch {
-        try auth.redirectToLogin(request);
-        return null;
+    const session = request.server.identity_service.authenticate(token) catch |failure| switch (failure) {
+        error.InvalidSession => {
+            web_logging.logDiagnostic(request, "info", "auth.session_rejected", "management session was rejected", .see_other, failure, "invalid session");
+            try auth.redirectToLogin(request);
+            return null;
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.session_failed", "management session lookup failed", .internal_server_error, failure, null);
+            try errors.respond(request, .internal_server_error);
+            return null;
+        },
     };
     if (auth.cookieValue(request, auth.csrf_cookie_name) == null) {
+        web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "management request had no CSRF cookie", .forbidden, null, "missing CSRF cookie");
         try errors.respond(request, .forbidden);
         return null;
     }
     request.authenticated_user_id = session.user_id;
     request.server.identity_service.requireCapability(token, .author_manage) catch |capability_error| switch (capability_error) {
         error.Forbidden => {
+            web_logging.logDiagnostic(request, "warn", "management.authorization_rejected", "request lacks author management capability", .forbidden, capability_error, "missing author management capability");
             try errors.respond(request, .forbidden);
             return null;
         },
-        else => return capability_error,
+        else => {
+            web_logging.logDiagnostic(request, "error", "management.authorization_failed", "author management authorization failed", .internal_server_error, capability_error, null);
+            try errors.respond(request, .internal_server_error);
+            return null;
+        },
     };
     request.server.identity_service.requireCapability(token, .document_assign_editor) catch |capability_error| switch (capability_error) {
         error.Forbidden => {
+            web_logging.logDiagnostic(request, "warn", "management.authorization_rejected", "request lacks editor assignment capability", .forbidden, capability_error, "missing editor assignment capability");
             try errors.respond(request, .forbidden);
             return null;
         },
-        else => return capability_error,
+        else => {
+            web_logging.logDiagnostic(request, "error", "management.authorization_failed", "editor assignment authorization failed", .internal_server_error, capability_error, null);
+            try errors.respond(request, .internal_server_error);
+            return null;
+        },
     };
     return token;
 }
@@ -278,13 +312,19 @@ fn validateRevision(value: i64) !i64 {
 
 fn managementError(request: *RequestContext, failure: anyerror) Error!void {
     return switch (failure) {
-        error.Forbidden => errors.respond(request, .forbidden),
+        error.Forbidden => blk: {
+            web_logging.logDiagnostic(request, "warn", "management.authorization_rejected", "management request was forbidden", .forbidden, failure, "insufficient capability");
+            break :blk errors.respond(request, .forbidden);
+        },
         error.AuthorNotFound,
         error.VersionNotFound,
         error.AssignmentNotFound,
         error.TargetNotEditor,
         error.DocumentNotFound,
-        => errors.respond(request, .not_found),
+        => blk: {
+            web_logging.logDiagnostic(request, "warn", "management.request_rejected", "management target was not found", .not_found, failure, "management target not found");
+            break :blk errors.respond(request, .not_found);
+        },
         error.InvalidAuthor,
         error.InvalidDisplayName,
         error.InvalidAuthorSlug,
@@ -296,8 +336,14 @@ fn managementError(request: *RequestContext, failure: anyerror) Error!void {
         error.ActiveAssignmentExists,
         error.StaleAssignment,
         error.ConstraintViolation,
-        => auth.respondText(request, "Invalid management request\n", .bad_request),
-        else => errors.respond(request, .internal_server_error),
+        => blk: {
+            web_logging.logDiagnostic(request, "warn", "management.request_rejected", "management request failed validation", .bad_request, failure, "invalid management request");
+            break :blk auth.respondText(request, "Invalid management request\n", .bad_request);
+        },
+        else => blk: {
+            web_logging.logDiagnostic(request, "error", "management.request_failed", "management operation failed", .internal_server_error, failure, null);
+            break :blk errors.respond(request, .internal_server_error);
+        },
     };
 }
 

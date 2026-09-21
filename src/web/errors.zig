@@ -1,6 +1,7 @@
 const std = @import("std");
 const context = @import("context.zig");
 const tmpl = @import("tmpl");
+const web_logging = @import("logging.zig");
 
 const RequestContext = context.RequestContext;
 const Error = anyerror;
@@ -14,16 +15,22 @@ const error_page_template = tmpl.parse(@embedFile("templates/pages/error.html"),
 /// field-level feedback. This page is for request-level failures that do not
 /// have a more useful application response.
 pub fn respond(request: *RequestContext, status: std.http.Status) Error!void {
-    const body_buffer = try request.allocator().alloc(u8, 32768);
+    const body_buffer = request.allocator().alloc(u8, 32768) catch |failure| {
+        web_logging.logDiagnostic(request, "error", "http.error_response_failed", "could not allocate an HTTP error response", status, failure, null);
+        return failure;
+    };
     const phrase = status.phrase() orelse "Request Error";
     var writer = std.Io.Writer.fixed(body_buffer);
-    try error_page_template.render(&writer, .{
+    error_page_template.render(&writer, .{
         .status_code = @intFromEnum(status),
         .phrase = phrase,
         .theme_css = theme_css,
         .error_css = error_css,
         .description = description(status),
-    });
+    }) catch |failure| {
+        web_logging.logDiagnostic(request, "error", "http.error_response_failed", "could not render an HTTP error response", status, failure, null);
+        return failure;
+    };
     const body = writer.buffered();
 
     request.request.respond(body, .{
@@ -37,6 +44,7 @@ pub fn respond(request: *RequestContext, status: std.http.Status) Error!void {
         },
     }) catch |response_error| {
         if (response_error == error.Canceled) return error.Canceled;
+        web_logging.logDiagnostic(request, "error", "http.error_response_failed", "could not write an HTTP error response", status, response_error, null);
         return response_error;
     };
     request.response_status = @intFromEnum(status);

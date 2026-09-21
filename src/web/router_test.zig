@@ -48,12 +48,10 @@ test "route matching decodes captures but rejects encoded separators and malform
 }
 
 test "route capture frames expose parents and reject name conflicts" {
-    var request_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer request_arena.deinit();
-
     var request: RequestContext = undefined;
+    request.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer request.arena.deinit();
     request.route_captures = .{
-        .allocator = request_arena.allocator(),
         .frames = .empty,
     };
 
@@ -131,13 +129,12 @@ test "a compiled route table is a layer and preserves composed handler delegatio
     var http_request: std.http.Server.Request = undefined;
     http_request.head.method = .GET;
     http_request.head.target = "/admin/drafts/42?preview=true";
-    var request_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer request_arena.deinit();
     var request: RequestContext = undefined;
+    request.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer request.arena.deinit();
     request.request = &http_request;
     request.response_status = null;
     request.route_captures = .{
-        .allocator = request_arena.allocator(),
         .frames = .empty,
     };
 

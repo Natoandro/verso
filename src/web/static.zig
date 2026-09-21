@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const context = @import("context.zig");
 const errors = @import("errors.zig");
 const layer = @import("layer.zig");
+const web_logging = @import("logging.zig");
 
 pub const RequestContext = context.RequestContext;
 pub const Next = layer.Next;
@@ -116,19 +117,36 @@ pub const FilesystemStatic = struct {
     }
 
     pub fn handle(self: *@This(), request: *RequestContext, _: Next) Error!void {
-        const relative_path = request.routeParam(self.path_parameter) orelse
+        const relative_path = request.routeParam(self.path_parameter) orelse {
+            web_logging.logDiagnostic(request, "info", "static.request_rejected", "static path parameter was missing", .not_found, null, "missing static path");
             return respondStatus(request, .not_found);
-        if (!isSafeRelativePath(relative_path)) return respondStatus(request, .not_found);
+        };
+        if (!isSafeRelativePath(relative_path)) {
+            web_logging.logDiagnostic(request, "warn", "static.request_rejected", "static path was rejected", .not_found, error.InvalidPath, "unsafe static path");
+            return respondStatus(request, .not_found);
+        }
 
         const content = self.readFileWithAllocator(request.allocator(), relative_path) catch |read_error| switch (read_error) {
-            error.StreamTooLong => return respondStatus(request, .payload_too_large),
+            error.StreamTooLong => {
+                web_logging.logDiagnostic(request, "warn", "static.request_rejected", "static file exceeded configured size", .payload_too_large, read_error, "static file too large");
+                return respondStatus(request, .payload_too_large);
+            },
             error.Canceled => return error.Canceled,
-            error.OutOfMemory => return error.OutOfMemory,
-            else => return respondStatus(request, .not_found),
+            error.OutOfMemory => {
+                web_logging.logDiagnostic(request, "error", "static.read_failed", "static file allocation failed", .internal_server_error, read_error, null);
+                return error.OutOfMemory;
+            },
+            else => {
+                web_logging.logDiagnostic(request, "error", "static.read_failed", "static file could not be read", .not_found, read_error, null);
+                return respondStatus(request, .not_found);
+            },
         };
         defer request.allocator().free(content);
 
-        const etag_buffer = try request.allocator().alloc(u8, 24);
+        const etag_buffer = request.allocator().alloc(u8, 24) catch |failure| {
+            web_logging.logDiagnostic(request, "error", "static.response_failed", "could not allocate static response metadata", .internal_server_error, failure, null);
+            return failure;
+        };
         const etag = if (self.generate_etag)
             std.fmt.bufPrint(etag_buffer, "\"{x}\"", .{std.hash.Wyhash.hash(0, content)}) catch unreachable
         else
@@ -242,6 +260,7 @@ fn respond(
         .extra_headers = headers[0..header_count],
     }) catch |response_error| {
         if (response_error == error.Canceled) return error.Canceled;
+        web_logging.logDiagnostic(request, "error", "http.response_failed", "failed to write static response", status, response_error, null);
         return response_error;
     };
     request.response_status = @intFromEnum(status);

@@ -1,5 +1,6 @@
 const std = @import("std");
 const auth_crypto = @import("../auth/crypto.zig");
+const auth_cookies = @import("auth_cookies.zig");
 const auth_security = @import("../auth/security.zig");
 const application_identity = @import("../application/identity.zig");
 const context = @import("context.zig");
@@ -8,6 +9,11 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
+const auth_templates = @import("auth_templates.zig");
+const web_logging = @import("logging.zig");
+
+pub const cookieValue = auth_cookies.value;
+const formatCookie = auth_cookies.formatCookie;
 
 const RequestContext = context.RequestContext;
 const Next = layer.Next;
@@ -67,10 +73,18 @@ pub const SessionGuard = struct {
     pub fn handle(_: *@This(), request: *RequestContext, next: Next) Error!void {
         if (!try checkRequestOrigin(request)) return;
         const token = cookieValue(request, session_cookie_name) orelse {
+            web_logging.logDiagnostic(request, "info", "auth.session_rejected", "protected request had no session", .see_other, null, "missing session cookie");
             return redirectToLogin(request);
         };
-        const session = request.server.identity_service.authenticate(token) catch {
-            return redirectToLogin(request);
+        const session = request.server.identity_service.authenticate(token) catch |failure| switch (failure) {
+            error.InvalidSession => {
+                web_logging.logDiagnostic(request, "info", "auth.session_rejected", "session authentication failed", .see_other, failure, "invalid session");
+                return redirectToLogin(request);
+            },
+            else => {
+                web_logging.logDiagnostic(request, "error", "auth.session_failed", "session authentication failed unexpectedly", .internal_server_error, failure, null);
+                return errors.respond(request, .internal_server_error);
+            },
         };
         if (auth_security.isUnsafeMethod(request.request.head.method)) {
             // HTMX sends the token as a header. Plain HTML form fallback is
@@ -78,12 +92,20 @@ pub const SessionGuard = struct {
             // hidden csrf_token field; editor mutations do so before calling
             // an application service.
             if (headerValue(request, "x-csrf-token")) |csrf| {
-                request.server.identity_service.validateCsrf(token, csrf) catch {
-                    return errors.respond(request, .forbidden);
+                request.server.identity_service.validateCsrf(token, csrf) catch |failure| switch (failure) {
+                    error.InvalidCsrfToken => {
+                        web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "request failed CSRF validation", .forbidden, failure, "invalid CSRF token");
+                        return errors.respond(request, .forbidden);
+                    },
+                    else => {
+                        web_logging.logDiagnostic(request, "error", "auth.csrf_failed", "CSRF validation failed unexpectedly", .internal_server_error, failure, null);
+                        return errors.respond(request, .internal_server_error);
+                    },
                 };
             } else if (request.request.head.content_type == null or
                 !std.ascii.eqlIgnoreCase(request.request.head.content_type.?, "application/x-www-form-urlencoded"))
             {
+                web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "unsafe request had no acceptable CSRF form", .forbidden, null, "missing CSRF token");
                 return errors.respond(request, .forbidden);
             }
         }
@@ -125,7 +147,8 @@ const routes_table = route.routes(.{
 
 fn getLogin(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const setup_available = request.server.identity_service.initialSetupAvailable() catch {
+    const setup_available = request.server.identity_service.initialSetupAvailable() catch |failure| {
+        web_logging.logDiagnostic(request, "error", "auth.setup_check_failed", "could not check initial setup availability", .internal_server_error, failure, null);
         return errors.respond(request, .internal_server_error);
     };
     if (setup_available) return redirectToRegistration(request);
@@ -133,7 +156,13 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
         if (request.server.identity_service.authenticate(token)) |session| {
             request.authenticated_user_id = session.user_id;
             return redirect(request, "/admin/editor", &.{});
-        } else |_| {}
+        } else |failure| switch (failure) {
+            error.InvalidSession => web_logging.logDiagnostic(request, "info", "auth.session_rejected", "login page session was rejected", .ok, failure, "invalid session"),
+            else => {
+                web_logging.logDiagnostic(request, "error", "auth.session_failed", "login page session lookup failed", .internal_server_error, failure, null);
+                return errors.respond(request, .internal_server_error);
+            },
+        }
     }
 
     return respond(request, login_html, "text/html; charset=utf-8", &[_]std.http.Header{
@@ -143,12 +172,13 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
 
 fn getRegister(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const setup_available = request.server.identity_service.initialSetupAvailable() catch {
+    const setup_available = request.server.identity_service.initialSetupAvailable() catch |failure| {
+        web_logging.logDiagnostic(request, "error", "auth.setup_check_failed", "could not check initial setup availability", .internal_server_error, failure, null);
         return errors.respond(request, .internal_server_error);
     };
     if (!setup_available) return redirectToLogin(request);
     var token = try auth_crypto.newSecret(request.server.io);
-    const html_buffer = try request.allocator().alloc(u8, 4096);
+    const html_buffer = try request.allocator().alloc(u8, register_html_template.len + token.len);
     const html = try std.fmt.bufPrint(html_buffer, register_html_template, .{&token});
     const cookie_buffer = try request.allocator().alloc(u8, 192);
     const cookie = try formatCookie(cookie_buffer, setup_csrf_cookie_name, &token, false);
@@ -162,12 +192,14 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     if (!try request.server.identity_service.initialSetupAvailable()) return redirectToLogin(request);
     const setup_cookie = cookieValue(request, setup_csrf_cookie_name);
-    var parsed = form.extract(RegistrationForm, request) catch {
+    var parsed = form.extract(RegistrationForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.registration_rejected", "registration form was rejected", .bad_request, failure, "invalid registration form");
         return errors.respond(request, .bad_request);
     };
     defer parsed.deinit(request.allocator());
     if (!try requireSetupCsrf(setup_cookie, parsed.value.csrf_token, request)) return;
     if (!std.mem.eql(u8, parsed.value.password, parsed.value.password_confirmation)) {
+        web_logging.logDiagnostic(request, "warn", "auth.registration_rejected", "registration passwords did not match", .bad_request, null, "password confirmation mismatch");
         return errors.respond(request, .bad_request);
     }
     const credentials = request.server.identity_service.registerInitialLocalOwner(
@@ -176,11 +208,40 @@ fn postRegister(request: *RequestContext, _: Next) Error!void {
         parsed.value.password,
         request.remote_address,
     ) catch |registration_error| switch (registration_error) {
-        error.OwnerAlreadyExists => return redirectToLogin(request),
-        error.InvalidRegistration => return errors.respond(request, .bad_request),
-        else => return errors.respond(request, .internal_server_error),
+        error.OwnerAlreadyExists => {
+            web_logging.logDiagnostic(request, "warn", "auth.registration_rejected", "initial owner already exists", .see_other, registration_error, "owner already exists");
+            return redirectToLogin(request);
+        },
+        error.InvalidRegistration => {
+            web_logging.logDiagnostic(request, "warn", "auth.registration_rejected", "registration was rejected", .bad_request, registration_error, "registration rate limit or policy rejection");
+            return errors.respond(request, .bad_request);
+        },
+        error.InvalidLogin,
+        error.InvalidDisplayName,
+        error.InvalidEmail,
+        error.InvalidPassword,
+        error.InvalidPasswordHash,
+        => {
+            web_logging.logDiagnostic(request, "warn", "auth.registration_rejected", "registration fields failed validation", .bad_request, registration_error, registrationFailureReason(registration_error));
+            return errors.respond(request, .bad_request);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.registration_failed", "initial owner registration failed", .internal_server_error, registration_error, null);
+            return errors.respond(request, .internal_server_error);
+        },
     };
     return establishSession(request, credentials, "/admin/editor");
+}
+
+fn registrationFailureReason(failure: anyerror) []const u8 {
+    return switch (failure) {
+        error.InvalidLogin => "login policy rejected value",
+        error.InvalidDisplayName => "display name policy rejected value",
+        error.InvalidEmail => "email policy rejected value",
+        error.InvalidPassword => "password policy requires 12 to 1024 characters and no NUL bytes",
+        error.InvalidPasswordHash => "password hash policy rejected value",
+        else => "registration field validation failed",
+    };
 }
 
 fn postLogin(request: *RequestContext, _: Next) Error!void {
@@ -188,14 +249,29 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
     if (cookieValue(request, session_cookie_name)) |token| {
         if (request.server.identity_service.authenticate(token)) |_| {
             const csrf = headerValue(request, "x-csrf-token") orelse {
+                web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "already authenticated login request had no CSRF token", .forbidden, null, "missing CSRF token");
                 return errors.respond(request, .forbidden);
             };
-            request.server.identity_service.validateCsrf(token, csrf) catch {
-                return errors.respond(request, .forbidden);
+            request.server.identity_service.validateCsrf(token, csrf) catch |failure| switch (failure) {
+                error.InvalidCsrfToken => {
+                    web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "already authenticated login request failed CSRF validation", .forbidden, failure, "invalid CSRF token");
+                    return errors.respond(request, .forbidden);
+                },
+                else => {
+                    web_logging.logDiagnostic(request, "error", "auth.csrf_failed", "already authenticated login CSRF validation failed unexpectedly", .internal_server_error, failure, null);
+                    return errors.respond(request, .internal_server_error);
+                },
             };
-        } else |_| {}
+        } else |failure| switch (failure) {
+            error.InvalidSession => web_logging.logDiagnostic(request, "info", "auth.session_rejected", "existing login session was rejected", .forbidden, failure, "invalid session"),
+            else => {
+                web_logging.logDiagnostic(request, "error", "auth.session_failed", "existing login session lookup failed", .internal_server_error, failure, null);
+                return errors.respond(request, .internal_server_error);
+            },
+        }
     }
-    var parsed = form.extract(LoginForm, request) catch {
+    var parsed = form.extract(LoginForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "login form was rejected", .unauthorized, failure, "invalid login form");
         return errors.respond(request, .unauthorized);
     };
     defer parsed.deinit(request.allocator());
@@ -204,23 +280,40 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
         parsed.value.password,
         request.remote_address,
     ) catch |login_error| switch (login_error) {
-        error.InvalidCredentials => return errors.respond(request, .unauthorized),
-        else => return errors.respond(request, .internal_server_error),
+        error.InvalidCredentials => {
+            web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "login credentials were rejected", .unauthorized, login_error, "invalid credentials");
+            return errors.respond(request, .unauthorized);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.login_failed", "local login failed", .internal_server_error, login_error, null);
+            return errors.respond(request, .internal_server_error);
+        },
     };
     return establishSession(request, credentials, "/admin/editor");
 }
 
 fn postLogout(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const token = cookieValue(request, session_cookie_name) orelse
+    const token = cookieValue(request, session_cookie_name) orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout request had no session", .unauthorized, null, "missing session cookie");
         return errors.respond(request, .unauthorized);
+    };
     const csrf = headerValue(request, "x-csrf-token") orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout request had no CSRF token", .forbidden, null, "missing CSRF token");
         return errors.respond(request, .forbidden);
     };
-    request.server.identity_service.validateCsrf(token, csrf) catch {
-        return errors.respond(request, .forbidden);
+    request.server.identity_service.validateCsrf(token, csrf) catch |failure| switch (failure) {
+        error.InvalidCsrfToken => {
+            web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout request failed CSRF validation", .forbidden, failure, "invalid CSRF token");
+            return errors.respond(request, .forbidden);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.logout_failed", "logout CSRF validation failed unexpectedly", .internal_server_error, failure, null);
+            return errors.respond(request, .internal_server_error);
+        },
     };
-    request.server.identity_service.logout(token) catch {
+    request.server.identity_service.logout(token) catch |failure| {
+        web_logging.logDiagnostic(request, "error", "auth.logout_failed", "logout failed", .internal_server_error, failure, null);
         return errors.respond(request, .internal_server_error);
     };
     return clearSession(request);
@@ -229,25 +322,22 @@ fn postLogout(request: *RequestContext, _: Next) Error!void {
 fn getPassword(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
     const token = cookieValue(request, session_cookie_name) orelse return redirectToLogin(request);
-    _ = request.server.identity_service.authenticate(token) catch return redirectToLogin(request);
-    const csrf_token = cookieValue(request, csrf_cookie_name) orelse
+    _ = request.server.identity_service.authenticate(token) catch |failure| switch (failure) {
+        error.InvalidSession => {
+            web_logging.logDiagnostic(request, "info", "auth.session_rejected", "password page session was rejected", .see_other, failure, "invalid session");
+            return redirectToLogin(request);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.session_failed", "password page session lookup failed", .internal_server_error, failure, null);
+            return errors.respond(request, .internal_server_error);
+        },
+    };
+    const csrf_token = cookieValue(request, csrf_cookie_name) orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password page had no CSRF cookie", .forbidden, null, "missing CSRF cookie");
         return errors.respond(request, .forbidden);
-    const html_buffer = try request.allocator().alloc(u8, 4096);
-    const html = try std.fmt.bufPrint(html_buffer,
-        \\<!doctype html>
-        \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Change password - Verso</title>
-        \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
-        \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
-        \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
-        \\<p class="eyebrow">Account settings</p><h1>Change password</h1><p>Keep your editorial workspace protected with a new password.</p></header>
-        \\<form class="standalone-form" method="post" action="/admin/password">
-        \\<input type="hidden" name="csrf_token" value="{s}">
-        \\<label>Current password <input type="password" name="current_password" autocomplete="current-password" required></label>
-        \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
-        \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Change password</button><a class="theme-button theme-button-quiet" href="/admin/editor">Cancel</a></div></form>
-        \\<footer class="standalone-footer"><span>Your publication stays in your hands.</span><a href="/admin/authors">Manage authors</a></footer>
-        \\</article></main></body></html>
-    , .{csrf_token});
+    };
+    const html_buffer = try request.allocator().alloc(u8, auth_templates.password_html.len + csrf_token.len);
+    const html = try std.fmt.bufPrint(html_buffer, auth_templates.password_html, .{csrf_token});
     return respond(request, html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
@@ -255,83 +345,122 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
 
 fn postPassword(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const token = cookieValue(request, session_cookie_name) orelse
+    const token = cookieValue(request, session_cookie_name) orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password change request had no session", .unauthorized, null, "missing session cookie");
         return errors.respond(request, .unauthorized);
-    _ = request.server.identity_service.authenticate(token) catch
-        return errors.respond(request, .unauthorized);
-    var parsed = form.extract(PasswordForm, request) catch {
+    };
+    _ = request.server.identity_service.authenticate(token) catch |failure| switch (failure) {
+        error.InvalidSession => {
+            web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password change session was rejected", .unauthorized, failure, "invalid session");
+            return errors.respond(request, .unauthorized);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.password_failed", "password change session lookup failed", .internal_server_error, failure, null);
+            return errors.respond(request, .internal_server_error);
+        },
+    };
+    var parsed = form.extract(PasswordForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password change form was rejected", .bad_request, failure, "invalid password form");
         return errors.respond(request, .bad_request);
     };
     defer parsed.deinit(request.allocator());
     if (!try requireCsrf(request, token, parsed.value.csrf_token)) return;
     const credentials = request.server.identity_service.changePassword(token, parsed.value.current_password, parsed.value.new_password) catch |change_error| switch (change_error) {
-        error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
-        else => return errors.respond(request, .internal_server_error),
+        error.InvalidCredentials, error.InvalidPassword => {
+            web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password change credentials were rejected", .unauthorized, change_error, "invalid password credentials");
+            return errors.respond(request, .unauthorized);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.password_failed", "password change failed", .internal_server_error, change_error, null);
+            return errors.respond(request, .internal_server_error);
+        },
     };
     return establishSession(request, credentials, "/admin/editor");
 }
 
 fn getRecovery(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    return respond(request, recovery_html, "text/html; charset=utf-8", &.{
+    return respond(request, auth_templates.recovery_html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
 
 fn postRecovery(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    var parsed = form.extract(RecoveryForm, request) catch {
+    var parsed = form.extract(RecoveryForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.recovery_rejected", "password recovery form was rejected", .accepted, failure, "invalid recovery form");
         return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
     };
     defer parsed.deinit(request.allocator());
     if (parsed.value.login) |login| {
-        _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch {};
+        _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch |failure| {
+            web_logging.logDiagnostic(request, "error", "auth.recovery_failed", "password recovery operation failed", .accepted, failure, null);
+        };
     }
     return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
 }
 
 fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    return respond(request, recovery_complete_html, "text/html; charset=utf-8", &.{
+    return respond(request, auth_templates.recovery_complete_html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
 
 fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    var parsed = form.extract(RecoveryCompleteForm, request) catch {
+    var parsed = form.extract(RecoveryCompleteForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.recovery_rejected", "password recovery completion form was rejected", .unauthorized, failure, "invalid recovery completion form");
         return errors.respond(request, .unauthorized);
     };
     defer parsed.deinit(request.allocator());
     const credentials = request.server.identity_service.completePasswordReset(parsed.value.token, parsed.value.new_password) catch |reset_error| switch (reset_error) {
-        error.InvalidCredentials, error.InvalidPassword => return errors.respond(request, .unauthorized),
-        else => return errors.respond(request, .internal_server_error),
+        error.InvalidCredentials, error.InvalidPassword => {
+            web_logging.logDiagnostic(request, "warn", "auth.recovery_rejected", "password recovery credentials were rejected", .unauthorized, reset_error, "invalid recovery credentials");
+            return errors.respond(request, .unauthorized);
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.recovery_failed", "password recovery completion failed", .internal_server_error, reset_error, null);
+            return errors.respond(request, .internal_server_error);
+        },
     };
     return establishSession(request, credentials, "/admin/editor");
 }
 
 pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
     const csrf = headerValue(request, "x-csrf-token") orelse form_token orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "request had no CSRF token", .forbidden, null, "missing CSRF token");
         try errors.respond(request, .forbidden);
         return false;
     };
-    request.server.identity_service.validateCsrf(token, csrf) catch {
-        try errors.respond(request, .forbidden);
-        return false;
+    request.server.identity_service.validateCsrf(token, csrf) catch |failure| switch (failure) {
+        error.InvalidCsrfToken => {
+            web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "request failed CSRF validation", .forbidden, failure, "invalid CSRF token");
+            try errors.respond(request, .forbidden);
+            return false;
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "auth.csrf_failed", "CSRF validation failed unexpectedly", .internal_server_error, failure, null);
+            try errors.respond(request, .internal_server_error);
+            return false;
+        },
     };
     return true;
 }
 
 fn requireSetupCsrf(cookie: ?[]const u8, form_token: ?[]const u8, request: *RequestContext) Error!bool {
     const cookie_value = cookie orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.setup_csrf_rejected", "registration had no setup CSRF cookie", .forbidden, null, "missing setup CSRF cookie");
         try errors.respond(request, .forbidden);
         return false;
     };
     const token = form_token orelse {
+        web_logging.logDiagnostic(request, "warn", "auth.setup_csrf_rejected", "registration had no setup CSRF form token", .forbidden, null, "missing setup CSRF form token");
         try errors.respond(request, .forbidden);
         return false;
     };
     if (!auth_crypto.constantTimeEqual(cookie_value, token)) {
+        web_logging.logDiagnostic(request, "warn", "auth.setup_csrf_rejected", "registration setup CSRF validation failed", .forbidden, null, "invalid setup CSRF token");
         try errors.respond(request, .forbidden);
         return false;
     }
@@ -357,6 +486,7 @@ fn establishSession(
 
 pub fn checkRequestOrigin(request: *RequestContext) !bool {
     const host = headerValue(request, "host") orelse {
+        web_logging.logDiagnostic(request, "warn", "http.origin_rejected", "request had no Host header", .bad_request, null, "missing Host header");
         try errors.respond(request, .bad_request);
         return false;
     };
@@ -370,7 +500,8 @@ pub fn checkRequestOrigin(request: *RequestContext) !bool {
         .origin = headerValue(request, "origin"),
         .forwarded_scheme = forwarded_scheme,
         .forwarded_host = forwarded_host,
-    }) catch {
+    }) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "http.origin_rejected", "request origin validation failed", .forbidden, failure, "origin policy rejected request");
         try errors.respond(request, .forbidden);
         return false;
     };
@@ -408,7 +539,10 @@ fn redirect(
     headers[0] = .{ .name = "location", .value = location };
     var count: usize = 1;
     for (extra_headers) |header| {
-        if (count == headers.len) return error.TooManyResponseHeaders;
+        if (count == headers.len) {
+            web_logging.logDiagnostic(request, "error", "http.response_failed", "response contained too many headers", .internal_server_error, error.TooManyResponseHeaders, null);
+            return error.TooManyResponseHeaders;
+        }
         headers[count] = header;
         count += 1;
     }
@@ -432,7 +566,10 @@ pub fn respond(
     headers[0] = .{ .name = "content-type", .value = content_type };
     var count: usize = 1;
     for (extra_headers) |header| {
-        if (count == headers.len) return error.TooManyResponseHeaders;
+        if (count == headers.len) {
+            web_logging.logDiagnostic(request, "error", "http.response_failed", "response contained too many headers", status, error.TooManyResponseHeaders, null);
+            return error.TooManyResponseHeaders;
+        }
         headers[count] = header;
         count += 1;
     }
@@ -442,111 +579,12 @@ pub fn respond(
         .extra_headers = headers[0..count],
     }) catch |response_error| {
         if (response_error == error.Canceled) return error.Canceled;
+        web_logging.logDiagnostic(request, "error", "http.response_failed", "failed to write HTTP response", status, response_error, null);
         return response_error;
     };
     request.response_status = @intFromEnum(status);
 }
 
-fn formatCookie(buffer: []u8, name: []const u8, value: []const u8, http_only: bool) ![]const u8 {
-    return std.fmt.bufPrint(
-        buffer,
-        "{s}={s}; Path=/; Secure; {s}SameSite=Lax",
-        .{ name, value, if (http_only) "HttpOnly; " else "" },
-    );
-}
-
 pub fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     return request.cachedHeaderValue(name);
-}
-
-pub fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
-    const header = headerValue(request, "cookie") orelse return null;
-    var cookies = std.mem.splitScalar(u8, header, ';');
-    while (cookies.next()) |part| {
-        const trimmed = std.mem.trim(u8, part, " \t");
-        const separator = std.mem.indexOfScalar(u8, trimmed, '=') orelse continue;
-        if (!std.mem.eql(u8, trimmed[0..separator], name)) continue;
-        const value = trimmed[separator + 1 ..];
-        if (value.len != auth_crypto.encoded_secret_length) return null;
-        for (value) |character| {
-            if (!std.ascii.isHex(character)) return null;
-        }
-        return value;
-    }
-    return null;
-}
-
-const recovery_html =
-    \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Password recovery - Verso</title>
-    \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
-    \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
-    \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
-    \\<p class="eyebrow">Account access</p><h1>Password recovery</h1><p>Enter your login and, if the account exists, recovery instructions will be sent.</p></header>
-    \\<form class="standalone-form" method="post" action="/admin/recover">
-    \\<label>Login <input name="login" autocomplete="username" required></label>
-    \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Request recovery</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div></form>
-    \\<footer class="standalone-footer"><span>Need another route in?</span><a href="/admin/recover/complete">Use a recovery token</a></footer>
-    \\</article></main></body></html>
-;
-
-const recovery_complete_html =
-    \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Set a new password - Verso</title>
-    \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
-    \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
-    \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
-    \\<p class="eyebrow">Account access</p><h1>Set a new password</h1><p>Use the recovery token you received to choose a new password.</p></header>
-    \\<form class="standalone-form" method="post" action="/admin/recover/complete">
-    \\<label>Recovery token <input name="token" autocomplete="one-time-code" required></label>
-    \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
-    \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Set password</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div></form>
-    \\<footer class="standalone-footer"><span>Recovery tokens are single-use.</span><a href="/admin/recover">Request another</a></footer>
-    \\</article></main></body></html>
-;
-
-test "cookie values reject malformed session credentials" {
-    try std.testing.expectEqual(@as(?[]const u8, null), parseCookieValue("bad"));
-    try std.testing.expectEqual(@as(?[]const u8, null), parseCookieValue("0123"));
-    try std.testing.expectEqualStrings(
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        parseCookieValue("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").?,
-    );
-}
-
-fn parseCookieValue(value: []const u8) ?[]const u8 {
-    if (value.len != auth_crypto.encoded_secret_length) return null;
-    for (value) |character| if (!std.ascii.isHex(character)) return null;
-    return value;
-}
-
-test "session and csrf cookie attributes are explicit" {
-    var buffer: [192]u8 = undefined;
-    const cookie = try formatCookie(&buffer, session_cookie_name, "token", true);
-    try std.testing.expect(std.mem.indexOf(u8, cookie, "Secure") != null);
-    try std.testing.expect(std.mem.indexOf(u8, cookie, "HttpOnly") != null);
-    try std.testing.expect(std.mem.indexOf(u8, cookie, "SameSite=Lax") != null);
-}
-
-test "admin authentication routes separate login and logout methods" {
-    const routes = Handler.routes();
-    try std.testing.expectEqual(@as(?usize, 0), route.resolve(routes, .GET, "/admin/login"));
-    try std.testing.expectEqual(@as(?usize, 1), route.resolve(routes, .POST, "/admin/login"));
-    try std.testing.expectEqual(@as(?usize, 2), route.resolve(routes, .GET, "/admin/register"));
-    try std.testing.expectEqual(@as(?usize, 3), route.resolve(routes, .POST, "/admin/register"));
-    try std.testing.expectEqual(@as(?usize, 4), route.resolve(routes, .POST, "/admin/logout"));
-    try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .GET, "/admin/logout"));
-}
-
-test "standalone admin pages expose their shared stylesheet" {
-    try std.testing.expectEqual(
-        @as(?usize, 12),
-        route.resolve(Handler.routes(), .GET, "/admin/admin.css"),
-    );
-}
-
-test "admin entry points use the setup-aware login handler" {
-    const routes = Handler.routes();
-    try std.testing.expectEqual(@as(?usize, 13), route.resolve(routes, .GET, "/admin"));
-    try std.testing.expectEqual(@as(?usize, 14), route.resolve(routes, .GET, "/admin/"));
 }
