@@ -588,7 +588,7 @@ deferred alternatives documented in
   login is implemented; OIDC remains deferred, and proxy identity headers are
   not accepted.
 
-- [ ] **IAM-002 — Manage authors and scoped assignments**
+- [x] **IAM-002 — Manage authors and scoped assignments**
 
   Managers can maintain attribution authors and make scoped assignments for
   editors acting on behalf of an author or working on a document. Capability
@@ -721,7 +721,7 @@ deferred alternatives documented in
 
   - [ ] **Application:** Implement authorized upload validation, content-type
     detection, size limits, checksum calculation, and metadata creation.
-  - [ ] **Filesystem storage:** Store content-addressed bytes outside the
+  - [x] **Filesystem storage:** Store content-addressed bytes outside the
     static root with safe temporary writes and durable replacement behavior.
   - [ ] **Web/admin:** Add the protected upload interface and return stable
     asset identities without exposing filesystem paths.

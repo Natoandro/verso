@@ -16,6 +16,7 @@ pub const domain = struct {
     pub const sections = @import("domain/sections.zig");
 };
 pub const storage = struct {
+    pub const assets = @import("storage/assets.zig");
     pub const documents = @import("storage/documents.zig");
     pub const document_versions = @import("storage/document_versions.zig");
     pub const document_access = @import("storage/document_access.zig");
@@ -45,6 +46,7 @@ test {
     _ = @import("application/documents_test.zig");
     _ = @import("application/documents_authorization_test.zig");
     _ = @import("storage/documents.zig");
+    _ = @import("storage/assets.zig");
     _ = @import("storage/document_versions.zig");
     _ = @import("storage/document_access.zig");
     _ = @import("storage/identity.zig");
