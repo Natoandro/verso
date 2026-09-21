@@ -92,6 +92,9 @@ run_server() {
     grep -F '<h1>Not Found</h1>' "$not_found_body" >/dev/null || fail "not-found page was incomplete"
 
     if [ "$check_initial_setup" = true ]; then
+        admin_headers=$(curl --silent --dump-header - --output /dev/null "http://127.0.0.1:$port/admin") || fail "admin entry route was not served"
+        printf '%s\n' "$admin_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "empty database admin entry did not redirect"
+        printf '%s\n' "$admin_headers" | grep -F 'location: /admin/register' >/dev/null || fail "admin entry did not redirect to registration"
         login_body_file="$case_directory/login.body"
         login_headers=$(curl --silent --dump-header - --output "$login_body_file" "http://127.0.0.1:$port/admin/login") || fail "login route was not served"
         printf '%s\n' "$login_headers" | grep -F 'HTTP/1.1 303' >/dev/null || fail "empty database did not redirect to registration"

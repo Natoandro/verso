@@ -179,11 +179,13 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
     const writer = &output.writer;
     try writer.writeAll(
         \\<!doctype html><html lang="en"><head><meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<title>Authors and assignments</title></head><body><main>
-        \\<h1>Authors and assignments</h1>
-        \\<p><a href="/admin/editor">Editor</a> | <a href="/admin/password">Change password</a></p>
-        \\<h2>Add author</h2><form method="post" action="/admin/authors">
+        \\<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+        \\<title>Authors and assignments - Verso</title><link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+        \\<body class="standalone-page"><main class="management-page">
+        \\<header class="management-header"><div><a class="management-brand" href="/" aria-label="Verso home"><span class="management-brand-mark">V</span> Verso</a>
+        \\<p class="eyebrow">Publication access</p><h1>Authors and assignments</h1><p>Manage the people who can shape this publication.</p></div>
+        \\<nav class="management-nav" aria-label="Admin navigation"><a class="theme-button theme-button-quiet" href="/admin/editor">Editor</a><a class="theme-button theme-button-quiet" href="/admin/password">Change password</a></nav></header>
+        \\<section class="management-section"><h2>Add author</h2><form class="management-form management-create-form" method="post" action="/admin/authors">
         \\<input type="hidden" name="csrf_token" value="
     );
     try writeCsrf(writer, request);
@@ -191,11 +193,11 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
         \\"><label>Name <input name="display_name" required></label>
         \\<label>Slug <input name="slug" required></label>
         \\<label>Biography <textarea name="biography"></textarea></label>
-        \\<button type="submit">Add author</button></form>
-        \\<h2>Authors</h2><ul>
+        \\<div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Add author</button></div></form></section>
+        \\<section class="management-section"><h2>Authors</h2><ul class="management-list">
     );
     for (snapshot.authors) |author| {
-        try writer.writeAll("<li><form method=\"post\" action=\"/admin/authors/");
+        try writer.writeAll("<li class=\"management-list-item\"><form class=\"management-form\" method=\"post\" action=\"/admin/authors/");
         try writer.print("{}", .{author.id});
         try writer.writeAll("\"><input type=\"hidden\" name=\"csrf_token\" value=\"");
         try writeCsrf(writer, request);
@@ -205,23 +207,23 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
         try escape.write(writer, author.slug.data, true);
         try writer.writeAll("\" required></label><label>Biography <textarea name=\"biography\">");
         try escape.write(writer, author.biography.data, true);
-        try writer.writeAll("</textarea></label><button type=\"submit\">Save</button></form></li>");
+        try writer.writeAll("</textarea></label><div class=\"management-actions\"><button class=\"theme-button theme-button-primary\" type=\"submit\">Save</button></div></form></li>");
     }
-    try writer.writeAll("</ul><h2>Assignments</h2><ul>");
+    try writer.writeAll("</ul></section><section class=\"management-section\"><h2>Assignments</h2><ul class=\"management-list\">");
     for (snapshot.assignments) |assignment| {
-        try writer.writeAll("<li>");
+        try writer.writeAll("<li class=\"management-list-item management-assignment\"><p><strong>");
         try escape.write(writer, assignment.editor_display_name.data, true);
-        try writer.writeAll(" - ");
+        try writer.writeAll("</strong> - ");
         try escape.write(writer, assignment.scope_kind.data, true);
         try writer.writeAll(" ");
         try escape.write(writer, assignment.scope_name.data, true);
-        try writer.writeAll(" <form method=\"post\" style=\"display:inline\" action=\"/admin/assignments/");
+        try writer.writeAll("</p><form class=\"management-inline-form\" method=\"post\" action=\"/admin/assignments/");
         try writer.print("{}/revoke\"><input type=\"hidden\" name=\"csrf_token\" value=\"", .{assignment.id});
         try writeCsrf(writer, request);
         try writer.print("\"><input type=\"hidden\" name=\"expected_revision\" value=\"{}\"><button type=\"submit\">Revoke</button></form></li>", .{assignment.revision_number});
     }
     try writer.writeAll(
-        \\</ul><h2>Assign editor</h2><form method="post" action="/admin/assignments">
+        \\</ul></section><section class="management-section"><h2>Assign editor</h2><form class="management-form management-create-form" method="post" action="/admin/assignments">
         \\<input type="hidden" name="csrf_token" value="
     );
     try writeCsrf(writer, request);
@@ -235,7 +237,7 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
         \\</select></label><label>Scope <select name="scope_type">
         \\<option value="author">Author</option><option value="document">Document</option>
         \\</select></label><label>Scope ID <input name="scope_id" inputmode="numeric" required></label>
-        \\<button type="submit">Assign</button></form></main></body></html>
+        \\<div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Assign</button></div></form></section></main></body></html>
     );
     const body = try output.toOwnedSlice();
     defer request.allocator().free(body);

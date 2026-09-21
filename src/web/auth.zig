@@ -16,6 +16,7 @@ const Error = anyerror;
 
 const theme_css = @embedFile("styles/theme.css");
 const auth_css = @embedFile("styles/auth.css");
+const admin_css = @embedFile("styles/admin.css");
 const login_html = @embedFile("templates/pages/login.html");
 const register_html_template = @embedFile("templates/pages/register.html");
 
@@ -113,6 +114,13 @@ const routes_table = route.routes(.{
         "text/css; charset=utf-8",
         .{ .status = .ok, .cache_control = "no-store" },
     ) },
+    .{ "GET /admin/admin.css", static_content.EmbeddedStatic.handler(
+        admin_css,
+        "text/css; charset=utf-8",
+        .{ .status = .ok, .cache_control = "no-store" },
+    ) },
+    .{ "GET /admin", getLogin },
+    .{ "GET /admin/", getLogin },
 });
 
 fn getLogin(request: *RequestContext, _: Next) Error!void {
@@ -227,14 +235,18 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
     const html_buffer = try request.allocator().alloc(u8, 4096);
     const html = try std.fmt.bufPrint(html_buffer,
         \\<!doctype html>
-        \\<html lang="en"><head><meta charset="utf-8"><title>Change password</title></head>
-        \\<body><main><h1>Change password</h1>
-        \\<form method="post" action="/admin/password">
+        \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Change password - Verso</title>
+        \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+        \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
+        \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
+        \\<p class="eyebrow">Account settings</p><h1>Change password</h1><p>Keep your editorial workspace protected with a new password.</p></header>
+        \\<form class="standalone-form" method="post" action="/admin/password">
         \\<input type="hidden" name="csrf_token" value="{s}">
         \\<label>Current password <input type="password" name="current_password" autocomplete="current-password" required></label>
         \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
-        \\<button type="submit">Change password</button></form>
-        \\</main></body></html>
+        \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Change password</button><a class="theme-button theme-button-quiet" href="/admin/editor">Cancel</a></div></form>
+        \\<footer class="standalone-footer"><span>Your publication stays in your hands.</span><a href="/admin/authors">Manage authors</a></footer>
+        \\</article></main></body></html>
     , .{csrf_token});
     return respond(request, html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
@@ -466,23 +478,31 @@ pub fn cookieValue(request: *const RequestContext, name: []const u8) ?[]const u8
 
 const recovery_html =
     \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><title>Password recovery</title></head>
-    \\<body><main><h1>Password recovery</h1>
-    \\<form method="post" action="/admin/recover">
+    \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Password recovery - Verso</title>
+    \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+    \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
+    \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
+    \\<p class="eyebrow">Account access</p><h1>Password recovery</h1><p>Enter your login and, if the account exists, recovery instructions will be sent.</p></header>
+    \\<form class="standalone-form" method="post" action="/admin/recover">
     \\<label>Login <input name="login" autocomplete="username" required></label>
-    \\<button type="submit">Request recovery</button></form>
-    \\</main></body></html>
+    \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Request recovery</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div></form>
+    \\<footer class="standalone-footer"><span>Need another route in?</span><a href="/admin/recover/complete">Use a recovery token</a></footer>
+    \\</article></main></body></html>
 ;
 
 const recovery_complete_html =
     \\<!doctype html>
-    \\<html lang="en"><head><meta charset="utf-8"><title>Set a new password</title></head>
-    \\<body><main><h1>Set a new password</h1>
-    \\<form method="post" action="/admin/recover/complete">
+    \\<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Set a new password - Verso</title>
+    \\<link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+    \\<body class="standalone-page"><main class="standalone-shell"><article class="standalone-card">
+    \\<header class="standalone-header"><a class="standalone-brand" href="/" aria-label="Verso home"><span class="standalone-brand-mark">V</span> Verso</a>
+    \\<p class="eyebrow">Account access</p><h1>Set a new password</h1><p>Use the recovery token you received to choose a new password.</p></header>
+    \\<form class="standalone-form" method="post" action="/admin/recover/complete">
     \\<label>Recovery token <input name="token" autocomplete="one-time-code" required></label>
     \\<label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
-    \\<button type="submit">Set password</button></form>
-    \\</main></body></html>
+    \\<div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Set password</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div></form>
+    \\<footer class="standalone-footer"><span>Recovery tokens are single-use.</span><a href="/admin/recover">Request another</a></footer>
+    \\</article></main></body></html>
 ;
 
 test "cookie values reject malformed session credentials" {
@@ -516,4 +536,17 @@ test "admin authentication routes separate login and logout methods" {
     try std.testing.expectEqual(@as(?usize, 3), route.resolve(routes, .POST, "/admin/register"));
     try std.testing.expectEqual(@as(?usize, 4), route.resolve(routes, .POST, "/admin/logout"));
     try std.testing.expectEqual(@as(?usize, null), route.resolve(routes, .GET, "/admin/logout"));
+}
+
+test "standalone admin pages expose their shared stylesheet" {
+    try std.testing.expectEqual(
+        @as(?usize, 12),
+        route.resolve(Handler.routes(), .GET, "/admin/admin.css"),
+    );
+}
+
+test "admin entry points use the setup-aware login handler" {
+    const routes = Handler.routes();
+    try std.testing.expectEqual(@as(?usize, 13), route.resolve(routes, .GET, "/admin"));
+    try std.testing.expectEqual(@as(?usize, 14), route.resolve(routes, .GET, "/admin/"));
 }
