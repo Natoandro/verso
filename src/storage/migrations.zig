@@ -2,6 +2,7 @@ const std = @import("std");
 const sqlite = @import("sqlite");
 const embedded = @import("embedded_migrations");
 const logging = @import("../logging.zig");
+const failure_reason = @import("../failure_reason.zig");
 
 pub const Migration = struct {
     version: i64,
@@ -10,12 +11,14 @@ pub const Migration = struct {
 };
 
 const MigrationFailureLogRecord = struct {
-    comptime format: []const u8 = "migration run failed in {directory}: {error_name}",
+    comptime format: []const u8 = "migration run failed in {directory}: {error_name} ({reason}) — {suggestion}",
     level: []const u8,
     event: []const u8,
     message: []const u8,
     directory: []const u8,
     error_name: []const u8,
+    reason: []const u8,
+    suggestion: []const u8,
 };
 
 const MigrationsLoadedLogRecord = struct {
@@ -112,6 +115,8 @@ pub const MigrationContext = struct {
                 .message = "migration run failed",
                 .directory = self.directory_path,
                 .error_name = @errorName(migration_error),
+                .reason = failure_reason.forError(migration_error),
+                .suggestion = failure_reason.suggestion(migration_error),
             }) catch {};
             return migration_error;
         };

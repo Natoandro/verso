@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const logging = @import("logging.zig");
+const failure_reason = @import("failure_reason.zig");
 const web = @import("web.zig");
 
 var shutdown_requested = std.atomic.Value(bool).init(false);
@@ -11,12 +12,14 @@ pub const SignalHandlerState = if (builtin.os.tag == .linux) struct {
 } else struct {};
 
 pub const ConnectionFailureLogRecord = struct {
-    comptime format: []const u8 = "HTTP connection failed after {duration_ms}: {error_name}",
+    comptime format: []const u8 = "HTTP connection failed after {duration_ms}: {error_name} ({reason}) — {suggestion}",
     level: []const u8,
     event: []const u8,
     message: []const u8,
     duration_ms: web.logging.DurationMilliseconds,
     error_name: []const u8,
+    reason: []const u8,
+    suggestion: []const u8,
 };
 
 pub fn resetShutdown() void {
@@ -99,6 +102,8 @@ fn logConnectionFailure(
         .message = "HTTP connection failed",
         .duration_ms = .{ .milliseconds = web.logging.durationMilliseconds(started_at.durationTo(finished_at)) },
         .error_name = @errorName(connection_error),
+        .reason = failure_reason.forError(connection_error),
+        .suggestion = failure_reason.suggestion(connection_error),
     }) catch {};
 }
 
@@ -187,10 +192,12 @@ test "connection failure records contain only connection details" {
             .message = "HTTP connection failed",
             .duration_ms = .{ .milliseconds = 3.25 },
             .error_name = "ConnectionReset",
+            .reason = "the operation could not be completed",
+            .suggestion = "Inspect the error details and retry after correcting the underlying problem.",
         },
     );
     try std.testing.expectEqualStrings(
-        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"warn\",\"event\":\"http.connection_failed\",\"message\":\"HTTP connection failed\",\"duration_ms\":3.25,\"error_name\":\"ConnectionReset\"}\n",
+        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"warn\",\"event\":\"http.connection_failed\",\"message\":\"HTTP connection failed\",\"duration_ms\":3.25,\"error_name\":\"ConnectionReset\",\"reason\":\"the operation could not be completed\",\"suggestion\":\"Inspect the error details and retry after correcting the underlying problem.\"}\n",
         writer.buffered(),
     );
 }

@@ -6,6 +6,7 @@ const identity_management = @import("application/identity_management.zig");
 const identity_queries = @import("storage/identity_queries.zig");
 const bootstrap = @import("application/bootstrap.zig");
 const logging = @import("logging.zig");
+const failure_reason = @import("failure_reason.zig");
 const migration_directory = @import("storage/migration_directory.zig");
 const migrations = @import("storage/migrations.zig");
 const database = @import("storage/sqlite.zig");
@@ -301,6 +302,8 @@ fn logStartupFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, sta
         .message = "server startup failed",
         .stage = stage,
         .error_name = @errorName(startup_error),
+        .reason = failure_reason.forError(startup_error),
+        .suggestion = failure_reason.suggestion(startup_error),
     });
 }
 
@@ -311,5 +314,7 @@ fn logRuntimeFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, run
         .message = "server runtime failed",
         .stage = stage,
         .error_name = @errorName(runtime_error),
+        .reason = failure_reason.forError(runtime_error),
+        .suggestion = failure_reason.suggestion(runtime_error),
     });
 }

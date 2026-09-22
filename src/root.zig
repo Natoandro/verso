@@ -1,5 +1,6 @@
 pub const config = @import("config.zig");
 pub const logging = @import("logging.zig");
+pub const failure_reason = @import("failure_reason.zig");
 pub const tmpl = @import("tmpl");
 pub const auth = @import("auth.zig");
 pub const application = struct {

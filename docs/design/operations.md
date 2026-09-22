@@ -288,7 +288,10 @@ value is null from all log formats; set it to `false` when explicit nulls are
 needed. Log records conventionally use `event` for a stable machine-readable
 identifier and `message` for a human-readable description. Pretty output uses
 `message` as its headline when present and falls back to `event`; JSON and text
-output retain both fields.
+output retain both fields. Failure and validation records also include safe,
+operator-facing `reason` and `suggestion` fields; submitted credentials,
+database URLs, and other secret configuration values are never copied into
+either field.
 
 ### Record message templates
 
@@ -339,7 +342,8 @@ at or above one second; machine-readable records retain the stable millisecond
 unit. Request targets retain the path and query keys while redacting query
 values, omitting absolute-form authorities, and bounding the logged length.
 The same field is used for completed requests and downstream failures;
-connection failures use a focused record with the duration and error name only.
+connection failures use a focused record with the duration, error name, and
+safe reason.
 
 The configuration file is optional. When the default `verso.toml` is absent,
 Verso starts from built-in defaults and continues through the normal override

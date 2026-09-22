@@ -1,6 +1,7 @@
 const std = @import("std");
 const context = @import("context.zig");
 const layer = @import("layer.zig");
+const failure_reason = @import("../failure_reason.zig");
 
 pub const DiagnosticLogRecord = struct {
     level: []const u8,
@@ -25,7 +26,7 @@ pub const RequestLoggingLayer = struct {
         const target = target_storage[0..target_length];
         next.call(request) catch |request_error| {
             if (request_error == error.Canceled) return error.Canceled;
-            try logFailedRequest(request, method, target, protocol, @errorName(request_error));
+            try logFailedRequest(request, method, target, protocol, request_error);
             return request_error;
         };
 
@@ -182,7 +183,7 @@ const CompletedRequestLogRecord = struct {
 };
 
 const FailedRequestLogRecord = struct {
-    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms} failed: {error_name}",
+    comptime format: []const u8 = "\"{method} {target} {protocol}\" {status} {duration_ms} failed: {error_name} ({reason}) — {suggestion}",
     level: []const u8,
     event: []const u8,
     message: []const u8,
@@ -192,7 +193,21 @@ const FailedRequestLogRecord = struct {
     status: ?u16,
     duration_ms: DurationMilliseconds,
     error_name: []const u8,
+    reason: []const u8,
+    suggestion: []const u8,
 };
+
+pub fn logValidationFailure(request: *context.RequestContext, failure: anyerror) void {
+    if (!failure_reason.isValidationError(failure)) return;
+    request.server.logger.log(request.server.io, .{
+        .level = "warn",
+        .event = "validation.failed",
+        .message = "input validation failed",
+        .error_name = @errorName(failure),
+        .reason = failure_reason.forError(failure),
+        .suggestion = failure_reason.suggestion(failure),
+    }) catch {};
+}
 
 fn logCompletedRequest(
     request: *context.RequestContext,
@@ -221,7 +236,7 @@ fn logFailedRequest(
     method: []const u8,
     target: []const u8,
     protocol: []const u8,
-    error_name: []const u8,
+    failure: anyerror,
 ) std.Io.Cancelable!void {
     const io = request.server.io;
     const finished_at = std.Io.Clock.now(.awake, io);
@@ -236,7 +251,9 @@ fn logFailedRequest(
         .protocol = protocol,
         .status = request.response_status,
         .duration_ms = .{ .milliseconds = durationMilliseconds(duration) },
-        .error_name = error_name,
+        .error_name = @errorName(failure),
+        .reason = failure_reason.forError(failure),
+        .suggestion = failure_reason.suggestion(failure),
     }) catch {};
 }
 

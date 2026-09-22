@@ -1,5 +1,6 @@
 const std = @import("std");
 const context = @import("context.zig");
+const failure_reason = @import("../failure_reason.zig");
 const web_logging = @import("logging.zig");
 
 pub const max_body_bytes = 16 * 1024;
@@ -37,6 +38,15 @@ pub fn extract(comptime Schema: type, request: *context.RequestContext) !Extract
         );
         return failure;
     };
+    return extractBody(Schema, request) catch |failure| {
+        if (failure_reason.isValidationError(failure)) {
+            web_logging.logValidationFailure(request, failure);
+        }
+        return failure;
+    };
+}
+
+fn extractBody(comptime Schema: type, request: *context.RequestContext) !Extracted(Schema) {
     try validateContentLength(request.request.head.content_length);
 
     const read_buffer = try request.allocator().alloc(u8, 4096);
