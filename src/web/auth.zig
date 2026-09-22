@@ -42,6 +42,10 @@ const LoginForm = struct {
     password: []const u8,
 };
 
+const LogoutForm = struct {
+    csrf_token: ?[]const u8,
+};
+
 const PasswordForm = struct {
     csrf_token: ?[]const u8,
     current_password: []const u8,
@@ -294,7 +298,12 @@ fn postLogout(request: *RequestContext, _: Next) Error!void {
         web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout request had no session", .unauthorized, null, "missing session cookie");
         return errors.respond(request, .unauthorized);
     };
-    const csrf = headerValue(request, "x-csrf-token") orelse {
+    var parsed = form.extract(LogoutForm, request) catch |failure| {
+        web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout form was rejected", .forbidden, failure, "invalid logout form");
+        return errors.respond(request, .forbidden);
+    };
+    defer parsed.deinit(request.allocator());
+    const csrf = headerValue(request, "x-csrf-token") orelse parsed.value.csrf_token orelse {
         web_logging.logDiagnostic(request, "warn", "auth.logout_rejected", "logout request had no CSRF token", .forbidden, null, "missing CSRF token");
         return errors.respond(request, .forbidden);
     };

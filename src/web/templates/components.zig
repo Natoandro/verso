@@ -1,5 +1,9 @@
 const tmpl = @import("tmpl");
 
+pub const admin_header = tmpl.parse(@embedFile("components/admin_header.html"), .{
+    .parameters = .{ .csrf_token = {}, .is_authenticated = {} },
+});
+
 pub const editor_head = tmpl.parse(@embedFile("components/editor_head.html"), .{
     .parameters = .{ .page_title = {} },
 });

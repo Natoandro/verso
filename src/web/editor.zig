@@ -480,4 +480,5 @@ test "editor template renders a text section" {
     defer std.testing.allocator.free(rendered);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "name=\"markdown\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "<svg") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "Signed in") != null);
 }

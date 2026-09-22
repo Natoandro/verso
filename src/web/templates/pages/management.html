@@ -10,17 +10,13 @@
   </head>
   <body class="standalone-page">
     <main class="management-page">
+      {{> admin_header csrf_token=csrf_token is_authenticated=is_authenticated }}
       <header class="management-header">
         <div>
-          <a class="management-brand" href="/" aria-label="Verso home"><span class="management-brand-mark">V</span> Verso</a>
           <p class="eyebrow">Publication access</p>
           <h1>Authors and assignments</h1>
           <p>Manage the people who can shape this publication.</p>
         </div>
-        <nav class="management-nav" aria-label="Admin navigation">
-          <a class="theme-button theme-button-quiet" href="/admin/editor">Editor</a>
-          <a class="theme-button theme-button-quiet" href="/admin/password">Change password</a>
-        </nav>
       </header>
 
       <section class="management-section">

@@ -3,6 +3,7 @@
   {{> head page_title=page_title }}
   <body>
     <main class="editor-shell" id="editor" data-editor data-document-id="{{ document_id }}">
+      {{> admin_header csrf_token=csrf_token is_authenticated=true }}
       <header class="editor-header">
         <div class="editor-context">
           <p class="eyebrow">Verso</p>

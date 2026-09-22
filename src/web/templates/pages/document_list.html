@@ -3,13 +3,14 @@
   {{> head page_title=page_title }}
   <body>
     <main class="admin-page" id="document-list" data-document-list>
+      {{> admin_header csrf_token=csrf_token is_authenticated=true }}
       <header class="admin-page-header">
         <div>
           <p class="eyebrow">Verso</p>
           <h1>Documents</h1>
           <p class="admin-lede">Drafts assigned to your editorial account.</p>
         </div>
-        <a class="admin-link" href="/admin/password">Account settings</a>
+        <span class="admin-page-status">Editorial workspace</span>
       </header>
 
       {{#if has_notice}}

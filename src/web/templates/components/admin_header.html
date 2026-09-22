@@ -1,0 +1,24 @@
+<header class="admin-layout-header">
+  <a class="admin-layout-brand" href="/" aria-label="Verso home">
+    <span class="admin-layout-brand-mark">V</span>
+    <span>Verso</span>
+  </a>
+  {{#if is_authenticated}}
+    <nav class="admin-layout-nav" aria-label="Admin navigation">
+      <a href="/admin/editor">Workspace</a>
+      <a href="/admin/password">Account</a>
+    </nav>
+  {{/if}}
+  <div class="admin-layout-session">
+    {{#if is_authenticated}}
+      <span class="admin-session-status"><span class="admin-session-dot" aria-hidden="true"></span>Signed in</span>
+      <form class="admin-session-form" method="post" action="/admin/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="theme-button theme-button-quiet admin-session-button" type="submit">Sign out</button>
+      </form>
+    {{#else}}
+      <span class="admin-session-status"><span class="admin-session-dot admin-session-dot-offline" aria-hidden="true"></span>Not signed in</span>
+      <a class="admin-session-link" href="/admin/login">Sign in</a>
+    {{/if}}
+  </div>
+</header>

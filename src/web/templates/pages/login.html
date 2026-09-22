@@ -7,16 +7,14 @@
     <meta name="theme-color" content="#fbfaf7">
     <title>Sign in — Verso</title>
     <link rel="stylesheet" href="/admin/theme.css">
+    <link rel="stylesheet" href="/admin/admin.css">
     <link rel="stylesheet" href="/admin/auth.css">
     <script src="https://unpkg.com/htmx.org@4.0.0/dist/htmx.min.js" integrity="sha384-BvJpBiO8Kh31EqtJe5DRIeWrHWnCGkwytKs9NKFi86Hhw96dEqdEMzZDeK9iEGTc" crossorigin="anonymous" defer></script>
   </head>
   <body class="auth-page">
+    {{> admin_header csrf_token=csrf_token is_authenticated=is_authenticated }}
     <main class="auth-shell">
       <section class="auth-intro" aria-label="About Verso">
-        <a class="auth-brand" href="/" aria-label="Verso home">
-          <span class="auth-brand-mark">V</span>
-          <span>Verso</span>
-        </a>
         <div class="auth-intro-copy">
           <p class="auth-eyebrow">Editorial workspace</p>
           <h1>Make space for ideas worth sharing.</h1>

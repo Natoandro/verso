@@ -7,12 +7,17 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const management = @import("../application/identity_management.zig");
 const routing = @import("router.zig");
-const templates = @import("templates/root.zig");
+const escape = @import("tmpl").escape;
+const tmpl = @import("tmpl");
 const web_logging = @import("logging.zig");
 
 const RequestContext = context.RequestContext;
 const Next = layer.Next;
 const Error = anyerror;
+
+const admin_header = tmpl.parse(@embedFile("templates/components/admin_header.html"), .{
+    .parameters = .{ .csrf_token = {}, .is_authenticated = {} },
+});
 
 const AuthorForm = struct {
     csrf_token: ?[]const u8,
@@ -208,15 +213,82 @@ fn managerToken(request: *RequestContext) Error!?[]const u8 {
 }
 
 fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!void {
+    var output: std.Io.Writer.Allocating = .init(request.allocator());
+    defer output.deinit();
+    const writer = &output.writer;
     const csrf_token = auth.cookieValue(request, auth.csrf_cookie_name) orelse return error.InvalidCsrfToken;
-    const body = try templates.pages.management.renderAlloc(request.allocator(), .{
-        .csrf_token = csrf_token,
-        .authors = snapshot.authors,
-        .editors = snapshot.editors,
-        .assignments = snapshot.assignments,
-    });
+    try writer.writeAll(
+        \\<!doctype html><html lang="en"><head><meta charset="utf-8">
+        \\<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+        \\<title>Authors and assignments - Verso</title><link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+        \\<body class="standalone-page"><main class="management-page">
+    );
+    try admin_header.render(writer, .{ .csrf_token = csrf_token, .is_authenticated = true });
+    try writer.writeAll(
+        \\<header class="management-header"><div>
+        \\<p class="eyebrow">Publication access</p><h1>Authors and assignments</h1><p>Manage the people who can shape this publication.</p></div></header>
+        \\<section class="management-section"><h2>Add author</h2><form class="management-form management-create-form" method="post" action="/admin/authors">
+        \\<input type="hidden" name="csrf_token" value="
+    );
+    try writeCsrf(writer, request);
+    try writer.writeAll(
+        \\"><label>Name <input name="display_name" required></label>
+        \\<label>Slug <input name="slug" required></label>
+        \\<label>Biography <textarea name="biography"></textarea></label>
+        \\<div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Add author</button></div></form></section>
+        \\<section class="management-section"><h2>Authors</h2><ul class="management-list">
+    );
+    for (snapshot.authors) |author| {
+        try writer.writeAll("<li class=\"management-list-item\"><form class=\"management-form\" method=\"post\" action=\"/admin/authors/");
+        try writer.print("{}", .{author.id});
+        try writer.writeAll("\"><input type=\"hidden\" name=\"csrf_token\" value=\"");
+        try writeCsrf(writer, request);
+        try writer.writeAll("\"><label>Name <input name=\"display_name\" value=\"");
+        try escape.write(writer, author.display_name.data, true);
+        try writer.writeAll("\" required></label><label>Slug <input name=\"slug\" value=\"");
+        try escape.write(writer, author.slug.data, true);
+        try writer.writeAll("\" required></label><label>Biography <textarea name=\"biography\">");
+        try escape.write(writer, author.biography.data, true);
+        try writer.writeAll("</textarea></label><div class=\"management-actions\"><button class=\"theme-button theme-button-primary\" type=\"submit\">Save</button></div></form></li>");
+    }
+    try writer.writeAll("</ul></section><section class=\"management-section\"><h2>Assignments</h2><ul class=\"management-list\">");
+    for (snapshot.assignments) |assignment| {
+        try writer.writeAll("<li class=\"management-list-item management-assignment\"><p><strong>");
+        try escape.write(writer, assignment.editor_display_name.data, true);
+        try writer.writeAll("</strong> - ");
+        try escape.write(writer, assignment.scope_kind.data, true);
+        try writer.writeAll(" ");
+        try escape.write(writer, assignment.scope_name.data, true);
+        try writer.writeAll("</p><form class=\"management-inline-form\" method=\"post\" action=\"/admin/assignments/");
+        try writer.print("{}/revoke\"><input type=\"hidden\" name=\"csrf_token\" value=\"", .{assignment.id});
+        try writeCsrf(writer, request);
+        try writer.print("\"><input type=\"hidden\" name=\"expected_revision\" value=\"{}\"><button type=\"submit\">Revoke</button></form></li>", .{assignment.revision_number});
+    }
+    try writer.writeAll(
+        \\</ul></section><section class="management-section"><h2>Assign editor</h2><form class="management-form management-create-form" method="post" action="/admin/assignments">
+        \\<input type="hidden" name="csrf_token" value="
+    );
+    try writeCsrf(writer, request);
+    try writer.writeAll("\"><label>Editor <select name=\"editor_user_id\" required>");
+    for (snapshot.editors) |editor| {
+        try writer.print("<option value=\"{}\">", .{editor.id});
+        try escape.write(writer, editor.display_name.data, true);
+        try writer.writeAll("</option>");
+    }
+    try writer.writeAll(
+        \\</select></label><label>Scope <select name="scope_type">
+        \\<option value="author">Author</option><option value="document">Document</option>
+        \\</select></label><label>Scope ID <input name="scope_id" inputmode="numeric" required></label>
+        \\<div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Assign</button></div></form></section></main></body></html>
+    );
+    const body = try output.toOwnedSlice();
     defer request.allocator().free(body);
     return auth.respond(request, body, "text/html; charset=utf-8", &.{.{ .name = "cache-control", .value = "no-store" }}, .ok);
+}
+
+fn writeCsrf(writer: *std.Io.Writer, request: *const RequestContext) !void {
+    const token = auth.cookieValue(request, auth.csrf_cookie_name) orelse return error.InvalidCsrfToken;
+    try escape.write(writer, token, true);
 }
 
 fn redirectToAuthors(request: *RequestContext) Error!void {
