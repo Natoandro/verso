@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Authors and assignments - Verso</title>
+    <link rel="stylesheet" href="/admin/theme.css">
+    <link rel="stylesheet" href="/admin/admin.css">
+  </head>
+  <body class="standalone-page">
+    <main class="management-page">
+      <header class="management-header">
+        <div>
+          <a class="management-brand" href="/" aria-label="Verso home"><span class="management-brand-mark">V</span> Verso</a>
+          <p class="eyebrow">Publication access</p>
+          <h1>Authors and assignments</h1>
+          <p>Manage the people who can shape this publication.</p>
+        </div>
+        <nav class="management-nav" aria-label="Admin navigation">
+          <a class="theme-button theme-button-quiet" href="/admin/editor">Editor</a>
+          <a class="theme-button theme-button-quiet" href="/admin/password">Change password</a>
+        </nav>
+      </header>
+
+      <section class="management-section">
+        <h2>Add author</h2>
+        <form class="management-form management-create-form" method="post" action="/admin/authors">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label>Name <input name="display_name" required></label>
+          <label>Slug <input name="slug" required></label>
+          <label>Biography <textarea name="biography"></textarea></label>
+          <div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Add author</button></div>
+        </form>
+      </section>
+
+      <section class="management-section">
+        <h2>Authors</h2>
+        <ul class="management-list">
+          {{#for authors |author|}}
+            <li class="management-list-item">
+              <form class="management-form" method="post" action="/admin/authors/{{ author.id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label>Name <input name="display_name" value="{{ author.display_name.data }}" required></label>
+                <label>Slug <input name="slug" value="{{ author.slug.data }}" required></label>
+                <label>Biography <textarea name="biography">{{ author.biography.data }}</textarea></label>
+                <div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Save</button></div>
+              </form>
+            </li>
+          {{/for}}
+        </ul>
+      </section>
+
+      <section class="management-section">
+        <h2>Assignments</h2>
+        <ul class="management-list">
+          {{#for assignments |assignment|}}
+            <li class="management-list-item management-assignment">
+              <p><strong>{{ assignment.editor_display_name.data }}</strong> - {{ assignment.scope_kind.data }} {{ assignment.scope_name.data }}</p>
+              <form class="management-inline-form" method="post" action="/admin/assignments/{{ assignment.id }}/revoke">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="expected_revision" value="{{ assignment.revision_number }}">
+                <button type="submit">Revoke</button>
+              </form>
+            </li>
+          {{/for}}
+        </ul>
+      </section>
+
+      <section class="management-section">
+        <h2>Assign editor</h2>
+        <form class="management-form management-create-form" method="post" action="/admin/assignments">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label>Editor <select name="editor_user_id" required>
+            {{#for editors |editor|}}
+              <option value="{{ editor.id }}">{{ editor.display_name.data }}</option>
+            {{/for}}
+          </select></label>
+          <label>Scope <select name="scope_type"><option value="author">Author</option><option value="document">Document</option></select></label>
+          <label>Scope ID <input name="scope_id" inputmode="numeric" required></label>
+          <div class="management-actions"><button class="theme-button theme-button-primary" type="submit">Assign</button></div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

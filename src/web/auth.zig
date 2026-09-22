@@ -9,7 +9,7 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
-const auth_templates = @import("auth_templates.zig");
+const templates = @import("templates/root.zig");
 const web_logging = @import("logging.zig");
 
 pub const cookieValue = auth_cookies.value;
@@ -23,8 +23,6 @@ const Error = anyerror;
 const theme_css = @embedFile("styles/theme.css");
 const auth_css = @embedFile("styles/auth.css");
 const admin_css = @embedFile("styles/admin.css");
-const login_html = @embedFile("templates/pages/login.html");
-const register_html_template = @embedFile("templates/pages/register.html");
 
 pub const session_cookie_name = "__Host-verso_session";
 pub const csrf_cookie_name = "__Host-verso_csrf";
@@ -165,7 +163,9 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
         }
     }
 
-    return respond(request, login_html, "text/html; charset=utf-8", &[_]std.http.Header{
+    const html = try templates.pages.auth_login.renderAlloc(request.allocator(), .{});
+    defer request.allocator().free(html);
+    return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
@@ -178,8 +178,8 @@ fn getRegister(request: *RequestContext, _: Next) Error!void {
     };
     if (!setup_available) return redirectToLogin(request);
     var token = try auth_crypto.newSecret(request.server.io);
-    const html_buffer = try request.allocator().alloc(u8, register_html_template.len + token.len);
-    const html = try std.fmt.bufPrint(html_buffer, register_html_template, .{&token});
+    const html = try templates.pages.auth_register.renderAlloc(request.allocator(), .{ .csrf_token = &token });
+    defer request.allocator().free(html);
     const cookie_buffer = try request.allocator().alloc(u8, 192);
     const cookie = try formatCookie(cookie_buffer, setup_csrf_cookie_name, &token, false);
     return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
@@ -336,8 +336,8 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
         web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password page had no CSRF cookie", .forbidden, null, "missing CSRF cookie");
         return errors.respond(request, .forbidden);
     };
-    const html_buffer = try request.allocator().alloc(u8, auth_templates.password_html.len + csrf_token.len);
-    const html = try std.fmt.bufPrint(html_buffer, auth_templates.password_html, .{csrf_token});
+    const html = try templates.pages.auth_password.renderAlloc(request.allocator(), .{ .csrf_token = csrf_token });
+    defer request.allocator().free(html);
     return respond(request, html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
@@ -380,7 +380,9 @@ fn postPassword(request: *RequestContext, _: Next) Error!void {
 
 fn getRecovery(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    return respond(request, auth_templates.recovery_html, "text/html; charset=utf-8", &.{
+    const html = try templates.pages.auth_recovery.renderAlloc(request.allocator(), .{});
+    defer request.allocator().free(html);
+    return respond(request, html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
@@ -402,7 +404,9 @@ fn postRecovery(request: *RequestContext, _: Next) Error!void {
 
 fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    return respond(request, auth_templates.recovery_complete_html, "text/html; charset=utf-8", &.{
+    const html = try templates.pages.auth_recovery_complete.renderAlloc(request.allocator(), .{});
+    defer request.allocator().free(html);
+    return respond(request, html, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }

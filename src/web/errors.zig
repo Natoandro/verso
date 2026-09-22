@@ -1,13 +1,13 @@
 const std = @import("std");
 const context = @import("context.zig");
-const tmpl = @import("tmpl");
+const templates = @import("templates/root.zig");
 const web_logging = @import("logging.zig");
 
 const RequestContext = context.RequestContext;
 const Error = anyerror;
 const theme_css = @embedFile("styles/theme.css");
 const error_css = @embedFile("styles/error.css");
-const error_page_template = tmpl.parse(@embedFile("templates/pages/error.html"), .{});
+const error_page_template = templates.pages.error_page;
 
 /// Renders the generic HTML response for an HTTP error status.
 ///

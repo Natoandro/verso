@@ -41,7 +41,7 @@
           <p>This one-time step gives you full control of this publication.</p>
         </div>
         <form class="auth-form" method="post" action="/admin/register">
-          <input type="hidden" name="csrf_token" value="{s}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="auth-form-grid">
             <div class="auth-field">
               <label for="display-name">Display name</label>
@@ -72,10 +72,10 @@
         <script>
           const password = document.getElementById("password");
           const confirmation = document.getElementById("password-confirmation");
-          const validateConfirmation = () => {{
+          const validateConfirmation = () => {
             const mismatch = confirmation.value.length > 0 && password.value !== confirmation.value;
             confirmation.setCustomValidity(mismatch ? "Passwords do not match." : "");
-          }};
+          };
           password.addEventListener("input", validateConfirmation);
           confirmation.addEventListener("input", validateConfirmation);
         </script>

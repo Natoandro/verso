@@ -27,6 +27,7 @@ pub fn layout(comptime source: []const u8) Layout(source) {
 pub fn Template(comptime source: []const u8, comptime options: anytype) type {
     return struct {
         pub const template_options = options;
+        pub const parsed = parser.parse(source);
 
         pub fn render(
             comptime self: @This(),
@@ -38,9 +39,9 @@ pub fn Template(comptime source: []const u8, comptime options: anytype) type {
             // the whole Parsed value in a runtime local would materialize its
             // source-sized node buffer in every render stack frame.
             if (comptime @hasField(@TypeOf(options), "components")) {
-                try renderer.renderNodes(writer, comptime parser.parse(source), options.components, context);
+                try renderer.renderNodes(writer, parsed, options.components, context);
             } else {
-                try renderer.renderNodes(writer, comptime parser.parse(source), EmptyComponents{}, context);
+                try renderer.renderNodes(writer, parsed, EmptyComponents{}, context);
             }
         }
 
@@ -62,9 +63,9 @@ pub fn Template(comptime source: []const u8, comptime options: anytype) type {
 }
 
 pub fn parse(comptime source: []const u8, comptime options: anytype) Template(source, options) {
+    const TemplateType = Template(source, options);
     comptime {
-        const parsed = parser.parse(source);
-        validateComponentNames(parsed, options);
+        validateComponentNames(TemplateType.parsed, options);
     }
     return .{};
 }

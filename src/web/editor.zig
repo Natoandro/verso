@@ -9,46 +9,10 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
+const templates = @import("templates/root.zig");
 const views = @import("editor_view.zig");
-const tmpl = @import("tmpl");
 const web_logging = @import("logging.zig");
 
-const editor_head = tmpl.parse(@embedFile("templates/components/editor_head.html"), .{
-    .parameters = .{ .page_title = {} },
-});
-const editor_section = tmpl.parse(@embedFile("templates/components/editor_section.html"), .{
-    .parameters = .{
-        .section = {},
-        .csrf_token = {},
-        .document_id = {},
-        .version_id = {},
-        .revision = {},
-        .details_value = {},
-        .title_value = {},
-    },
-    .components = .{
-        .icon_check = tmpl.parse(@embedFile("templates/components/icon_check.html"), .{}),
-        .icon_copy = tmpl.parse(@embedFile("templates/components/icon_copy.html"), .{}),
-        .icon_delete = tmpl.parse(@embedFile("templates/components/icon_delete.html"), .{}),
-        .icon_down = tmpl.parse(@embedFile("templates/components/icon_down.html"), .{}),
-        .icon_edit = tmpl.parse(@embedFile("templates/components/icon_edit.html"), .{}),
-        .icon_up = tmpl.parse(@embedFile("templates/components/icon_up.html"), .{}),
-    },
-});
-const editor_template = tmpl.parse(@embedFile("templates/pages/editor.html"), .{
-    .components = .{
-        .head = editor_head,
-        .section_card = editor_section,
-        .icon_check = tmpl.parse(@embedFile("templates/components/icon_check.html"), .{}),
-        .icon_details = tmpl.parse(@embedFile("templates/components/icon_details.html"), .{}),
-        .icon_edit = tmpl.parse(@embedFile("templates/components/icon_edit.html"), .{}),
-        .icon_image = tmpl.parse(@embedFile("templates/components/icon_image.html"), .{}),
-        .icon_text = tmpl.parse(@embedFile("templates/components/icon_text.html"), .{}),
-    },
-});
-const document_list_template = tmpl.parse(@embedFile("templates/pages/document_list.html"), .{
-    .components = .{ .head = editor_head },
-});
 const theme_css = @embedFile("styles/theme.css");
 const editor_base_css = @embedFile("styles/editor/base.css");
 const editor_document_css = @embedFile("styles/editor/document.css");
@@ -356,8 +320,8 @@ fn editorFailure(request: *context.RequestContext, failure: anyerror) !void {
 
 fn respondPage(request: *context.RequestContext, page: views.Page) !void {
     const content = switch (page.kind) {
-        .editor => editor_template.renderAlloc(request.allocator(), page),
-        .document_list => document_list_template.renderAlloc(request.allocator(), page),
+        .editor => templates.pages.editor.renderAlloc(request.allocator(), page),
+        .document_list => templates.pages.document_list.renderAlloc(request.allocator(), page),
     } catch |failure| {
         web_logging.logDiagnostic(request, "error", "editor.render_failed", "editor page template rendering failed", .internal_server_error, failure, null);
         return failure;
@@ -512,7 +476,7 @@ test "editor template renders a text section" {
         .has_multiple = false,
         .section_count = 1,
     };
-    const rendered = try editor_template.renderAlloc(std.testing.allocator, page);
+    const rendered = try templates.pages.editor.renderAlloc(std.testing.allocator, page);
     defer std.testing.allocator.free(rendered);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "name=\"markdown\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "<svg") != null);

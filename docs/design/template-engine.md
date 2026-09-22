@@ -428,6 +428,13 @@ shadowing; layout composition; independent fragment rendering; and compile
 failures for malformed templates, unknown fields, invalid conditions, invalid
 iteration, missing components, duplicate snippets, and invalid snippet calls.
 
+Application templates are owned by compile-time modules under
+`src/web/templates/`. Each HTML source is embedded and parsed by one exported
+module-level template value. A small module hierarchy groups shared components
+and page templates, while web handlers import those values and supply only
+request-specific context. This is a source-organization rule, not a runtime
+registry: requests never load, parse, or look up templates by name.
+
 ## 9. Design Principle
 
 The engine optimizes for:
