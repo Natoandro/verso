@@ -10,7 +10,19 @@
         </div>
         <div class="editor-header-actions">
           <a class="theme-button theme-button-quiet" href="/admin/editor">All drafts</a>
-          <button class="theme-button theme-button-quiet" type="button" aria-haspopup="dialog" aria-controls="document-details-dialog" onclick="document.getElementById('document-details-dialog').showModal()">Document details</button>
+          <button
+            class="icon-button icon-button-details"
+            type="button"
+            title="{{ details_label }}"
+            aria-label="{{ details_label }}"
+            aria-pressed="{{#if details_open}}true{{#else}}false{{/if}}"
+            hx-get="/admin/editor?document={{ document_id }}&amp;details={{ details_toggle }}&amp;title={{ title_value }}"
+            hx-target="#editor"
+            hx-select="#editor"
+            hx-swap="outerHTML"
+          >
+            <span class="icon">{{> icon_details }}</span>
+          </button>
         </div>
       </header>
 
@@ -21,16 +33,69 @@
       <section class="document-article" aria-labelledby="document-title">
         <div class="article-title-row">
           <div class="article-title-content">
-            <h1 id="document-title" class="document-title">{{ title }}</h1>
+            {{#if title_editing}}
+              <form class="title-edit-form" method="post" action="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-post="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="document_id" value="{{ document_id }}">
+                <input type="hidden" name="version_id" value="{{ version_id }}">
+                <input type="hidden" name="expected_revision" value="{{ revision }}">
+                <input type="hidden" name="slug" value="{{ slug }}">
+                <input type="hidden" name="description" value="{{ description }}">
+                <input id="document-title" class="document-title" name="title" value="{{ title }}" aria-label="Edit document title" autocomplete="off" required autofocus>
+                <button class="icon-button icon-button-check title-action" type="submit" title="Validate title" aria-label="Validate title">
+                  <span class="icon">{{> icon_check }}</span>
+                </button>
+              </form>
+            {{#else}}
+              <h1 id="document-title" class="document-title">{{ title }}</h1>
+            {{/if}}
             {{#if has_description}}<p class="article-description">{{ description }}</p>{{/if}}
           </div>
+          {{#if title_editing}}
+          {{#else}}
+            <button
+              class="icon-button icon-button-edit title-action"
+              type="button"
+              title="Edit title"
+              aria-label="Edit title"
+              hx-get="/admin/editor?document={{ document_id }}&amp;title=1&amp;details={{ details_value }}"
+              hx-target="#editor"
+              hx-select="#editor"
+              hx-swap="outerHTML"
+            >
+              <span class="icon">{{> icon_edit }}</span>
+            </button>
+          {{/if}}
         </div>
+
+        {{#if details_open}}
+          <form class="details-panel" method="post" action="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-post="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="document_id" value="{{ document_id }}">
+            <input type="hidden" name="version_id" value="{{ version_id }}">
+            <input type="hidden" name="expected_revision" value="{{ revision }}">
+            <input type="hidden" name="title" value="{{ title }}">
+            <div class="details-grid">
+              <label>
+                URL slug
+                <input name="slug" value="{{ slug }}" aria-label="URL slug" placeholder="URL slug" required>
+              </label>
+              <label>
+                Short description
+                <textarea name="description" rows="2" aria-label="Short description" placeholder="Short description">{{ description }}</textarea>
+              </label>
+            </div>
+            <div class="details-actions">
+              <button class="theme-button theme-button-primary" type="submit">Save details</button>
+            </div>
+          </form>
+        {{/if}}
 
         <div class="article-toolbar"><span class="section-count">{{ section_count }} section{{#if has_multiple}}s{{/if}}</span></div>
         <div class="section-list" aria-live="polite">
           {{#if has_sections}}
             {{#for sections |section|}}
-              {{> section_card section=section csrf_token=csrf_token document_id=document_id version_id=version_id revision=revision details_value=details_value oob="" }}
+              {{> section_card section=section csrf_token=csrf_token document_id=document_id version_id=version_id revision=revision details_value=details_value title_value=title_value }}
             {{/for}}
           {{#else}}
             <p class="empty-state">Your article is empty. Add text or an image placeholder to begin.</p>
@@ -39,61 +104,24 @@
 
         <div class="add-section">
           <span class="add-section-label">Add to article</span>
-          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="operation" value="insert-text">
             <input type="hidden" name="document_id" value="{{ document_id }}">
             <input type="hidden" name="version_id" value="{{ version_id }}">
             <input type="hidden" name="expected_revision" value="{{ revision }}">
-            <button class="icon-button icon-button-text" type="submit" aria-label="Add text" title="Add text">＋</button>
+            <button class="icon-button icon-button-text" type="submit" aria-label="Add text" title="Add text"><span class="icon">{{> icon_text }}</span></button>
           </form>
-          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="operation" value="insert-image">
             <input type="hidden" name="document_id" value="{{ document_id }}">
             <input type="hidden" name="version_id" value="{{ version_id }}">
             <input type="hidden" name="expected_revision" value="{{ revision }}">
-            <button class="icon-button icon-button-image" type="submit" aria-label="Add image placeholder" title="Add image placeholder">▧</button>
+            <button class="icon-button icon-button-image" type="submit" aria-label="Add image placeholder" title="Add image placeholder"><span class="icon">{{> icon_image }}</span></button>
           </form>
         </div>
       </section>
-
-      <dialog class="theme-modal theme-modal-wide" id="document-details-dialog" aria-labelledby="document-details-dialog-title">
-        <div class="theme-modal-panel">
-          <div class="theme-modal-header">
-            <div>
-              <p class="eyebrow">Document details</p>
-              <h2 id="document-details-dialog-title">Edit your draft</h2>
-              <p>Update the title, address, and short introduction.</p>
-            </div>
-            <button class="theme-modal-close" type="button" aria-label="Close dialog" onclick="this.closest('dialog').close()">×</button>
-          </div>
-          <form class="theme-modal-form" method="post" action="/admin/editor/document" hx-post="/admin/editor/document" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="document_id" value="{{ document_id }}">
-            <input type="hidden" name="version_id" value="{{ version_id }}">
-            <input id="document-revision" type="hidden" name="expected_revision" value="{{ revision }}">
-            <label>
-              Title
-              <input name="title" value="{{ title }}" required>
-            </label>
-            <div class="details-grid">
-              <label>
-                URL slug
-                <input name="slug" value="{{ slug }}" placeholder="URL slug" required>
-              </label>
-              <label>
-                Short description
-                <textarea name="description" rows="2" placeholder="Short description">{{ description }}</textarea>
-              </label>
-            </div>
-            <div class="theme-modal-actions">
-              <button class="theme-button theme-button-quiet" type="button" onclick="this.closest('dialog').close()">Cancel</button>
-              <button class="theme-button theme-button-primary" type="submit">Save draft</button>
-            </div>
-          </form>
-        </div>
-      </dialog>
 
       <footer class="editor-footer">
         <span class="status-dot" aria-hidden="true"></span>

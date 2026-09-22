@@ -1,113 +1,94 @@
 <article
   id="section-{{ section.id }}"
-  {{{ oob }}}
   class="section-card {{section.kind}}-section{{#if section.is_preview}} is-preview{{/if}}"
   tabindex="0"
 >
   <div class="section-actions">
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="move-up">
       <input type="hidden" name="document_id" value="{{ document_id }}">
       <input type="hidden" name="version_id" value="{{ version_id }}">
       <input type="hidden" name="section_id" value="{{ section.id }}">
       <input type="hidden" name="expected_revision" value="{{ revision }}">
-      <button class="icon-button icon-button-up" type="submit" aria-label="Move section up" title="Move section up" {{#if section.is_first}}disabled{{/if}}>↑</button>
+      <button class="icon-button icon-button-up" type="submit" aria-label="Move section up" title="Move section up" {{#if section.is_first}}disabled{{/if}}><span class="icon">{{> icon_up }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="move-down">
       <input type="hidden" name="document_id" value="{{ document_id }}">
       <input type="hidden" name="version_id" value="{{ version_id }}">
       <input type="hidden" name="section_id" value="{{ section.id }}">
       <input type="hidden" name="expected_revision" value="{{ revision }}">
-      <button class="icon-button icon-button-down" type="submit" aria-label="Move section down" title="Move section down" {{#if section.is_last}}disabled{{/if}}>↓</button>
+      <button class="icon-button icon-button-down" type="submit" aria-label="Move section down" title="Move section down" {{#if section.is_last}}disabled{{/if}}><span class="icon">{{> icon_down }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="duplicate">
       <input type="hidden" name="document_id" value="{{ document_id }}">
       <input type="hidden" name="version_id" value="{{ version_id }}">
       <input type="hidden" name="section_id" value="{{ section.id }}">
       <input type="hidden" name="expected_revision" value="{{ revision }}">
-      <button class="icon-button icon-button-copy" type="submit" aria-label="Duplicate section" title="Duplicate section">⧉</button>
+      <button class="icon-button icon-button-copy" type="submit" aria-label="Duplicate section" title="Duplicate section"><span class="icon">{{> icon_copy }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="delete">
       <input type="hidden" name="document_id" value="{{ document_id }}">
       <input type="hidden" name="version_id" value="{{ version_id }}">
       <input type="hidden" name="section_id" value="{{ section.id }}">
       <input type="hidden" name="expected_revision" value="{{ revision }}">
-      <button class="icon-button icon-button-delete" type="submit" aria-label="Delete section" title="Delete section">×</button>
+      <button class="icon-button icon-button-delete" type="submit" aria-label="Delete section" title="Delete section"><span class="icon">{{> icon_delete }}</span></button>
     </form>
+    {{#if section.is_preview}}
+      <button
+        class="icon-button icon-button-edit"
+        type="button"
+        aria-label="Edit section"
+        title="Edit section"
+        hx-get="/admin/editor?document={{ document_id }}&amp;details={{ details_value }}&amp;title={{ title_value }}"
+        hx-target="#editor"
+        hx-select="#editor"
+        hx-swap="outerHTML"
+      ><span class="icon">{{> icon_edit }}</span></button>
+    {{/if}}
   </div>
 
   {{#if section.is_preview}}
     <div class="section-card-body section-preview">{{{ section.preview_html }}}</div>
-    <button class="theme-button theme-button-quiet section-edit-trigger" type="button" aria-haspopup="dialog" aria-controls="section-edit-dialog-{{ section.id }}" onclick="document.getElementById('section-edit-dialog-{{ section.id }}').showModal()">Edit section</button>
   {{#else}}
-    <div class="section-card-body section-editor-summary">
-      <p class="section-summary-kind">{{ section.kind }} section</p>
-      <p>Open the section editor to add or update this content.</p>
-      <button class="theme-button theme-button-quiet section-edit-trigger" type="button" aria-haspopup="dialog" aria-controls="section-edit-dialog-{{ section.id }}" onclick="document.getElementById('section-edit-dialog-{{ section.id }}').showModal()">Edit section</button>
-    </div>
-  {{/if}}
-
-  <dialog class="theme-modal theme-modal-wide" id="section-edit-dialog-{{ section.id }}" aria-labelledby="section-edit-dialog-title-{{ section.id }}">
-    <div class="theme-modal-panel">
-      <div class="theme-modal-header">
-        <div>
-          <p class="eyebrow">{{ section.kind }} section</p>
-          <h2 id="section-edit-dialog-title-{{ section.id }}">Edit section</h2>
-          <p>Make a focused change, then save or preview it.</p>
+    <form class="section-card-body section-editor" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="operation" value="preview">
+      <input type="hidden" name="document_id" value="{{ document_id }}">
+      <input type="hidden" name="version_id" value="{{ version_id }}">
+      <input type="hidden" name="section_id" value="{{ section.id }}">
+      <input type="hidden" name="expected_revision" value="{{ revision }}">
+      <input type="hidden" name="kind" value="{{ section.kind }}">
+      {{#if section.is_text}}
+        <div class="growing-textarea" data-replicated-value="{{ section.markdown }}">
+          <textarea name="markdown" aria-label="Markdown content" spellcheck="false" required oninput="this.parentNode.dataset.replicatedValue=this.value">{{ section.markdown }}</textarea>
         </div>
-        <button class="theme-modal-close" type="button" aria-label="Close dialog" onclick="this.closest('dialog').close()">×</button>
-      </div>
-      <form class="theme-modal-form" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="document_id" value="{{ document_id }}">
-        <input type="hidden" name="version_id" value="{{ version_id }}">
-        <input type="hidden" name="section_id" value="{{ section.id }}">
-        <input type="hidden" name="expected_revision" value="{{ revision }}">
-        <input type="hidden" name="kind" value="{{ section.kind }}">
-        {{#if section.is_text}}
-          <label>
-            Markdown content
-            <textarea class="theme-modal-textarea" name="markdown" spellcheck="false" required>{{ section.markdown }}</textarea>
-          </label>
-        {{#else}}
-          <div class="image-editor">
-            <div class="asset-note">Image upload is not part of this draft editor yet. Use an existing asset name.</div>
-            <div class="image-fields">
-              <label>
-                Asset name
-                <input name="asset" value="{{ section.asset }}" placeholder="Asset name" required>
-              </label>
-              <label>
-                Alt text
-                <input name="alt" value="{{ section.alt }}" placeholder="Alt text" required>
-              </label>
-            </div>
-            <label>
-              Caption
-              <input name="caption" value="{{ section.caption }}" placeholder="Caption">
-            </label>
-            <label class="display-field">Display
-              <select name="display">
-                <option value="inline" {{#if section.display_inline}}selected{{/if}}>Inline</option>
-                <option value="wide" {{#if section.display_wide}}selected{{/if}}>Wide</option>
-                <option value="full" {{#if section.display_full}}selected{{/if}}>Full</option>
-              </select>
-            </label>
+      {{#else}}
+        <div class="image-editor">
+          <div class="asset-note">Image upload is not part of this draft editor yet. Use an existing asset name.</div>
+          <div class="image-fields">
+            <input name="asset" value="{{ section.asset }}" placeholder="Asset name" aria-label="Asset name" required>
+            <input name="alt" value="{{ section.alt }}" placeholder="Alt text" aria-label="Alt text" required>
           </div>
-        {{/if}}
-        <div class="theme-modal-actions">
-          <button class="theme-button theme-button-quiet" type="button" onclick="this.closest('dialog').close()">Cancel</button>
-          <button class="theme-button theme-button-quiet" name="operation" value="preview" type="submit">Save and preview</button>
-          <button class="theme-button theme-button-primary" name="operation" value="update" type="submit">Save section</button>
+          <input name="caption" value="{{ section.caption }}" placeholder="Caption" aria-label="Caption">
+          <label class="display-field">
+            Display
+            <select name="display" aria-label="Image display">
+              <option value="inline" {{#if section.display_inline}}selected{{/if}}>Inline</option>
+              <option value="wide" {{#if section.display_wide}}selected{{/if}}>Wide</option>
+              <option value="full" {{#if section.display_full}}selected{{/if}}>Full</option>
+            </select>
+          </label>
         </div>
-      </form>
-    </div>
-  </dialog>
+      {{/if}}
+      <p class="section-save-hint">Save this section to validate and preview it.</p>
+      <button class="icon-button icon-button-check section-check" type="submit" aria-label="Validate section" title="Validate section"><span class="icon">{{> icon_check }}</span></button>
+    </form>
+  {{/if}}
 </article>

@@ -52,6 +52,7 @@
               action="/admin/editor/create"
               hx-post="/admin/editor/create"
               hx-target="#document-list"
+              hx-select="#editor"
               hx-swap="outerHTML"
               hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'
             >

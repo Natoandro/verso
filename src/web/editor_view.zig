@@ -46,6 +46,8 @@ pub const Page = struct {
     description: []const u8,
     has_description: bool,
     details_open: bool,
+    title_editing: bool,
+    title_value: []const u8,
     details_toggle: []const u8,
     details_value: []const u8,
     details_label: []const u8,
@@ -88,6 +90,8 @@ pub fn list(
         .description = "",
         .has_description = false,
         .details_open = false,
+        .title_editing = false,
+        .title_value = "0",
         .details_toggle = "1",
         .details_value = "0",
         .details_label = "Document details",
@@ -103,6 +107,7 @@ pub fn editor(
     csrf_token: []const u8,
     draft: document.DraftDocument,
     details_open: bool,
+    title_editing: bool,
     preview_id: ?i64,
     notice: []const u8,
     notice_is_error: bool,
@@ -128,6 +133,8 @@ pub fn editor(
         .description = draft.description orelse "",
         .has_description = draft.description != null and draft.description.?.len > 0,
         .details_open = details_open,
+        .title_editing = title_editing,
+        .title_value = if (title_editing) "1" else "0",
         .details_toggle = if (details_open) "0" else "1",
         .details_value = if (details_open) "1" else "0",
         .details_label = if (details_open) "Hide details" else "Document details",
@@ -213,7 +220,7 @@ test "editor view preserves draft sections and presentation flags" {
         .language = "en",
         .sections = &sections,
     };
-    const page = try editor(std.testing.allocator, "csrf", draft, false, 8, "", false);
+    const page = try editor(std.testing.allocator, "csrf", draft, false, false, 8, "", false);
     defer std.testing.allocator.free(page.sections);
     defer std.testing.allocator.free(page.sections[0].preview_html);
     try std.testing.expect(page.sections[0].is_preview);

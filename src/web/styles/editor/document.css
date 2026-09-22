@@ -13,6 +13,11 @@
   min-width: 0;
   flex: 1;
 }
+.title-edit-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
 .document-title {
   display: block;
   width: 100%;
@@ -29,6 +34,13 @@
   outline: none;
   overflow-wrap: anywhere;
   resize: none;
+}
+.title-edit-form .document-title {
+  flex: 1;
+}
+.title-action {
+  flex: 0 0 auto;
+  margin-top: 5px;
 }
 .document-title::placeholder {
   color: #aeb8b4;
@@ -49,6 +61,11 @@
   border-top: 1px solid #e3e7e3;
   border-bottom: 1px solid #e3e7e3;
   padding: 18px 0;
+}
+.details-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 .details-grid {
   display: grid;

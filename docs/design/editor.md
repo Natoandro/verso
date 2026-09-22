@@ -48,12 +48,12 @@ flowchart TB
 
 ### Form placement
 
-Forms that collect editorial fields are presented in modal dialogs rather than
-being embedded in the article or draft-list content. This keeps the publication
-surface focused on content and gives each editing action a clear, bounded
-workspace. A form may occupy the full page when the page itself is dedicated
-to that operation, such as account setup or password recovery. Compact
-action-only controls may remain beside the content they operate on.
+The editor keeps the document surface visible while fields are edited. Title,
+document details, and section fields are disclosed inline, with compact action
+controls beside the content they operate on. This preserves the document-like
+interaction of the editor while each confirmation still submits an explicit
+server mutation. A form may occupy the full page when the page itself is
+dedicated to that operation, such as account setup or password recovery.
 
 ## 2. Section-oriented editing
 
