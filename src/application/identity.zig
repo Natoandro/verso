@@ -166,7 +166,7 @@ pub const Service = struct {
             try password.verify(self.allocator, self.io, value.password_hash, password_text)
         else blk: {
             var ignored_hash: [password.encoded_hash_capacity]u8 = undefined;
-            _ = password.hash(self.allocator, self.io, "Verso invalid credential padding", &ignored_hash) catch {};
+            _ = try password.hash(self.allocator, self.io, "Verso invalid credential padding", &ignored_hash);
             break :blk false;
         };
         if (!valid) {
@@ -343,9 +343,7 @@ pub const Service = struct {
     }
 
     fn rateKey(prefix: []const u8, value: []const u8) [auth_crypto.encoded_secret_length]u8 {
-        var input: [1024]u8 = undefined;
-        const namespaced = std.fmt.bufPrint(&input, "{s}{s}", .{ prefix, value }) catch unreachable;
-        return auth_crypto.hashSecret(namespaced);
+        return auth_crypto.hashSecretParts(prefix, value);
     }
 };
 

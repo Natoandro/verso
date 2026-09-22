@@ -15,6 +15,15 @@ pub fn hashSecret(secret: []const u8) [encoded_secret_length]u8 {
     return std.fmt.bytesToHex(digest, .lower);
 }
 
+pub fn hashSecretParts(first: []const u8, second: []const u8) [encoded_secret_length]u8 {
+    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    hasher.update(first);
+    hasher.update(second);
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    hasher.final(&digest);
+    return std.fmt.bytesToHex(digest, .lower);
+}
+
 pub fn secretMatches(secret: []const u8, expected_hash: []const u8) bool {
     const actual_hash = hashSecret(secret);
     return constantTimeEqual(&actual_hash, expected_hash);
@@ -37,4 +46,7 @@ test "secret hashing is stable and comparisons are constant-shape" {
     try std.testing.expect(!constantTimeEqual(&first, "short"));
     const generated = try newSecret(std.testing.io);
     try std.testing.expect(!std.mem.eql(u8, &generated, &first));
+    const concatenated = hashSecret("prefixvalue");
+    const parts = hashSecretParts("prefix", "value");
+    try std.testing.expectEqualSlices(u8, &concatenated, &parts);
 }

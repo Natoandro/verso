@@ -232,11 +232,23 @@ fn parseFilename(filename: []const u8) !ParsedFilename {
     const separator = std.mem.indexOfScalar(u8, stem, '_') orelse return error.InvalidMigrationFilename;
     if (separator == 0 or separator + 1 == stem.len) return error.InvalidMigrationFilename;
 
-    const version = std.fmt.parseInt(i64, stem[0..separator], 10) catch {
-        return error.InvalidMigrationFilename;
+    const version = std.fmt.parseInt(i64, stem[0..separator], 10) catch |failure| switch (failure) {
+        error.InvalidCharacter => return error.InvalidMigrationFilename,
+        error.Overflow => return error.InvalidMigrationVersion,
     };
     if (version <= 0) return error.InvalidMigrationVersion;
     return .{ .version = version, .name = stem[separator + 1 ..] };
+}
+
+test "migration filename overflow is distinct from malformed syntax" {
+    try std.testing.expectError(
+        error.InvalidMigrationVersion,
+        parseFilename("9223372036854775808_overflow.sql"),
+    );
+    try std.testing.expectError(
+        error.InvalidMigrationFilename,
+        parseFilename("not-a-version_name.sql"),
+    );
 }
 
 fn lessThan(_: void, lhs: Migration, rhs: Migration) bool {

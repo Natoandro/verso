@@ -111,7 +111,14 @@ pub fn verify(
     password: []const u8,
 ) !bool {
     if (password.len > maximum_length) return false;
-    argon2.strVerify(password_hash, password, .{ .allocator = allocator }, io) catch return false;
+    argon2.strVerify(password_hash, password, .{ .allocator = allocator }, io) catch |failure| switch (failure) {
+        error.InvalidEncoding,
+        error.NoSpaceLeft,
+        error.PasswordVerificationFailed,
+        error.WeakParameters,
+        => return false,
+        else => return failure,
+    };
     return true;
 }
 
@@ -127,4 +134,13 @@ test "encoded password validation checks the Argon2id structure" {
     try validateEncodedHash("$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA");
     try std.testing.expectError(error.InvalidPasswordHash, validateEncodedHash("$argon2id$v=19$test"));
     try std.testing.expectError(error.InvalidPasswordHash, validateEncodedHash("$argon2id$v=19$x=1,t=2,p=1$c2FsdA$aGFzaA"));
+}
+
+test "password verification treats weak stored parameters as invalid credentials" {
+    try std.testing.expect(!try verify(
+        std.testing.allocator,
+        std.testing.io,
+        "$argon2id$v=19$m=0,t=0,p=0$c2FsdA$aGFzaA",
+        "correct horse battery staple",
+    ));
 }

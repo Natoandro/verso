@@ -500,10 +500,25 @@ pub fn checkRequestOrigin(request: *RequestContext) !bool {
         .origin = headerValue(request, "origin"),
         .forwarded_scheme = forwarded_scheme,
         .forwarded_host = forwarded_host,
-    }) catch |failure| {
-        web_logging.logDiagnostic(request, "warn", "http.origin_rejected", "request origin validation failed", .forbidden, failure, "origin policy rejected request");
-        try errors.respond(request, .forbidden);
-        return false;
+    }, request.allocator()) catch |failure| switch (failure) {
+        error.IncompleteForwardedOrigin,
+        error.UntrustedForwardedOrigin,
+        error.InvalidForwardedScheme,
+        error.InvalidForwardedHost,
+        error.InvalidPublicOrigin,
+        error.MissingOrigin,
+        error.OriginNotAllowed,
+        error.InvalidOrigin,
+        => {
+            web_logging.logDiagnostic(request, "warn", "http.origin_rejected", "request origin validation failed", .forbidden, failure, "origin policy rejected request");
+            try errors.respond(request, .forbidden);
+            return false;
+        },
+        else => {
+            web_logging.logDiagnostic(request, "error", "http.origin_check_failed", "request origin validation failed unexpectedly", .internal_server_error, failure, null);
+            try errors.respond(request, .internal_server_error);
+            return false;
+        },
     };
     return true;
 }

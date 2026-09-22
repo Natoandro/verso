@@ -396,7 +396,10 @@ fn decodeSection(allocator: std.mem.Allocator, kind: []const u8, data: []const u
                 allocator,
                 data,
                 .{},
-            ) catch return error.InvalidStoredSection;
+            ) catch |failure| switch (failure) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return error.InvalidStoredSection,
+            };
             const payload = section_domain.Payload{ .text = .{ .markdown = parsed.markdown } };
             section_domain.validatePayload(payload) catch return error.InvalidStoredSection;
             return payload;
@@ -412,7 +415,10 @@ fn decodeSection(allocator: std.mem.Allocator, kind: []const u8, data: []const u
                 allocator,
                 data,
                 .{},
-            ) catch return error.InvalidStoredSection;
+            ) catch |failure| switch (failure) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return error.InvalidStoredSection,
+            };
             const display = if (parsed.display) |value|
                 section_domain.ImageDisplay.parse(value) catch return error.InvalidStoredSection
             else

@@ -4,9 +4,10 @@ const config_types = @import("../config.zig");
 pub fn prepareConfiguredDirectories(
     io: std.Io,
     root: std.Io.Dir,
+    allocator: std.mem.Allocator,
     app_config: config_types.Config,
 ) !void {
-    try prepareDatabaseParentDirectory(io, root, app_config);
+    try prepareDatabaseParentDirectory(io, root, allocator, app_config);
 
     switch (app_config.storage) {
         .filesystem => |filesystem| try root.createDirPath(io, filesystem.path),
@@ -17,26 +18,28 @@ pub fn prepareConfiguredDirectories(
 pub fn prepareDatabaseParentDirectory(
     io: std.Io,
     root: std.Io.Dir,
+    allocator: std.mem.Allocator,
     app_config: config_types.Config,
 ) !void {
-    var database_path_buffer: [1024]u8 = undefined;
-    const database_path = try resolveDatabasePath(app_config, &database_path_buffer);
+    const database_path = try resolveDatabasePath(allocator, app_config);
+    defer allocator.free(database_path);
     try createParentDirectory(io, root, database_path);
 }
 
-pub fn resolveDatabasePath(app_config: config_types.Config, buffer: []u8) ![]const u8 {
+pub fn resolveDatabasePath(allocator: std.mem.Allocator, app_config: config_types.Config) ![]u8 {
     if (std.mem.indexOfScalar(u8, app_config.database.url, ':') == null) {
-        return app_config.database.url;
+        return allocator.dupe(u8, app_config.database.url);
     }
 
-    const database_uri = try std.Uri.parse(app_config.database.url);
-    if (!database_uri.path.isEmpty()) {
-        const database_path = try database_uri.path.toRaw(buffer);
-        if (std.mem.startsWith(u8, database_path, "/./")) return database_path[1..];
-        return database_path;
-    }
-    if (database_uri.host) |database_host| return database_host.toRaw(buffer);
-    return error.InvalidDatabaseUrl;
+    const database_uri = std.Uri.parse(app_config.database.url) catch return error.InvalidDatabaseUrl;
+    const component = if (!database_uri.path.isEmpty())
+        database_uri.path
+    else
+        database_uri.host orelse return error.InvalidDatabaseUrl;
+    const raw_path = try std.fmt.allocPrint(allocator, "{f}", .{std.fmt.alt(component, .formatRaw)});
+    defer allocator.free(raw_path);
+    if (std.mem.startsWith(u8, raw_path, "/./")) return allocator.dupe(u8, raw_path[1..]);
+    return allocator.dupe(u8, raw_path);
 }
 
 fn createParentDirectory(io: std.Io, root: std.Io.Dir, path: []const u8) !void {
@@ -54,7 +57,7 @@ test "prepareConfiguredDirectories creates database, asset, and cache parents" {
     app_config.storage = .{ .filesystem = .{ .path = "nested/assets" } };
     app_config.cache.path = "nested/cache";
 
-    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, app_config);
+    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, std.testing.allocator, app_config);
 
     var database_parent = try temporary_directory.dir.openDir(std.testing.io, "nested/db", .{});
     database_parent.close(std.testing.io);
@@ -69,8 +72,8 @@ test "prepareConfiguredDirectories is repeatable" {
     defer temporary_directory.cleanup();
 
     const app_config = config_types.Config{};
-    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, app_config);
-    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, app_config);
+    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, std.testing.allocator, app_config);
+    try prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, std.testing.allocator, app_config);
 }
 
 test "prepareConfiguredDirectories rejects a file in a configured parent path" {
@@ -84,7 +87,7 @@ test "prepareConfiguredDirectories rejects a file in a configured parent path" {
     app_config.database.url = "blocked/verso.db";
     try std.testing.expectError(
         error.NotDir,
-        prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, app_config),
+        prepareConfiguredDirectories(std.testing.io, temporary_directory.dir, std.testing.allocator, app_config),
     );
 }
 
@@ -92,10 +95,11 @@ test "resolveDatabasePath keeps relative SQLite URLs relative" {
     var app_config = config_types.Config{};
     app_config.database.url = "sqlite:///./data/verso.db";
 
-    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try resolveDatabasePath(std.testing.allocator, app_config);
+    defer std.testing.allocator.free(database_path);
     try std.testing.expectEqualStrings(
         "./data/verso.db",
-        try resolveDatabasePath(app_config, &database_path_buffer),
+        database_path,
     );
 }
 
@@ -103,9 +107,20 @@ test "resolveDatabasePath keeps absolute SQLite URLs absolute" {
     var app_config = config_types.Config{};
     app_config.database.url = "sqlite:///var/lib/verso.db";
 
-    var database_path_buffer: [1024]u8 = undefined;
+    const database_path = try resolveDatabasePath(std.testing.allocator, app_config);
+    defer std.testing.allocator.free(database_path);
     try std.testing.expectEqualStrings(
         "/var/lib/verso.db",
-        try resolveDatabasePath(app_config, &database_path_buffer),
+        database_path,
     );
+}
+
+test "resolveDatabasePath allocates decoded paths without an incidental size limit" {
+    var app_config = config_types.Config{};
+    app_config.database.url = "sqlite:///./" ++ ("nested%2F" ** 200) ++ "verso.db";
+
+    const database_path = try resolveDatabasePath(std.testing.allocator, app_config);
+    defer std.testing.allocator.free(database_path);
+    try std.testing.expect(database_path.len > 1024);
+    try std.testing.expectEqual(@as(u8, '.'), database_path[0]);
 }

@@ -81,7 +81,7 @@ pub fn load(allocator: std.mem.Allocator, sources: ConfigSources) !toml.Parsed(c
 
     try applyEnvironment(parsed_config.arena.allocator(), &parsed_config.value, sources.envs);
     try applyCli(parsed_config.arena.allocator(), &parsed_config.value, sources.cli);
-    try parsed_config.value.validate();
+    try parsed_config.value.validateWithAllocator(parsed_config.arena.allocator());
     return parsed_config;
 }
 

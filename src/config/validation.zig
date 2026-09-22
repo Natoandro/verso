@@ -58,13 +58,31 @@ pub fn isLoopbackHost(host: []const u8) bool {
 }
 
 pub fn isLoopbackBaseUrl(url: []const u8) bool {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    return isLoopbackBaseUrlWithAllocator(arena.allocator(), url) catch false;
+}
+
+pub fn isLoopbackBaseUrlWithAllocator(allocator: std.mem.Allocator, url: []const u8) !bool {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
     const uri = std.Uri.parse(url) catch return false;
-    var host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
-    const host = uri.getHost(&host_buffer) catch return false;
+    const host = uri.getHostAlloc(arena.allocator()) catch |failure| switch (failure) {
+        error.UriMissingHost => return false,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
     return isLoopbackHost(host.bytes);
 }
 
 pub fn isValidDatabaseUrl(database_url: []const u8) bool {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    return isValidDatabaseUrlWithAllocator(arena.allocator(), database_url) catch false;
+}
+
+pub fn isValidDatabaseUrlWithAllocator(allocator: std.mem.Allocator, database_url: []const u8) !bool {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
     if (!isSafeText(database_url)) return false;
     if (std.mem.indexOfScalar(u8, database_url, ':') == null) return isValidPath(database_url);
 
@@ -72,8 +90,10 @@ pub fn isValidDatabaseUrl(database_url: []const u8) bool {
     if (!std.ascii.eqlIgnoreCase(uri.scheme, "sqlite")) return false;
     if (uri.path.isEmpty() and uri.host == null) return false;
 
-    var path_buffer: [1024]u8 = undefined;
-    const database_path = uri.path.toRaw(&path_buffer) catch return false;
+    const component = if (!uri.path.isEmpty()) uri.path else uri.host.?;
+    const database_path = component.toRawMaybeAlloc(arena.allocator()) catch |failure| switch (failure) {
+        error.OutOfMemory => return error.OutOfMemory,
+    };
     return isValidPath(database_path);
 }
 

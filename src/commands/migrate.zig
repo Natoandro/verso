@@ -64,19 +64,20 @@ fn runUp(init: std.process.Init, cli_overrides: verso.config.CliOverrides) !void
     verso.application.bootstrap.prepareDatabaseParentDirectory(
         init.io,
         std.Io.Dir.cwd(),
+        init.gpa,
         app_config,
     ) catch |failure| {
         command_support.logCommandFailure(init, "migrate up", "database_directory", "error", failure);
         return failure;
     };
-    var database_path_buffer: [1024]u8 = undefined;
     const database_path = verso.application.bootstrap.resolveDatabasePath(
+        init.gpa,
         app_config,
-        &database_path_buffer,
     ) catch |failure| {
         command_support.logCommandFailure(init, "migrate up", "database_path", "error", failure);
         return failure;
     };
+    defer init.gpa.free(database_path);
     var database = verso.storage.sqlite.Database.open(init.gpa, database_path) catch |failure| {
         command_support.logCommandFailure(init, "migrate up", "database_open", "error", failure);
         return failure;

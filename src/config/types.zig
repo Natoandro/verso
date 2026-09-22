@@ -178,7 +178,13 @@ pub const Config = struct {
         try defaults.write(writer);
     }
 
-    pub fn validate(self: Config) ConfigError!void {
+    pub fn validate(self: Config) (ConfigError || std.mem.Allocator.Error)!void {
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        return self.validateWithAllocator(arena.allocator());
+    }
+
+    pub fn validateWithAllocator(self: Config, allocator: std.mem.Allocator) (ConfigError || std.mem.Allocator.Error)!void {
         if (!validation.isSafeText(self.site.name)) return error.InvalidSiteName;
         if (!validation.isValidServerHost(self.server.host)) return error.InvalidServerHost;
         if (self.server.port == 0) return error.InvalidServerHost;
@@ -198,7 +204,9 @@ pub const Config = struct {
 
         if (self.site.base_url) |base_url| {
             if (!validation.isValidBaseUrl(base_url)) return error.InvalidBaseUrl;
-            if (self.runtime.environment == .production and validation.isLoopbackBaseUrl(base_url)) {
+            if (self.runtime.environment == .production and
+                try validation.isLoopbackBaseUrlWithAllocator(allocator, base_url))
+            {
                 return error.InvalidBaseUrl;
             }
         } else if (self.runtime.environment == .production or
@@ -207,7 +215,9 @@ pub const Config = struct {
             return error.MissingBaseUrl;
         }
 
-        if (!validation.isValidDatabaseUrl(self.database.url)) return error.InvalidDatabaseUrl;
+        if (!(try validation.isValidDatabaseUrlWithAllocator(allocator, self.database.url))) {
+            return error.InvalidDatabaseUrl;
+        }
         if (!validation.isValidPath(self.migrations.path)) return error.InvalidMigrationConfiguration;
 
         switch (self.storage) {
@@ -256,12 +266,12 @@ pub const Config = struct {
         };
     }
 
-    pub fn effectiveBaseUrl(self: Config, buffer: []u8) ![]const u8 {
-        if (self.site.base_url) |base_url| return base_url;
+    pub fn effectiveBaseUrl(self: Config, allocator: std.mem.Allocator) ![]u8 {
+        if (self.site.base_url) |base_url| return allocator.dupe(u8, base_url);
         if (std.mem.indexOfScalar(u8, self.server.host, ':') != null) {
-            return std.fmt.bufPrint(buffer, "http://[{s}]:{}", .{ self.server.host, self.server.port });
+            return std.fmt.allocPrint(allocator, "http://[{s}]:{}", .{ self.server.host, self.server.port });
         }
-        return std.fmt.bufPrint(buffer, "http://{s}:{}", .{ self.server.host, self.server.port });
+        return std.fmt.allocPrint(allocator, "http://{s}:{}", .{ self.server.host, self.server.port });
     }
 
     pub fn uiLanguageTag(self: Config) []const u8 {

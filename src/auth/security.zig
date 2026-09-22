@@ -41,7 +41,7 @@ pub const OriginPolicy = struct {
     allowed_origins: []const []const u8 = &.{},
     trusted_proxy_addresses: []const []const u8 = &.{},
 
-    pub fn check(self: OriginPolicy, request: Request) !void {
+    pub fn check(self: OriginPolicy, request: Request, allocator: std.mem.Allocator) !void {
         const has_forwarded_scheme = request.forwarded_scheme != null;
         const has_forwarded_host = request.forwarded_host != null;
         if (has_forwarded_scheme != has_forwarded_host) return error.IncompleteForwardedOrigin;
@@ -51,18 +51,18 @@ pub const OriginPolicy = struct {
             return error.UntrustedForwardedOrigin;
         }
 
-        var effective_origin_buffer: [1024]u8 = undefined;
         const effective_origin = if (forwarded)
-            try formatOrigin(&effective_origin_buffer, request.forwarded_scheme.?, request.forwarded_host.?)
+            try formatOrigin(allocator, request.forwarded_scheme.?, request.forwarded_host.?)
         else
-            try formatOrigin(&effective_origin_buffer, request.scheme, request.host);
-        if (!originsEqual(effective_origin, self.public_origin)) {
+            try formatOrigin(allocator, request.scheme, request.host);
+        defer allocator.free(effective_origin);
+        if (!(try originsEqual(allocator, effective_origin, self.public_origin))) {
             return error.InvalidPublicOrigin;
         }
 
         if (isUnsafeMethod(request.method)) {
             const request_origin = request.origin orelse return error.MissingOrigin;
-            if (!self.originAllowed(request_origin)) return error.OriginNotAllowed;
+            if (!(try self.originAllowed(allocator, request_origin))) return error.OriginNotAllowed;
         }
     }
 
@@ -83,11 +83,11 @@ pub const OriginPolicy = struct {
         return self.isTrustedProxy(remote_address);
     }
 
-    fn originAllowed(self: OriginPolicy, origin: []const u8) bool {
+    fn originAllowed(self: OriginPolicy, allocator: std.mem.Allocator, origin: []const u8) !bool {
         if (!isValidOrigin(origin)) return false;
-        if (originsEqual(origin, self.public_origin)) return true;
+        if (try originsEqual(allocator, origin, self.public_origin)) return true;
         for (self.allowed_origins) |allowed| {
-            if (originsEqual(origin, allowed)) return true;
+            if (try originsEqual(allocator, origin, allowed)) return true;
         }
         return false;
     }
@@ -100,12 +100,12 @@ pub fn isUnsafeMethod(method: std.http.Method) bool {
     };
 }
 
-fn formatOrigin(buffer: []u8, scheme: []const u8, host: []const u8) ![]const u8 {
+fn formatOrigin(allocator: std.mem.Allocator, scheme: []const u8, host: []const u8) ![]u8 {
     if (!std.mem.eql(u8, scheme, "http") and !std.mem.eql(u8, scheme, "https")) {
         return error.InvalidForwardedScheme;
     }
     if (!isValidHost(host)) return error.InvalidForwardedHost;
-    return std.fmt.bufPrint(buffer, "{s}://{s}", .{ scheme, host });
+    return std.fmt.allocPrint(allocator, "{s}://{s}", .{ scheme, host });
 }
 
 fn isValidOrigin(origin: []const u8) bool {
@@ -117,15 +117,15 @@ fn isValidOrigin(origin: []const u8) bool {
             std.mem.eql(u8, origin[0..separator], "https"));
 }
 
-fn originsEqual(left: []const u8, right: []const u8) bool {
-    var left_buffer: [1024]u8 = undefined;
-    var right_buffer: [1024]u8 = undefined;
-    const canonical_left = canonicalOrigin(left, &left_buffer) catch return false;
-    const canonical_right = canonicalOrigin(right, &right_buffer) catch return false;
+fn originsEqual(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !bool {
+    const canonical_left = try canonicalOrigin(allocator, left);
+    defer allocator.free(canonical_left);
+    const canonical_right = try canonicalOrigin(allocator, right);
+    defer allocator.free(canonical_right);
     return std.mem.eql(u8, canonical_left, canonical_right);
 }
 
-fn canonicalOrigin(origin: []const u8, buffer: []u8) ![]const u8 {
+fn canonicalOrigin(allocator: std.mem.Allocator, origin: []const u8) ![]u8 {
     const separator = std.mem.indexOf(u8, origin, "://") orelse return error.InvalidOrigin;
     const scheme = origin[0..separator];
     if (!std.ascii.eqlIgnoreCase(scheme, "http") and
@@ -144,14 +144,14 @@ fn canonicalOrigin(origin: []const u8, buffer: []u8) ![]const u8 {
         if (authority.len == 0) return error.InvalidOrigin;
     }
 
-    const needed = scheme.len + 3 + authority.len;
-    if (needed > buffer.len) return error.InvalidOrigin;
+    const buffer = try allocator.alloc(u8, scheme.len + 3 + authority.len);
+    errdefer allocator.free(buffer);
     for (scheme, 0..) |character, index| buffer[index] = std.ascii.toLower(character);
     @memcpy(buffer[scheme.len .. scheme.len + 3], "://");
     for (authority, 0..) |character, index| {
         buffer[scheme.len + 3 + index] = std.ascii.toLower(character);
     }
-    return buffer[0..needed];
+    return buffer;
 }
 
 fn isValidHost(host: []const u8) bool {
@@ -171,27 +171,27 @@ test "unsafe requests require same-origin or explicitly allowed origin" {
         .scheme = "https",
         .host = "example.test",
         .remote_address = "192.0.2.1",
-    });
+    }, std.testing.allocator);
     try std.testing.expectError(error.MissingOrigin, policy.check(.{
         .method = .POST,
         .scheme = "https",
         .host = "example.test",
         .remote_address = "192.0.2.1",
-    }));
+    }, std.testing.allocator));
     try std.testing.expectError(error.OriginNotAllowed, policy.check(.{
         .method = .POST,
         .scheme = "https",
         .host = "example.test",
         .remote_address = "192.0.2.1",
         .origin = "https://evil.test",
-    }));
+    }, std.testing.allocator));
     try policy.check(.{
         .method = .POST,
         .scheme = "https",
         .host = "example.test",
         .remote_address = "192.0.2.1",
         .origin = "https://example.test",
-    });
+    }, std.testing.allocator);
 }
 
 test "forwarded origin headers are accepted only from configured proxies" {
@@ -206,7 +206,7 @@ test "forwarded origin headers are accepted only from configured proxies" {
         .remote_address = "192.0.2.10",
         .forwarded_scheme = "https",
         .forwarded_host = "example.test",
-    });
+    }, std.testing.allocator);
     try std.testing.expectError(error.UntrustedForwardedOrigin, policy.check(.{
         .method = .GET,
         .scheme = "https",
@@ -214,7 +214,7 @@ test "forwarded origin headers are accepted only from configured proxies" {
         .remote_address = "192.0.2.11",
         .forwarded_scheme = "https",
         .forwarded_host = "example.test",
-    }));
+    }, std.testing.allocator));
 }
 
 test "trusted forwarded unsafe requests still require an allowed origin" {
@@ -230,7 +230,7 @@ test "trusted forwarded unsafe requests still require an allowed origin" {
         .origin = "https://evil.test",
         .forwarded_scheme = "https",
         .forwarded_host = "example.test",
-    }));
+    }, std.testing.allocator));
     try policy.check(.{
         .method = .POST,
         .scheme = "http",
@@ -239,7 +239,7 @@ test "trusted forwarded unsafe requests still require an allowed origin" {
         .origin = "https://example.test",
         .forwarded_scheme = "https",
         .forwarded_host = "example.test",
-    });
+    }, std.testing.allocator);
 }
 
 test "origin comparison canonicalizes scheme case and default ports" {
@@ -252,7 +252,19 @@ test "origin comparison canonicalizes scheme case and default ports" {
         .host = "example.test",
         .remote_address = "192.0.2.1",
         .origin = "https://EXAMPLE.TEST",
-    });
+    }, std.testing.allocator);
+}
+
+test "origin comparison allocates for long authorities" {
+    const host = ("a" ** 1100) ++ ".example.test";
+    const origin = "https://" ++ host;
+    const policy = OriginPolicy{ .public_origin = origin };
+    try policy.check(.{
+        .method = .GET,
+        .scheme = "https",
+        .host = host,
+        .remote_address = "192.0.2.1",
+    }, std.testing.allocator);
 }
 
 test "session cookie policy is host-only and protected" {

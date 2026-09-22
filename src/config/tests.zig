@@ -157,8 +157,9 @@ test "development derives a loopback base URL" {
     defer parsed_config.deinit();
     try parsed_config.value.validate();
 
-    var buffer: [64]u8 = undefined;
-    try std.testing.expectEqualStrings("http://127.0.0.1:8080", try parsed_config.value.effectiveBaseUrl(&buffer));
+    const base_url = try parsed_config.value.effectiveBaseUrl(std.testing.allocator);
+    defer std.testing.allocator.free(base_url);
+    try std.testing.expectEqualStrings("http://127.0.0.1:8080", base_url);
 }
 
 test "development brackets expanded IPv6 loopback URLs" {
@@ -169,10 +170,11 @@ test "development brackets expanded IPv6 loopback URLs" {
     defer parsed_config.deinit();
     try parsed_config.value.validate();
 
-    var buffer: [64]u8 = undefined;
+    const base_url = try parsed_config.value.effectiveBaseUrl(std.testing.allocator);
+    defer std.testing.allocator.free(base_url);
     try std.testing.expectEqualStrings(
         "http://[0:0:0:0:0:0:0:1]:9090",
-        try parsed_config.value.effectiveBaseUrl(&buffer),
+        base_url,
     );
 }
 

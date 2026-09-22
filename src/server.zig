@@ -88,16 +88,16 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     };
     defer restoreSignalHandlers(&signal_handlers);
 
-    bootstrap.prepareConfiguredDirectories(io, std.Io.Dir.cwd(), app_config) catch |startup_error| {
+    bootstrap.prepareConfiguredDirectories(io, std.Io.Dir.cwd(), allocator, app_config) catch |startup_error| {
         logStartupFailure(&logger, io, "directories", startup_error);
         return startup_error;
     };
 
-    var database_path_buffer: [1024]u8 = undefined;
-    const database_path = bootstrap.resolveDatabasePath(app_config, &database_path_buffer) catch |startup_error| {
+    const database_path = bootstrap.resolveDatabasePath(allocator, app_config) catch |startup_error| {
         logStartupFailure(&logger, io, "database", startup_error);
         return startup_error;
     };
+    defer allocator.free(database_path);
     var database_connection = database.Database.open(allocator, database_path) catch |startup_error| {
         logStartupFailure(&logger, io, "database", startup_error);
         return startup_error;
@@ -160,11 +160,11 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         &identity_service,
     );
 
-    var base_url_buffer: [1024]u8 = undefined;
-    const base_url = app_config.effectiveBaseUrl(&base_url_buffer) catch |startup_error| {
+    const base_url = app_config.effectiveBaseUrl(allocator) catch |startup_error| {
         logStartupFailure(&logger, io, "base_url", startup_error);
         return startup_error;
     };
+    defer allocator.free(base_url);
     const public_origin = web.originFromBaseUrl(base_url) catch |startup_error| {
         logStartupFailure(&logger, io, "base_url", startup_error);
         return startup_error;

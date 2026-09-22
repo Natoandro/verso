@@ -15,13 +15,10 @@ const error_page_template = tmpl.parse(@embedFile("templates/pages/error.html"),
 /// field-level feedback. This page is for request-level failures that do not
 /// have a more useful application response.
 pub fn respond(request: *RequestContext, status: std.http.Status) Error!void {
-    const body_buffer = request.allocator().alloc(u8, 32768) catch |failure| {
-        web_logging.logDiagnostic(request, "error", "http.error_response_failed", "could not allocate an HTTP error response", status, failure, null);
-        return failure;
-    };
     const phrase = status.phrase() orelse "Request Error";
-    var writer = std.Io.Writer.fixed(body_buffer);
-    error_page_template.render(&writer, .{
+    var output = std.Io.Writer.Allocating.init(request.allocator());
+    defer output.deinit();
+    error_page_template.render(&output.writer, .{
         .status_code = @intFromEnum(status),
         .phrase = phrase,
         .theme_css = theme_css,
@@ -31,7 +28,7 @@ pub fn respond(request: *RequestContext, status: std.http.Status) Error!void {
         web_logging.logDiagnostic(request, "error", "http.error_response_failed", "could not render an HTTP error response", status, failure, null);
         return failure;
     };
-    const body = writer.buffered();
+    const body = output.written();
 
     request.request.respond(body, .{
         .status = status,
