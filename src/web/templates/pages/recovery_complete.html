@@ -15,14 +15,14 @@
         <header class="standalone-header">
           <p class="eyebrow">Account access</p>
           <h1>Set a new password</h1>
-          <p>Use the recovery token you received to choose a new password.</p>
+          <p>Use the recovery link provided by your administrator to choose a new password.</p>
         </header>
         <form class="standalone-form" method="post" action="/admin/recover/complete">
-          <label>Recovery token <input name="token" autocomplete="one-time-code" required></label>
+          <label>Recovery token <input name="token" value="{{ token }}" autocomplete="one-time-code" required></label>
           <label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
           <div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Set password</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div>
         </form>
-        <footer class="standalone-footer"><span>Recovery tokens are single-use.</span><a href="/admin/recover">Request another</a></footer>
+        <footer class="standalone-footer"><span>Recovery tokens are single-use.</span><a href="/admin/login">Back to sign in</a></footer>
       </article>
     </main>
   </body>

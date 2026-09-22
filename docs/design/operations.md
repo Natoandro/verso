@@ -365,6 +365,22 @@ but currently fail validation because their renderers are not implemented.
 Secrets should not normally be stored directly inside publicly tracked
 configuration files.
 
+### Operator-issued password reset links
+
+Before email delivery is configured, an operator may issue a local password
+reset link with:
+
+```text
+verso auth password-reset --login <login-or-email>
+```
+
+The target may instead be supplied with `--email`. The command requires a
+resolved `database.url` and explicit `site.base_url`, accepts those values from
+`verso.toml`, `VERSO_DATABASE_URL`/`VERSO_SITE_BASE_URL`, or command-line
+overrides, and prints the link to standard output. The token is opaque, stored
+only as a hash, expires after one hour, and is invalidated after use or another
+password reset. The output is sensitive and must not be logged or shared.
+
 ### Initial user provisioning
 
 The first-user configuration is an explicit bootstrap surface rather than a

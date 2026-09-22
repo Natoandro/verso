@@ -14,6 +14,9 @@ pub fn parseBool(boolean_text: []const u8) Error!bool {
 }
 
 pub fn parseUnsigned(comptime T: type, integer_text: []const u8) Error!T {
+    for (integer_text) |character| {
+        if (character < '0' or character > '9') return error.InvalidValue;
+    }
     return std.fmt.parseUnsigned(T, integer_text, 10) catch error.InvalidValue;
 }
 

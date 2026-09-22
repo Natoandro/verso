@@ -218,6 +218,27 @@ pub const Service = struct {
         return .{ .value = token };
     }
 
+    /// Issues a reset token for an operator who already controls the database.
+    /// The caller is responsible for protecting the returned URL.
+    pub fn issueAdminPasswordReset(self: *Service, identifier: []const u8) !PasswordResetToken {
+        var identifier_buffer: [320]u8 = undefined;
+        const normalized_identifier = password.normalizeLogin(&identifier_buffer, identifier) catch {
+            return error.ResetUserNotFound;
+        };
+        var credential = (try self.local_store.credentialForLoginOrEmail(
+            self.allocator,
+            normalized_identifier,
+        )) orelse return error.ResetUserNotFound;
+        defer credential.deinit();
+
+        const token = try auth_crypto.newSecret(self.io);
+        const token_hash = auth_crypto.hashSecret(&token);
+        if (!try self.local_store.issueResetToken(credential.user_id, &token_hash)) {
+            return error.ResetUserNotFound;
+        }
+        return .{ .value = token };
+    }
+
     pub fn completePasswordReset(
         self: *Service,
         token: []const u8,

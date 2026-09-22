@@ -13,9 +13,6 @@ const register_template = tmpl.parse(@embedFile("templates/pages/register.html")
 const password_template = tmpl.parse(@embedFile("templates/pages/password.html"), .{
     .components = .{ .admin_header = admin_header },
 });
-const recovery_template = tmpl.parse(@embedFile("templates/pages/recovery.html"), .{
-    .components = .{ .admin_header = admin_header },
-});
 const recovery_complete_template = tmpl.parse(@embedFile("templates/pages/recovery_complete.html"), .{
     .components = .{ .admin_header = admin_header },
 });
@@ -43,17 +40,11 @@ pub fn password(allocator: std.mem.Allocator, csrf_token: []const u8) ![]u8 {
     });
 }
 
-pub fn recovery(allocator: std.mem.Allocator) ![]u8 {
-    return recovery_template.renderAlloc(allocator, .{
-        .csrf_token = "",
-        .is_authenticated = false,
-    });
-}
-
-pub fn recoveryComplete(allocator: std.mem.Allocator) ![]u8 {
+pub fn recoveryComplete(allocator: std.mem.Allocator, token: []const u8) ![]u8 {
     return recovery_complete_template.renderAlloc(allocator, .{
         .csrf_token = "",
         .is_authenticated = false,
+        .token = token,
     });
 }
 

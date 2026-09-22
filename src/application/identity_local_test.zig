@@ -25,22 +25,22 @@ test "local password authentication rotates sessions and supports recovery" {
     var store = storage.Store.init(&database);
     var service = identity.Service.initForInterface(std.testing.io, std.testing.allocator, &store, .web);
     const owner_id = try service.bootstrapLocalOwner(
-        .{ .subject = "local-owner", .display_name = "Local Owner" },
-        "Owner@Example.test",
+        .{ .subject = "local-owner", .display_name = "Local Owner", .email = "Owner@Example.test" },
+        "Owner-login",
         "correct horse battery staple",
     );
     try std.testing.expectError(
         error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "wrong password", "192.0.2.1"),
+        service.startLocalSession("owner-login", "wrong password", "192.0.2.1"),
     );
 
     const first_session = try service.startLocalSession(
-        "owner@example.test",
+        "owner-login",
         "correct horse battery staple",
         "192.0.2.1",
     );
     const second_session = try service.startLocalSession(
-        "OWNER@EXAMPLE.TEST",
+        "OWNER-LOGIN",
         "correct horse battery staple",
         "192.0.2.1",
     );
@@ -55,27 +55,38 @@ test "local password authentication rotates sessions and supports recovery" {
     try std.testing.expectError(error.InvalidSession, service.authenticate(&second_session.token));
     try std.testing.expectEqual(owner_id, (try service.authenticate(&changed_session.token)).user_id);
 
-    const reset = (try service.requestPasswordReset("owner@example.test", "192.0.2.1")).?;
+    const reset = (try service.requestPasswordReset("owner-login", "192.0.2.1")).?;
     const recovered_session = try service.completePasswordReset(
         &reset.value,
         "recovered correct horse battery staple",
     );
     try std.testing.expectError(error.InvalidSession, service.authenticate(&changed_session.token));
     try std.testing.expectEqual(owner_id, (try service.authenticate(&recovered_session.token)).user_id);
+
+    const admin_reset = try service.issueAdminPasswordReset("owner@example.test");
+    const admin_recovered_session = try service.completePasswordReset(
+        &admin_reset.value,
+        "admin recovered correct horse battery staple",
+    );
+    try std.testing.expectEqual(owner_id, (try service.authenticate(&admin_recovered_session.token)).user_id);
     try std.testing.expectError(
         error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
+        service.completePasswordReset(&admin_reset.value, "another password that cannot be reused"),
+    );
+    try std.testing.expectError(
+        error.InvalidCredentials,
+        service.startLocalSession("owner-login", "another correct horse battery staple", "192.0.2.1"),
     );
     var failure_index: usize = 1;
     while (failure_index < 5) : (failure_index += 1) {
         try std.testing.expectError(
             error.InvalidCredentials,
-            service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
+            service.startLocalSession("owner-login", "another correct horse battery staple", "192.0.2.1"),
         );
     }
     try std.testing.expectError(
         error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "recovered correct horse battery staple", "192.0.2.1"),
+        service.startLocalSession("owner-login", "recovered correct horse battery staple", "192.0.2.1"),
     );
     try database.exec(
         "UPDATE local_login_rate_limits SET window_started_at = '2000-01-01T00:00:00.000Z', locked_until = NULL",
@@ -84,6 +95,6 @@ test "local password authentication rotates sessions and supports recovery" {
     );
     try std.testing.expectError(
         error.InvalidCredentials,
-        service.startLocalSession("owner@example.test", "another correct horse battery staple", "192.0.2.1"),
+        service.startLocalSession("owner-login", "another correct horse battery staple", "192.0.2.1"),
     );
 }

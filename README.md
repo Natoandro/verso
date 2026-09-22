@@ -84,8 +84,22 @@ verso serve
 ```
 
 `auth bootstrap-owner` is one-time and reads the initial password from
-`VERSO_BOOTSTRAP_PASSWORD`; recovery-token delivery is intentionally deferred
-until an email or other configured delivery channel exists.
+`VERSO_BOOTSTRAP_PASSWORD`; plaintext passwords are not accepted as command-line
+arguments.
+
+Until an email delivery channel exists, an operator can issue a one-hour,
+single-use password reset link locally:
+
+```bash
+verso auth password-reset --login owner@example.test \
+  --database-url ./data/verso.db \
+  --site-base-url https://example.org
+```
+
+The command also reads `VERSO_DATABASE_URL` and `VERSO_SITE_BASE_URL`, or the
+same values from `verso.toml`, and prints the link as `reset_link=...`. Anyone
+who can run the command or access the database should be treated as an
+administrator. The link itself is a credential and must be handled securely.
 
 First-user setup is intentionally a single-use boundary. The setup surface
 supports web registration from the empty-database login page and an optional

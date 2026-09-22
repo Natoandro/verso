@@ -2,8 +2,10 @@ const defaults = @import("config/defaults.zig");
 const loading = @import("config/load.zig");
 const schema = @import("config/schema.zig");
 const types = @import("config/types.zig");
+const toml = @import("toml");
 
 pub const Config = types.Config;
+pub const Parsed = toml.Parsed(Config);
 pub const ConfigError = types.ConfigError;
 pub const Environment = types.Environment;
 pub const UiLanguage = types.UiLanguage;

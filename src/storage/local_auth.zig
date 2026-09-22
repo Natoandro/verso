@@ -25,6 +25,14 @@ pub const Store = struct {
         allocator: std.mem.Allocator,
         login: []const u8,
     ) !?Credential {
+        return self.credentialForLoginOrEmail(allocator, login);
+    }
+
+    pub fn credentialForLoginOrEmail(
+        self: *Store,
+        allocator: std.mem.Allocator,
+        identifier: []const u8,
+    ) !?Credential {
         const Row = struct {
             user_id: i64,
             password_hash: sqlite.Text,
@@ -35,10 +43,10 @@ pub const Store = struct {
             \\SELECT credential.user_id, credential.password_hash
             \\FROM local_password_credentials AS credential
             \\JOIN users AS user ON user.id = credential.user_id
-            \\WHERE credential.login = ? AND user.state = 'active'
+            \\WHERE (credential.login = ? OR user.email = ?) AND user.state = 'active'
         ,
             .{},
-            .{login},
+            .{ identifier, identifier },
         ) orelse return null;
         defer allocator.free(row.password_hash.data);
         return .{

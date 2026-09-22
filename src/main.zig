@@ -51,7 +51,7 @@ pub fn main(init: std.process.Init) !void {
         return serve_command.run(init, &command_args, inherited_overrides);
     }
     if (std.mem.eql(u8, command_name, "auth")) {
-        return auth_command.run(init, &command_args);
+        return auth_command.run(init, &command_args, inherited_overrides);
     }
     command_support.logCommandFailure(init, "verso", "command_selection", "warn", error.InvalidCommand);
     return error.InvalidCommand;

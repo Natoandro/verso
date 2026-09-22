@@ -240,9 +240,11 @@ reverse proxy. A reverse proxy may terminate TLS and provide trusted forwarded
 origin metadata, but it never authenticates a user for Verso. The local
 provider stores only a memory-hard password hash and requires generic
 credential failures, failure rate limiting, session rotation after login, and
-authenticated password change/recovery flows. Recovery-token delivery is left
-to a future configured channel; the application does not expose tokens through
-the generic web response.
+authenticated password change/recovery flows. Until a delivery channel exists,
+an operator with database access may use `verso auth password-reset` to issue a
+one-hour reset link for a local login or email. The command is the only reset
+request issuer for now; the web completion route accepts the returned link, but
+the application does not expose tokens through a generic web response.
 
 Verso's planned OIDC integration will also be implemented inside Verso rather
 than delegated to an authentication gateway. It will use the authorization-code flow with PKCE,

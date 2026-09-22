@@ -232,7 +232,7 @@ fn makeEnvironmentReference() [environmentReferenceLength()]u8 {
 }
 
 test "serve metadata resolves only Config paths" {
-    try std.testing.expectEqual(@as(usize, serve_cli_metadata.len), 23);
+    try std.testing.expectEqual(@as(usize, serve_cli_metadata.len), 22);
     try std.testing.expect(fieldType("server") == Config.Server);
     try std.testing.expectEqualStrings("server_port", cliName("server.port")[0..]);
     try std.testing.expectEqualStrings("server-port", cliOptionName("server.port")[0..]);
@@ -241,6 +241,6 @@ test "serve metadata resolves only Config paths" {
 
 test "environment mappings are reflected from Config" {
     try std.testing.expect(environment_fields.len > serve_cli_metadata.len);
-    try std.testing.expect(std.mem.indexOf(u8, environment_reference, "VERSO_SERVER_PORT") != null);
-    try std.testing.expect(std.mem.indexOf(u8, environment_reference, "VERSO_STORAGE_FS_PATH") != null);
+    try std.testing.expect(std.mem.indexOf(u8, environment_reference[0..], "VERSO_SERVER_PORT") != null);
+    try std.testing.expect(std.mem.indexOf(u8, environment_reference[0..], "VERSO_STORAGE_FS_PATH") != null);
 }

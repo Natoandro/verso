@@ -52,10 +52,6 @@ const PasswordForm = struct {
     new_password: []const u8,
 };
 
-const RecoveryForm = struct {
-    login: ?[]const u8,
-};
-
 const RecoveryCompleteForm = struct {
     token: []const u8,
     new_password: []const u8,
@@ -124,8 +120,6 @@ const routes_table = route.routes(.{
     .{ "POST /admin/logout", postLogout },
     .{ "GET /admin/password", getPassword },
     .{ "POST /admin/password", postPassword },
-    .{ "GET /admin/recover", getRecovery },
-    .{ "POST /admin/recover", postRecovery },
     .{ "GET /admin/recover/complete", getRecoveryComplete },
     .{ "POST /admin/recover/complete", postRecoveryComplete },
     .{ "GET /admin/theme.css", static_content.EmbeddedStatic.handler(
@@ -383,33 +377,9 @@ fn postPassword(request: *RequestContext, _: Next) Error!void {
     return establishSession(request, credentials, "/admin/editor");
 }
 
-fn getRecovery(request: *RequestContext, _: Next) Error!void {
-    if (!try checkRequestOrigin(request)) return;
-    const body = views.recovery(request.allocator()) catch |failure| return authViewFailure(request, failure);
-    defer request.allocator().free(body);
-    return respond(request, body, "text/html; charset=utf-8", &.{
-        .{ .name = "cache-control", .value = "no-store" },
-    }, .ok);
-}
-
-fn postRecovery(request: *RequestContext, _: Next) Error!void {
-    if (!try checkRequestOrigin(request)) return;
-    var parsed = form.extract(RecoveryForm, request) catch |failure| {
-        web_logging.logDiagnostic(request, "warn", "auth.recovery_rejected", "password recovery form was rejected", .accepted, failure, "invalid recovery form");
-        return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
-    };
-    defer parsed.deinit(request.allocator());
-    if (parsed.value.login) |login| {
-        _ = request.server.identity_service.requestPasswordReset(login, request.remote_address) catch |failure| {
-            web_logging.logDiagnostic(request, "error", "auth.recovery_failed", "password recovery operation failed", .accepted, failure, null);
-        };
-    }
-    return respondText(request, "If the account exists, the recovery request was accepted.\n", .accepted);
-}
-
 fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const body = views.recoveryComplete(request.allocator()) catch |failure| return authViewFailure(request, failure);
+    const body = views.recoveryComplete(request.allocator(), queryParam(request, "token") orelse "") catch |failure| return authViewFailure(request, failure);
     defer request.allocator().free(body);
     return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
@@ -643,4 +613,15 @@ pub fn respond(
 
 pub fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     return request.cachedHeaderValue(name);
+}
+
+fn queryParam(request: *const RequestContext, name: []const u8) ?[]const u8 {
+    const target = request.requestTarget();
+    const query_start = std.mem.indexOfScalar(u8, target, '?') orelse return null;
+    var pairs = std.mem.splitScalar(u8, target[query_start + 1 ..], '&');
+    while (pairs.next()) |pair| {
+        const separator = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        if (std.mem.eql(u8, pair[0..separator], name)) return pair[separator + 1 ..];
+    }
+    return null;
 }

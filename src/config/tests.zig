@@ -106,7 +106,7 @@ test "initial owner bootstrap environment fields are reflected without CLI expos
         "Environment Owner",
         parsed_config.value.auth.bootstrap.display_name.?,
     );
-    try std.testing.expectEqual(@as(usize, 23), schema.serve_cli_metadata.len);
+    try std.testing.expectEqual(@as(usize, 22), schema.serve_cli_metadata.len);
 }
 
 test "public static root is separate from canonical storage paths" {
