@@ -262,6 +262,21 @@
   margin-top: 36px;
 }
 
+.auth-feedback {
+  min-height: 0;
+  color: var(--verso-danger, #a33f35);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.auth-feedback:empty {
+  display: none;
+}
+
+.auth-feedback p {
+  margin: 0;
+}
+
 .auth-form-grid {
   display: grid;
   grid-template-columns: 1fr;

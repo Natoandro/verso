@@ -9,8 +9,8 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
 const static_content = @import("static.zig");
-const templates = @import("templates/root.zig");
 const web_logging = @import("logging.zig");
+const views = @import("auth_views.zig");
 
 pub const cookieValue = auth_cookies.value;
 const formatCookie = auth_cookies.formatCookie;
@@ -163,11 +163,7 @@ fn getLogin(request: *RequestContext, _: Next) Error!void {
         }
     }
 
-    const html = try templates.pages.auth_login.renderAlloc(request.allocator(), .{});
-    defer request.allocator().free(html);
-    return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
-        .{ .name = "cache-control", .value = "no-store" },
-    }, .ok);
+    return renderLogin(request, null, .ok);
 }
 
 fn getRegister(request: *RequestContext, _: Next) Error!void {
@@ -178,11 +174,11 @@ fn getRegister(request: *RequestContext, _: Next) Error!void {
     };
     if (!setup_available) return redirectToLogin(request);
     var token = try auth_crypto.newSecret(request.server.io);
-    const html = try templates.pages.auth_register.renderAlloc(request.allocator(), .{ .csrf_token = &token });
-    defer request.allocator().free(html);
     const cookie_buffer = try request.allocator().alloc(u8, 192);
     const cookie = try formatCookie(cookie_buffer, setup_csrf_cookie_name, &token, false);
-    return respond(request, html, "text/html; charset=utf-8", &[_]std.http.Header{
+    const body = views.register(request.allocator(), &token) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
         .{ .name = "set-cookie", .value = cookie },
     }, .ok);
@@ -272,7 +268,7 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
     }
     var parsed = form.extract(LoginForm, request) catch |failure| {
         web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "login form was rejected", .unauthorized, failure, "invalid login form");
-        return errors.respond(request, .unauthorized);
+        return loginFailure(request, "Enter your login and password.", .unauthorized);
     };
     defer parsed.deinit(request.allocator());
     const credentials = request.server.identity_service.startLocalSession(
@@ -282,7 +278,7 @@ fn postLogin(request: *RequestContext, _: Next) Error!void {
     ) catch |login_error| switch (login_error) {
         error.InvalidCredentials => {
             web_logging.logDiagnostic(request, "warn", "auth.login_rejected", "login credentials were rejected", .unauthorized, login_error, "invalid credentials");
-            return errors.respond(request, .unauthorized);
+            return loginFailure(request, "The login or password is incorrect.", .unauthorized);
         },
         else => {
             web_logging.logDiagnostic(request, "error", "auth.login_failed", "local login failed", .internal_server_error, login_error, null);
@@ -336,9 +332,9 @@ fn getPassword(request: *RequestContext, _: Next) Error!void {
         web_logging.logDiagnostic(request, "warn", "auth.password_rejected", "password page had no CSRF cookie", .forbidden, null, "missing CSRF cookie");
         return errors.respond(request, .forbidden);
     };
-    const html = try templates.pages.auth_password.renderAlloc(request.allocator(), .{ .csrf_token = csrf_token });
-    defer request.allocator().free(html);
-    return respond(request, html, "text/html; charset=utf-8", &.{
+    const body = views.password(request.allocator(), csrf_token) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
@@ -380,9 +376,9 @@ fn postPassword(request: *RequestContext, _: Next) Error!void {
 
 fn getRecovery(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const html = try templates.pages.auth_recovery.renderAlloc(request.allocator(), .{});
-    defer request.allocator().free(html);
-    return respond(request, html, "text/html; charset=utf-8", &.{
+    const body = views.recovery(request.allocator()) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
@@ -404,9 +400,9 @@ fn postRecovery(request: *RequestContext, _: Next) Error!void {
 
 fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     if (!try checkRequestOrigin(request)) return;
-    const html = try templates.pages.auth_recovery_complete.renderAlloc(request.allocator(), .{});
-    defer request.allocator().free(html);
-    return respond(request, html, "text/html; charset=utf-8", &.{
+    const body = views.recoveryComplete(request.allocator()) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
     }, .ok);
 }
@@ -480,12 +476,44 @@ fn establishSession(
     const csrf_cookie_buffer = try request.allocator().alloc(u8, 192);
     const session_cookie = try formatCookie(session_cookie_buffer, session_cookie_name, &credentials.token, true);
     const csrf_cookie = try formatCookie(csrf_cookie_buffer, csrf_cookie_name, &credentials.csrf_token, false);
+    if (isHtmx(request)) return respond(request, &.{}, "text/plain; charset=utf-8", &.{
+        .{ .name = "hx-redirect", .value = location },
+        .{ .name = "set-cookie", .value = session_cookie },
+        .{ .name = "set-cookie", .value = csrf_cookie },
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .ok);
     return respond(request, &.{}, "text/plain; charset=utf-8", &.{
         .{ .name = "location", .value = location },
         .{ .name = "set-cookie", .value = session_cookie },
         .{ .name = "set-cookie", .value = csrf_cookie },
         .{ .name = "cache-control", .value = "no-store" },
     }, .see_other);
+}
+
+fn renderLogin(request: *RequestContext, message: ?[]const u8, status: std.http.Status) Error!void {
+    const body = views.login(request.allocator(), message) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    }, status);
+}
+
+fn loginFailure(request: *RequestContext, message: []const u8, status: std.http.Status) Error!void {
+    if (!isHtmx(request)) return renderLogin(request, message, status);
+    const body = views.loginFeedback(request.allocator(), message) catch |failure| return authViewFailure(request, failure);
+    defer request.allocator().free(body);
+    return respond(request, body, "text/html; charset=utf-8", &.{
+        .{ .name = "cache-control", .value = "no-store" },
+    }, .ok);
+}
+
+fn authViewFailure(request: *RequestContext, failure: anyerror) Error {
+    web_logging.logDiagnostic(request, "error", "auth.template_render_failed", "authentication page rendering failed", .internal_server_error, failure, null);
+    return failure;
+}
+
+fn isHtmx(request: *const RequestContext) bool {
+    return headerValue(request, "hx-request") != null;
 }
 
 pub fn checkRequestOrigin(request: *RequestContext) !bool {

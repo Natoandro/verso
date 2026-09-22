@@ -8,6 +8,7 @@
     <title>Sign in — Verso</title>
     <link rel="stylesheet" href="/admin/theme.css">
     <link rel="stylesheet" href="/admin/auth.css">
+    <script src="https://unpkg.com/htmx.org@4.0.0/dist/htmx.min.js" integrity="sha384-BvJpBiO8Kh31EqtJe5DRIeWrHWnCGkwytKs9NKFi86Hhw96dEqdEMzZDeK9iEGTc" crossorigin="anonymous" defer></script>
   </head>
   <body class="auth-page">
     <main class="auth-shell">
@@ -40,7 +41,8 @@
           <h2 id="auth-title">Sign in to Verso</h2>
           <p>Continue to your editorial workspace.</p>
         </div>
-        <form class="auth-form" method="post" action="/admin/login">
+        <form class="auth-form" method="post" action="/admin/login" hx-post="/admin/login" hx-target="#login-feedback" hx-swap="innerHTML">
+          <div id="login-feedback" class="auth-feedback" aria-live="polite">{{#if has_error}}<p class="auth-feedback-error" role="alert">{{ error_message }}</p>{{/if}}</div>
           <div class="auth-field">
             <label for="login">Login</label>
             <input id="login" name="login" autocomplete="username" placeholder="you@example.com" required autofocus>
