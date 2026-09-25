@@ -130,5 +130,18 @@
         <span class="footer-note">Preview and publish remain separate operations.</span>
       </footer>
     </main>
+    <script>
+      (() => {
+        const resizeTextareas = (root) => {
+          root.querySelectorAll("textarea[data-auto-resize]").forEach((textarea) => {
+            textarea.style.height = "auto";
+            textarea.style.height = `${textarea.scrollHeight}px`;
+          });
+        };
+        resizeTextareas(document);
+        window.addEventListener("resize", () => resizeTextareas(document));
+        document.body.addEventListener("htmx:afterSettle", (event) => resizeTextareas(event.target));
+      })();
+    </script>
   </body>
 </html>

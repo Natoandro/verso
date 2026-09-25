@@ -51,13 +51,15 @@
         hx-select="#editor"
         hx-swap="outerHTML"
       ><span class="icon">{{> icon_edit }}</span></button>
+    {{#else}}
+      <button class="icon-button icon-button-check section-check" type="submit" form="section-editor-{{ section.id }}" aria-label="Validate section" title="Validate section"><span class="icon">{{> icon_check }}</span></button>
     {{/if}}
   </div>
 
   {{#if section.is_preview}}
     <div class="section-card-body section-preview">{{{ section.preview_html }}}</div>
   {{#else}}
-    <form class="section-card-body section-editor" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form id="section-editor-{{ section.id }}" class="section-card-body section-editor" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="preview">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -66,8 +68,8 @@
       <input type="hidden" name="expected_revision" value="{{ revision }}">
       <input type="hidden" name="kind" value="{{ section.kind }}">
       {{#if section.is_text}}
-        <div class="growing-textarea" data-replicated-value="{{ section.markdown }}">
-          <textarea name="markdown" aria-label="Markdown content" spellcheck="false" required oninput="this.parentNode.dataset.replicatedValue=this.value">{{ section.markdown }}</textarea>
+        <div class="growing-textarea">
+          <textarea name="markdown" data-auto-resize aria-label="Markdown content" spellcheck="false" required oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px'">{{ section.markdown }}</textarea>
         </div>
       {{#else}}
         <div class="image-editor">
@@ -87,8 +89,6 @@
           </label>
         </div>
       {{/if}}
-      <p class="section-save-hint">Save this section to validate and preview it.</p>
-      <button class="icon-button icon-button-check section-check" type="submit" aria-label="Validate section" title="Validate section"><span class="icon">{{> icon_check }}</span></button>
     </form>
   {{/if}}
 </article>
