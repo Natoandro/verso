@@ -21,6 +21,11 @@ pub const PasswordResetToken = struct {
     value: [auth_crypto.encoded_secret_length]u8,
 };
 
+pub const PasswordResetIdentifier = union(enum) {
+    login: []const u8,
+    email: []const u8,
+};
+
 pub const Service = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -220,15 +225,22 @@ pub const Service = struct {
 
     /// Issues a reset token for an operator who already controls the database.
     /// The caller is responsible for protecting the returned URL.
-    pub fn issueAdminPasswordReset(self: *Service, identifier: []const u8) !PasswordResetToken {
+    pub fn issueAdminPasswordReset(
+        self: *Service,
+        identifier: PasswordResetIdentifier,
+    ) !PasswordResetToken {
         var identifier_buffer: [320]u8 = undefined;
-        const normalized_identifier = password.normalizeLogin(&identifier_buffer, identifier) catch {
+        const raw_identifier = switch (identifier) {
+            .login => |value| value,
+            .email => |value| value,
+        };
+        const normalized_identifier = password.normalizeLogin(&identifier_buffer, raw_identifier) catch {
             return error.ResetUserNotFound;
         };
-        var credential = (try self.local_store.credentialForLoginOrEmail(
-            self.allocator,
-            normalized_identifier,
-        )) orelse return error.ResetUserNotFound;
+        var credential = switch (identifier) {
+            .login => try self.local_store.credentialForLogin(self.allocator, normalized_identifier),
+            .email => try self.local_store.credentialForEmail(self.allocator, normalized_identifier),
+        } orelse return error.ResetUserNotFound;
         defer credential.deinit();
 
         const token = try auth_crypto.newSecret(self.io);

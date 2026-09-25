@@ -183,7 +183,10 @@ fn passwordReset(
         command_support.logCommandFailure(init, "auth password-reset", "argument_validation", "warn", error.InvalidArguments);
         return error.InvalidArguments;
     }
-    const identifier = login orelse email.?;
+    const identifier = if (login) |value|
+        verso.application.identity.PasswordResetIdentifier{ .login = value }
+    else
+        verso.application.identity.PasswordResetIdentifier{ .email = email.? };
 
     var parsed_config = loadAuthConfig(init, cli_overrides, "auth password-reset") catch |configuration_error| {
         return configuration_error;
@@ -193,6 +196,10 @@ fn passwordReset(
     const site_url = app_config.site.base_url orelse {
         command_support.logCommandFailure(init, "auth password-reset", "site_url", "error", error.MissingSiteBaseUrl);
         return error.MissingSiteBaseUrl;
+    };
+    const site_origin = verso.web.originFromBaseUrl(site_url) catch |failure| {
+        command_support.logCommandFailure(init, "auth password-reset", "site_url", "error", failure);
+        return failure;
     };
 
     verso.application.bootstrap.prepareDatabaseParentDirectory(
@@ -242,11 +249,7 @@ fn passwordReset(
         command_support.logCommandFailure(init, "auth password-reset", "reset_issue", "error", failure);
         return failure;
     };
-    const reset_link = try std.fmt.allocPrint(
-        init.gpa,
-        "{s}{s}admin/recover/complete?token={s}",
-        .{ site_url, if (std.mem.endsWith(u8, site_url, "/")) "" else "/", &reset_token.value },
-    );
+    const reset_link = try passwordResetLink(init.gpa, site_origin, &reset_token.value);
     defer init.gpa.free(reset_link);
 
     var output_buffer: [256]u8 = undefined;
@@ -283,5 +286,27 @@ fn tryCommandLogger(init: std.process.Init, app_config: verso.config.Config) ver
         init.gpa,
         app_config.effectiveLoggingFormat(stderr_is_tty),
         .{ .use_color = stderr_is_tty, .omit_null_fields = app_config.logging.omit_null_fields },
+    );
+}
+
+fn passwordResetLink(
+    allocator: std.mem.Allocator,
+    site_url: []const u8,
+    token: []const u8,
+) ![]u8 {
+    const site_origin = try verso.web.originFromBaseUrl(site_url);
+    return std.fmt.allocPrint(allocator, "{s}/admin/recover/complete?token={s}", .{ site_origin, token });
+}
+
+test "password reset links use the site origin" {
+    const link = try passwordResetLink(
+        std.testing.allocator,
+        "https://example.test/editor?source=admin#reset",
+        "token",
+    );
+    defer std.testing.allocator.free(link);
+    try std.testing.expectEqualStrings(
+        "https://example.test/admin/recover/complete?token=token",
+        link,
     );
 }

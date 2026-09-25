@@ -18,8 +18,9 @@
           <p>Use the recovery link provided by your administrator to choose a new password.</p>
         </header>
         <form class="standalone-form" method="post" action="/admin/recover/complete">
-          <label>Recovery token <input name="token" value="{{ token }}" autocomplete="one-time-code" required></label>
+          <input type="hidden" name="token" value="{{ token }}">
           <label>New password <input type="password" name="new_password" autocomplete="new-password" required></label>
+          <label>Confirm new password <input type="password" name="new_password_confirmation" autocomplete="new-password" required></label>
           <div class="standalone-actions"><button class="theme-button theme-button-primary" type="submit">Set password</button><a class="theme-button theme-button-quiet" href="/admin/login">Back to sign in</a></div>
         </form>
         <footer class="standalone-footer"><span>Recovery tokens are single-use.</span><a href="/admin/login">Back to sign in</a></footer>

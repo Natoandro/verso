@@ -25,13 +25,33 @@ pub const Store = struct {
         allocator: std.mem.Allocator,
         login: []const u8,
     ) !?Credential {
-        return self.credentialForLoginOrEmail(allocator, login);
+        const Row = struct {
+            user_id: i64,
+            password_hash: sqlite.Text,
+        };
+        const row = try self.database.oneAlloc(
+            Row,
+            allocator,
+            \\SELECT credential.user_id, credential.password_hash
+            \\FROM local_password_credentials AS credential
+            \\JOIN users AS user ON user.id = credential.user_id
+            \\WHERE credential.login = ? AND user.state = 'active'
+        ,
+            .{},
+            .{login},
+        ) orelse return null;
+        defer allocator.free(row.password_hash.data);
+        return .{
+            .user_id = row.user_id,
+            .password_hash = try allocator.dupe(u8, row.password_hash.data),
+            .allocator = allocator,
+        };
     }
 
-    pub fn credentialForLoginOrEmail(
+    pub fn credentialForEmail(
         self: *Store,
         allocator: std.mem.Allocator,
-        identifier: []const u8,
+        email: []const u8,
     ) !?Credential {
         const Row = struct {
             user_id: i64,
@@ -43,10 +63,10 @@ pub const Store = struct {
             \\SELECT credential.user_id, credential.password_hash
             \\FROM local_password_credentials AS credential
             \\JOIN users AS user ON user.id = credential.user_id
-            \\WHERE (credential.login = ? OR user.email = ?) AND user.state = 'active'
+            \\WHERE user.email = ? AND user.state = 'active'
         ,
             .{},
-            .{ identifier, identifier },
+            .{email},
         ) orelse return null;
         defer allocator.free(row.password_hash.data);
         return .{

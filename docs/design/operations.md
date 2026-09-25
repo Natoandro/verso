@@ -371,10 +371,11 @@ Before email delivery is configured, an operator may issue a local password
 reset link with:
 
 ```text
-verso auth password-reset --login <login-or-email>
+verso auth password-reset --login <login>
 ```
 
-The target may instead be supplied with `--email`. The command requires a
+The target may instead be supplied with `--email` when targeting the user's
+account email. The command requires a
 resolved `database.url` and explicit `site.base_url`, accepts those values from
 `verso.toml`, `VERSO_DATABASE_URL`/`VERSO_SITE_BASE_URL`, or command-line
 overrides, and prints the link to standard output. The token is opaque, stored

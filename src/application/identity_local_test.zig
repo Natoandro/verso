@@ -63,7 +63,25 @@ test "local password authentication rotates sessions and supports recovery" {
     try std.testing.expectError(error.InvalidSession, service.authenticate(&changed_session.token));
     try std.testing.expectEqual(owner_id, (try service.authenticate(&recovered_session.token)).user_id);
 
-    const admin_reset = try service.issueAdminPasswordReset("owner@example.test");
+    try database.exec(
+        "INSERT INTO users (subject, display_name) VALUES ('second-user', 'Second User')",
+        .{},
+        .{},
+    );
+    const second_user_id = database.getLastInsertRowID();
+    try database.exec(
+        "INSERT INTO local_password_credentials (user_id, login, password_hash) VALUES (?, 'owner@example.test', '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA')",
+        .{},
+        .{second_user_id},
+    );
+    const login_reset = try service.issueAdminPasswordReset(.{ .login = "owner@example.test" });
+    const login_recovered_session = try service.completePasswordReset(
+        &login_reset.value,
+        "second user recovered correct horse battery staple",
+    );
+    try std.testing.expectEqual(second_user_id, (try service.authenticate(&login_recovered_session.token)).user_id);
+
+    const admin_reset = try service.issueAdminPasswordReset(.{ .email = "owner@example.test" });
     const admin_recovered_session = try service.completePasswordReset(
         &admin_reset.value,
         "admin recovered correct horse battery staple",

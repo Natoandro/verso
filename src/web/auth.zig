@@ -55,6 +55,7 @@ const PasswordForm = struct {
 const RecoveryCompleteForm = struct {
     token: []const u8,
     new_password: []const u8,
+    new_password_confirmation: []const u8,
 };
 
 pub const Handler = struct {
@@ -383,6 +384,7 @@ fn getRecoveryComplete(request: *RequestContext, _: Next) Error!void {
     defer request.allocator().free(body);
     return respond(request, body, "text/html; charset=utf-8", &.{
         .{ .name = "cache-control", .value = "no-store" },
+        .{ .name = "referrer-policy", .value = "no-referrer" },
     }, .ok);
 }
 
@@ -393,6 +395,18 @@ fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
         return errors.respond(request, .unauthorized);
     };
     defer parsed.deinit(request.allocator());
+    if (!recoveryPasswordsMatch(parsed.value)) {
+        web_logging.logDiagnostic(
+            request,
+            "warn",
+            "auth.recovery_rejected",
+            "password recovery confirmation did not match",
+            .bad_request,
+            error.InvalidPasswordConfirmation,
+            "password confirmation mismatch",
+        );
+        return errors.respond(request, .bad_request);
+    }
     const credentials = request.server.identity_service.completePasswordReset(parsed.value.token, parsed.value.new_password) catch |reset_error| switch (reset_error) {
         error.InvalidCredentials, error.InvalidPassword => {
             web_logging.logDiagnostic(request, "warn", "auth.recovery_rejected", "password recovery credentials were rejected", .unauthorized, reset_error, "invalid recovery credentials");
@@ -404,6 +418,10 @@ fn postRecoveryComplete(request: *RequestContext, _: Next) Error!void {
         },
     };
     return establishSession(request, credentials, "/admin/editor");
+}
+
+fn recoveryPasswordsMatch(values: RecoveryCompleteForm) bool {
+    return std.mem.eql(u8, values.new_password, values.new_password_confirmation);
 }
 
 pub fn requireCsrf(request: *RequestContext, token: []const u8, form_token: ?[]const u8) Error!bool {
@@ -613,6 +631,19 @@ pub fn respond(
 
 pub fn headerValue(request: *const RequestContext, name: []const u8) ?[]const u8 {
     return request.cachedHeaderValue(name);
+}
+
+test "password recovery requires matching password confirmation" {
+    try std.testing.expect(recoveryPasswordsMatch(.{
+        .token = "token",
+        .new_password = "correct horse battery staple",
+        .new_password_confirmation = "correct horse battery staple",
+    }));
+    try std.testing.expect(!recoveryPasswordsMatch(.{
+        .token = "token",
+        .new_password = "correct horse battery staple",
+        .new_password_confirmation = "different correct horse battery staple",
+    }));
 }
 
 fn queryParam(request: *const RequestContext, name: []const u8) ?[]const u8 {
