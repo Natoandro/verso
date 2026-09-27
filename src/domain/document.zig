@@ -28,6 +28,9 @@ pub const CreateDraft = struct {
     slug: []const u8,
     description: ?[]const u8 = null,
     language: []const u8 = "en",
+    subject_ids: []const i64 = &.{},
+    series_id: ?i64 = null,
+    series_position: ?u32 = null,
     markdown: []const u8,
 };
 
@@ -65,6 +68,9 @@ pub const SaveDraft = struct {
     slug: []const u8,
     description: ?[]const u8 = null,
     language: []const u8 = "en",
+    subject_ids: []const i64 = &.{},
+    series_id: ?i64 = null,
+    series_position: ?u32 = null,
     sections: []const DraftSection,
 };
 
@@ -78,6 +84,9 @@ pub const DraftDocument = struct {
     slug: []const u8,
     description: ?[]const u8,
     language: []const u8,
+    subject_ids: []i64 = &.{},
+    series_id: ?i64 = null,
+    series_position: ?u32 = null,
     sections: []DraftSection,
 };
 
@@ -90,7 +99,16 @@ pub fn validateCreateDraft(request: CreateDraft) !void {
     if (request.document_id) |document_id| {
         if (document_id <= 0) return error.InvalidDocumentId;
     }
-    try validateMetadata(request.document_type, request.title, request.slug, request.description, request.language);
+    try validateMetadata(
+        request.document_type,
+        request.title,
+        request.slug,
+        request.description,
+        request.language,
+        request.subject_ids,
+        request.series_id,
+        request.series_position,
+    );
     if (std.mem.indexOfScalar(u8, request.markdown, 0) != null) return error.InvalidMarkdown;
 }
 
@@ -101,7 +119,16 @@ pub fn validateCreateNextVersion(request: CreateNextVersion) !void {
 pub fn validateSaveDraft(request: SaveDraft) !void {
     if (request.document_id <= 0) return error.InvalidDocumentId;
     if (request.version_id <= 0) return error.InvalidVersionId;
-    try validateMetadata(request.document_type, request.title, request.slug, request.description, request.language);
+    try validateMetadata(
+        request.document_type,
+        request.title,
+        request.slug,
+        request.description,
+        request.language,
+        request.subject_ids,
+        request.series_id,
+        request.series_position,
+    );
 
     for (request.sections, 0..) |section, index| {
         if (section.id) |section_id| {
@@ -122,23 +149,47 @@ fn validateMetadata(
     slug: []const u8,
     description: ?[]const u8,
     language: []const u8,
+    subject_ids: []const i64,
+    series_id: ?i64,
+    series_position: ?u32,
 ) !void {
     _ = document_type;
-    if (!isNonEmptyText(title)) return error.InvalidTitle;
+    if (!isValidText(title, false)) return error.InvalidTitle;
     if (!isValidSlug(slug)) return error.InvalidSlug;
     if (!isNonEmptyToken(language)) return error.InvalidLanguage;
     if (description) |value| {
-        if (std.mem.indexOfScalar(u8, value, 0) != null) return error.InvalidDescription;
+        if (value.len != 0 and !isValidText(value, true)) return error.InvalidDescription;
+    }
+    for (subject_ids, 0..) |subject_id, index| {
+        if (subject_id <= 0) return error.InvalidSubjectId;
+        for (subject_ids[0..index]) |previous| {
+            if (subject_id == previous) return error.DuplicateSubjectId;
+        }
+    }
+    if ((series_id == null) != (series_position == null)) return error.InvalidSeriesMetadata;
+    if (series_id) |id| {
+        if (id <= 0) return error.InvalidSeriesId;
+    }
+    if (series_position) |position| {
+        if (position == 0) return error.InvalidSeriesPosition;
     }
 }
 
-fn isNonEmptyText(value: []const u8) bool {
-    return std.mem.trim(u8, value, &std.ascii.whitespace).len > 0 and
-        std.mem.indexOfScalar(u8, value, 0) == null;
+fn isValidText(value: []const u8, allow_newlines: bool) bool {
+    if (value.len == 0 or std.mem.trim(u8, value, &std.ascii.whitespace).len == 0) {
+        return false;
+    }
+    for (value) |character| {
+        if (character == 0 or character == 0x7f) return false;
+        if (character < 0x20 and !(allow_newlines and (character == '\n' or character == '\r' or character == '\t'))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn isNonEmptyToken(value: []const u8) bool {
-    if (!isNonEmptyText(value)) return false;
+    if (!isValidText(value, false)) return false;
     for (value) |character| {
         if (!(std.ascii.isAlphanumeric(character) or character == '-' or character == '_')) return false;
     }
@@ -146,7 +197,7 @@ fn isNonEmptyToken(value: []const u8) bool {
 }
 
 fn isValidSlug(value: []const u8) bool {
-    if (!isNonEmptyText(value)) return false;
+    if (!isValidText(value, false)) return false;
     for (value) |character| {
         if (!(std.ascii.isAlphanumeric(character) or character == '-' or character == '_')) return false;
     }
@@ -169,4 +220,16 @@ test "draft metadata validation rejects invalid values" {
     var invalid = valid;
     invalid.title = " ";
     try std.testing.expectError(error.InvalidTitle, validateCreateDraft(invalid));
+
+    invalid = valid;
+    invalid.title = "A\nTitle";
+    try std.testing.expectError(error.InvalidTitle, validateCreateDraft(invalid));
+
+    invalid = valid;
+    invalid.series_position = 1;
+    try std.testing.expectError(error.InvalidSeriesMetadata, validateCreateDraft(invalid));
+
+    invalid = valid;
+    invalid.subject_ids = &.{ 4, 4 };
+    try std.testing.expectError(error.DuplicateSubjectId, validateCreateDraft(invalid));
 }

@@ -2,6 +2,7 @@ const sqlite = @import("sqlite");
 const domain = @import("../domain/document.zig");
 const std = @import("std");
 const document_access = @import("document_access.zig");
+const document_metadata = @import("document_metadata.zig");
 
 pub const EncodedSection = struct {
     id: ?i64,
@@ -26,6 +27,9 @@ pub const DraftRecord = struct {
     slug: []const u8,
     description: ?[]const u8,
     language: []const u8,
+    subject_ids: []i64,
+    series_id: ?i64,
+    series_position: ?i64,
     sections: []SectionRecord,
 
     pub fn deinit(self: *DraftRecord, allocator: std.mem.Allocator) void {
@@ -34,6 +38,7 @@ pub const DraftRecord = struct {
         allocator.free(self.slug);
         if (self.description) |description| allocator.free(description);
         allocator.free(self.language);
+        allocator.free(self.subject_ids);
         for (self.sections) |section| {
             allocator.free(section.kind);
             allocator.free(section.data);
@@ -114,13 +119,25 @@ pub const Store = struct {
             ) != null) return error.DocumentAlreadyStarted;
         }
 
+        try document_metadata.validateReferences(self.database, request.subject_ids, request.series_id);
+
         try self.database.exec(
             \\INSERT INTO document_versions
-            \\    (document_id, version_number, state, slug, title, description, language, created_by)
-            \\    VALUES (?, 1, 'draft', ?, ?, ?, ?, ?)
+            \\    (document_id, version_number, state, slug, title, description, language,
+            \\     series_id, series_position, created_by)
+            \\    VALUES (?, 1, 'draft', ?, ?, ?, ?, ?, ?, ?)
         ,
             .{},
-            .{ document_id, request.slug, request.title, request.description, request.language, created_by },
+            .{
+                document_id,
+                request.slug,
+                request.title,
+                request.description,
+                request.language,
+                request.series_id,
+                request.series_position,
+                created_by,
+            },
         );
         const version_id = self.database.getLastInsertRowID();
 
@@ -130,6 +147,7 @@ pub const Store = struct {
             .{ version_id, section_data },
         );
         const section_id = self.database.getLastInsertRowID();
+        try document_metadata.insertSubjectReferences(self.database, version_id, request.subject_ids);
 
         try self.database.execMulti("COMMIT;", .{});
         return .{
@@ -176,6 +194,7 @@ pub const Store = struct {
             .{},
             .{ request.document_id, request.document_type.text() },
         ) == null) return error.DocumentTypeMismatch;
+        try document_metadata.validateReferences(self.database, request.subject_ids, request.series_id);
 
         const current_revision = (try self.database.one(
             i64,
@@ -224,16 +243,29 @@ pub const Store = struct {
             }
         }
 
+        try self.database.exec(
+            "DELETE FROM version_subjects WHERE version_id = ?",
+            .{},
+            .{request.version_id},
+        );
+        try document_metadata.insertSubjectReferences(self.database, request.version_id, request.subject_ids);
+
         const next_revision = std.math.add(i64, current_revision, 1) catch return error.RevisionOverflow;
         try self.database.exec(
-            "UPDATE document_versions SET slug = ?, title = ?, description = ?, language = ?, " ++
-                "revision_number = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+            \\UPDATE document_versions
+            \\SET slug = ?, title = ?, description = ?, language = ?,
+            \\    series_id = ?, series_position = ?, revision_number = ?,
+            \\    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            \\WHERE id = ?
+        ,
             .{},
             .{
                 request.slug,
                 request.title,
                 request.description,
                 request.language,
+                request.series_id,
+                request.series_position,
                 next_revision,
                 request.version_id,
             },
@@ -246,6 +278,9 @@ pub const Store = struct {
     }
 
     pub fn loadDraft(self: *Store, allocator: std.mem.Allocator, version_id: i64) !DraftRecord {
+        try self.database.execMulti("BEGIN;", .{});
+        errdefer self.database.execMulti("ROLLBACK;", .{}) catch {};
+
         const VersionRow = struct {
             document_id: i64,
             version_number: i64,
@@ -256,18 +291,20 @@ pub const Store = struct {
             slug: []const u8,
             description: ?[]const u8,
             language: []const u8,
+            series_id: ?i64,
+            series_position: ?i64,
         };
         const version = (try self.database.oneAlloc(
             VersionRow,
             allocator,
             "SELECT v.document_id, v.version_number, v.revision_number, d.type, v.state, " ++
-                "v.title, v.slug, v.description, v.language " ++
+                "v.title, v.slug, v.description, v.language, v.series_id, v.series_position " ++
                 "FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.id = ?",
             .{},
             .{version_id},
         )) orelse return error.VersionNotFound;
         var version_owned = true;
-        defer if (version_owned) freeVersionRow(allocator, version);
+        defer if (version_owned) document_metadata.freeVersionRow(allocator, version);
         if (!std.mem.eql(u8, version.state, "draft") and !std.mem.eql(u8, version.state, "review")) {
             return error.VersionNotEditable;
         }
@@ -282,11 +319,25 @@ pub const Store = struct {
             .slug = version.slug,
             .description = version.description,
             .language = version.language,
+            .subject_ids = &.{},
+            .series_id = version.series_id,
+            .series_position = version.series_position,
             .sections = &.{},
         };
         errdefer record.deinit(allocator);
         allocator.free(version.state);
         version_owned = false;
+
+        const SubjectRow = struct { subject_id: i64 };
+        var subject_statement = try self.database.prepareWithDiags(
+            "SELECT subject_id FROM version_subjects WHERE version_id = ? ORDER BY subject_id",
+            .{},
+        );
+        defer subject_statement.deinit();
+        const subject_rows = try subject_statement.all(SubjectRow, allocator, .{}, .{version_id});
+        defer allocator.free(subject_rows);
+        record.subject_ids = try allocator.alloc(i64, subject_rows.len);
+        for (subject_rows, 0..) |subject, index| record.subject_ids[index] = subject.subject_id;
 
         var statement = try self.database.prepareWithDiags(
             "SELECT id, position, kind, data FROM sections WHERE version_id = ? ORDER BY position",
@@ -294,6 +345,7 @@ pub const Store = struct {
         );
         defer statement.deinit();
         record.sections = try statement.all(SectionRecord, allocator, .{}, .{version_id});
+        try self.database.execMulti("COMMIT;", .{});
         return record;
     }
 
@@ -341,12 +393,3 @@ pub const Store = struct {
         )) orelse error.DraftNotFound;
     }
 };
-
-fn freeVersionRow(allocator: std.mem.Allocator, row: anytype) void {
-    allocator.free(row.document_type);
-    allocator.free(row.state);
-    allocator.free(row.title);
-    allocator.free(row.slug);
-    if (row.description) |description| allocator.free(description);
-    allocator.free(row.language);
-}

@@ -19,6 +19,17 @@ any needed published fixtures through application services for integration
 tests; they do not introduce a public or unauthenticated publishing
 interface.
 
+### Current sequencing decision
+
+`DOC-004` remains part of the planned content model, but its immutable working
+revision snapshots are intentionally deferred. The current editor direction is
+server-transactional and already provides optimistic concurrency through draft
+revision numbers; it does not promise browser-local recovery or offline editing.
+Implement working-revision storage after the editorial and publishing path has
+demonstrated a concrete need for recovery checkpoints, review snapshots, or
+MCP revision operations. Continue with `DOC-005` as the next active document
+slice.
+
 ## Prerequisites — bootstrap and schema
 
 These are deliberately not feature slices. They must be complete before
@@ -216,6 +227,12 @@ migration task.
   - [ ] **Application/integration:** Verify valid metadata changes, rejected
     malformed values, and the inability to edit the logical type or bypass
     configured collections.
+
+  The draft aggregate now validates and round-trips title, slug, description,
+  language, subjects, and series metadata. Public type-to-collection mapping
+  remains coupled to the public route-resolution work in `RND-002`; the
+  current implementation has no public document route that could consume a
+  deployment mapping.
 
 - [x] **DOC-006 — Persist and load complete draft documents**
 

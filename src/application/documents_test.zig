@@ -204,6 +204,124 @@ test "createDraft persists document version and text section atomically" {
     ));
 }
 
+test "draft metadata persists subject and series relationships through save and load" {
+    var database = try sqlite.Db.init(.{
+        .mode = .Memory,
+        .open_flags = .{ .write = true, .create = true },
+    });
+    defer database.deinit();
+    try migrate(&database);
+
+    try database.exec("INSERT INTO series (title, slug) VALUES ('A Series', 'a-series')", .{}, .{});
+    const series_id = database.getLastInsertRowID();
+    try database.exec("INSERT INTO subjects (name, slug) VALUES ('Zig', 'zig')", .{}, .{});
+    const zig_subject_id = database.getLastInsertRowID();
+    try database.exec("INSERT INTO subjects (name, slug) VALUES ('SQLite', 'sqlite')", .{}, .{});
+    const sqlite_subject_id = database.getLastInsertRowID();
+
+    var store = storage.Store.init(&database);
+    var service = Service.init(std.testing.allocator, &store);
+    const subject_ids = [_]i64{zig_subject_id};
+    try std.testing.expectError(
+        error.SubjectNotFound,
+        service.createDraft(.local_operator, .{
+            .document_type = .article,
+            .title = "Invalid metadata",
+            .slug = "invalid-metadata",
+            .subject_ids = &[_]i64{9999},
+            .markdown = "body",
+        }),
+    );
+    try std.testing.expectError(
+        error.SeriesNotFound,
+        service.createDraft(.local_operator, .{
+            .document_type = .article,
+            .title = "Invalid series",
+            .slug = "invalid-series",
+            .series_id = 9999,
+            .series_position = 1,
+            .markdown = "body",
+        }),
+    );
+    try std.testing.expectEqual(@as(?i64, 0), try database.one(i64, "SELECT count(*) FROM documents", .{}, .{}));
+
+    const draft = try service.createDraft(.local_operator, .{
+        .document_type = .article,
+        .title = "Metadata",
+        .slug = "metadata",
+        .subject_ids = &subject_ids,
+        .series_id = series_id,
+        .series_position = 2,
+        .markdown = "body",
+    });
+
+    var loaded = try service.loadDraft(.local_operator, draft.version_id);
+    try std.testing.expectEqual(series_id, loaded.document.series_id.?);
+    try std.testing.expectEqual(@as(?u32, 2), loaded.document.series_position);
+    try std.testing.expectEqualSlices(i64, &subject_ids, loaded.document.subject_ids);
+
+    const replacement_subject_ids = [_]i64{sqlite_subject_id};
+    _ = try service.saveDraft(.local_operator, .{
+        .document_id = draft.document_id,
+        .version_id = draft.version_id,
+        .expected_revision = loaded.document.revision_number,
+        .document_type = .article,
+        .title = "Updated metadata",
+        .slug = "updated-metadata",
+        .subject_ids = &replacement_subject_ids,
+        .series_id = series_id,
+        .series_position = 3,
+        .sections = loaded.document.sections,
+    });
+    loaded.deinit();
+
+    var updated = try service.loadDraft(.local_operator, draft.version_id);
+    defer updated.deinit();
+    try std.testing.expectEqualStrings("Updated metadata", updated.document.title);
+    try std.testing.expectEqual(@as(?u32, 3), updated.document.series_position);
+    try std.testing.expectEqualSlices(i64, &replacement_subject_ids, updated.document.subject_ids);
+    try std.testing.expectError(
+        error.SubjectNotFound,
+        service.saveDraft(.local_operator, .{
+            .document_id = draft.document_id,
+            .version_id = draft.version_id,
+            .expected_revision = updated.document.revision_number,
+            .document_type = .article,
+            .title = "Must roll back",
+            .slug = "must-roll-back",
+            .subject_ids = &[_]i64{9999},
+            .series_id = series_id,
+            .series_position = 4,
+            .sections = updated.document.sections,
+        }),
+    );
+    try std.testing.expectEqualSlices(i64, &replacement_subject_ids, updated.document.subject_ids);
+    try std.testing.expectEqual(@as(?i64, 1), try database.one(
+        i64,
+        "SELECT revision_number FROM document_versions WHERE id = ?",
+        .{},
+        .{draft.version_id},
+    ));
+    try std.testing.expectEqual(@as(?i64, 1), try database.one(
+        i64,
+        "SELECT count(*) FROM document_versions WHERE id = ? AND title = ?",
+        .{},
+        .{ draft.version_id, "Updated metadata" },
+    ));
+    try std.testing.expectEqual(@as(?i64, series_id), try database.one(
+        i64,
+        "SELECT series_id FROM document_versions WHERE id = ?",
+        .{},
+        .{draft.version_id},
+    ));
+    try std.testing.expectEqual(@as(?i64, 1), try database.one(
+        i64,
+        "SELECT count(*) FROM version_subjects WHERE version_id = ? AND subject_id = ?",
+        .{},
+        .{ draft.version_id, sqlite_subject_id },
+    ));
+}
+
 test "section mutations preserve order and reject stale or immutable edits" {
     var database = try sqlite.Db.init(.{
         .mode = .Memory,

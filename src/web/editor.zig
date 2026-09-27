@@ -173,6 +173,9 @@ fn saveDocument(request: *context.RequestContext, _: layer.Next) anyerror!void {
         .slug = parsed.value.slug,
         .description = if (description_value.len == 0) null else description_value,
         .language = loaded.document.language,
+        .subject_ids = loaded.document.subject_ids,
+        .series_id = loaded.document.series_id,
+        .series_position = loaded.document.series_position,
         .sections = draft_sections,
     }) catch |failure| {
         web_logging.logDiagnostic(request, "warn", "editor.document_save_failed", "draft save failed", .ok, failure, null);

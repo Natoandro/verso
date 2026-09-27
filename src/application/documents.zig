@@ -123,9 +123,11 @@ pub const Service = struct {
         actor: Actor,
         version_id: i64,
     ) !LoadedDraft {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        errdefer arena.deinit();
         return .{
-            .arena = null,
-            .document = try self.loadDraftDocument(actor, version_id, allocator),
+            .arena = arena,
+            .document = try self.loadDraftDocument(actor, version_id, arena.allocator()),
         };
     }
 
@@ -141,6 +143,11 @@ pub const Service = struct {
         const document_type = domain.DocumentType.parse(record.document_type) catch return error.InvalidStoredDocument;
         const version_number = std.math.cast(u32, record.version_number) orelse return error.InvalidStoredDocument;
         const revision_number = std.math.cast(u64, record.revision_number) orelse return error.InvalidStoredDocument;
+        const series_position = if (record.series_position) |position|
+            std.math.cast(u32, position) orelse return error.InvalidStoredDocument
+        else
+            null;
+        if ((record.series_id == null) != (series_position == null)) return error.InvalidStoredDocument;
         const sections = try allocator.alloc(domain.DraftSection, record.sections.len);
 
         for (record.sections, 0..) |section, index| {
@@ -162,6 +169,9 @@ pub const Service = struct {
             .slug = record.slug,
             .description = record.description,
             .language = record.language,
+            .subject_ids = record.subject_ids,
+            .series_id = record.series_id,
+            .series_position = series_position,
             .sections = sections,
         };
     }
