@@ -67,6 +67,15 @@ opens its editable fields or submits a section operation. The server returns
 the updated section or the smallest surrounding region needed to preserve
 ordering, controls, validation errors, and accessible focus.
 
+The initial editor view renders all sections as previews. Editing a section
+selects only that section for editing; validating it replaces that section
+with its server-rendered preview. A rendering or validation error keeps the
+affected section editable so its content can be corrected during that
+operation.
+
+The document title and details controls remain outside the section region, so
+section operations do not rerender them.
+
 Supported operations include:
 
 - insert a section;

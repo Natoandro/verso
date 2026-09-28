@@ -4,7 +4,7 @@
   tabindex="0"
 >
   <div class="section-actions">
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section?details={{ details_value }}" hx-post="/admin/editor/section?details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="move-up">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -13,7 +13,7 @@
       <input type="hidden" name="expected_revision" value="{{ revision }}">
       <button class="icon-button icon-button-up" type="submit" aria-label="Move section up" title="Move section up" {{#if section.is_first}}disabled{{/if}}><span class="icon">{{> icon_up }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section?details={{ details_value }}" hx-post="/admin/editor/section?details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="move-down">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -22,7 +22,7 @@
       <input type="hidden" name="expected_revision" value="{{ revision }}">
       <button class="icon-button icon-button-down" type="submit" aria-label="Move section down" title="Move section down" {{#if section.is_last}}disabled{{/if}}><span class="icon">{{> icon_down }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section?details={{ details_value }}" hx-post="/admin/editor/section?details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="duplicate">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -31,7 +31,7 @@
       <input type="hidden" name="expected_revision" value="{{ revision }}">
       <button class="icon-button icon-button-copy" type="submit" aria-label="Duplicate section" title="Duplicate section"><span class="icon">{{> icon_copy }}</span></button>
     </form>
-    <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form method="post" action="/admin/editor/section?details={{ details_value }}" hx-post="/admin/editor/section?details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="delete">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -46,7 +46,7 @@
         type="button"
         aria-label="Edit section"
         title="Edit section"
-        hx-get="/admin/editor?document={{ document_id }}&amp;details={{ details_value }}&amp;title={{ title_value }}"
+        hx-get="/admin/editor?document={{ document_id }}&amp;details={{ details_value }}&amp;edit={{ section.id }}"
         hx-target="#editor"
         hx-select="#editor"
         hx-swap="outerHTML"
@@ -59,7 +59,7 @@
   {{#if section.is_preview}}
     <div class="section-card-body section-preview">{{{ section.preview_html }}}</div>
   {{#else}}
-    <form id="section-editor-{{ section.id }}" class="section-card-body section-editor" method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+    <form id="section-editor-{{ section.id }}" class="section-card-body section-editor" method="post" action="/admin/editor/section?details={{ details_value }}" hx-post="/admin/editor/section?details={{ details_value }}" hx-target="#section-{{ section.id }}" hx-select="#section-{{ section.id }}" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="operation" value="preview">
       <input type="hidden" name="document_id" value="{{ document_id }}">
@@ -67,6 +67,8 @@
       <input type="hidden" name="section_id" value="{{ section.id }}">
       <input type="hidden" name="expected_revision" value="{{ revision }}">
       <input type="hidden" name="kind" value="{{ section.kind }}">
+      <input type="hidden" name="editor_details" value="{{ details_value }}">
+      <input type="hidden" name="editor_title" value="{{ title_value }}">
       {{#if section.is_text}}
         <div class="growing-textarea">
           <textarea name="markdown" data-auto-resize aria-label="Markdown content" spellcheck="false" required oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px'">{{ section.markdown }}</textarea>

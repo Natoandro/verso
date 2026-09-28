@@ -2,7 +2,7 @@
 <html lang="en">
   {{> head page_title=page_title }}
   <body>
-    <main class="editor-shell" id="editor" data-editor data-document-id="{{ document_id }}">
+    <main class="editor-shell" id="editor-page" data-editor data-document-id="{{ document_id }}">
       {{> admin_header csrf_token=csrf_token is_authenticated=true }}
       <header class="editor-header">
         <div class="editor-context">
@@ -18,8 +18,8 @@
             aria-label="{{ details_label }}"
             aria-pressed="{{#if details_open}}true{{#else}}false{{/if}}"
             hx-get="/admin/editor?document={{ document_id }}&amp;details={{ details_toggle }}&amp;title={{ title_value }}"
-            hx-target="#editor"
-            hx-select="#editor"
+            hx-target="#editor-page"
+            hx-select="#editor-page"
             hx-swap="outerHTML"
           >
             <span class="icon">{{> icon_details }}</span>
@@ -27,15 +27,11 @@
         </div>
       </header>
 
-      {{#if has_notice}}
-        <div class="notice {{#if notice_is_error}}notice-error{{#else}}notice-success{{/if}}" role="status">{{ notice }}</div>
-      {{/if}}
-
       <section class="document-article" aria-labelledby="document-title">
         <div class="article-title-row">
           <div class="article-title-content">
             {{#if title_editing}}
-              <form class="title-edit-form" method="post" action="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-post="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+              <form class="title-edit-form" method="post" action="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-post="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-target="#editor-page" hx-select="#editor-page" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="document_id" value="{{ document_id }}">
                 <input type="hidden" name="version_id" value="{{ version_id }}">
@@ -60,8 +56,8 @@
               title="Edit title"
               aria-label="Edit title"
               hx-get="/admin/editor?document={{ document_id }}&amp;title=1&amp;details={{ details_value }}"
-              hx-target="#editor"
-              hx-select="#editor"
+              hx-target="#editor-page"
+              hx-select="#editor-page"
               hx-swap="outerHTML"
             >
               <span class="icon">{{> icon_edit }}</span>
@@ -70,7 +66,7 @@
         </div>
 
         {{#if details_open}}
-          <form class="details-panel" method="post" action="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-post="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+          <form class="details-panel" method="post" action="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-post="/admin/editor/document?details=1&amp;title={{ title_value }}" hx-target="#editor-page" hx-select="#editor-page" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="document_id" value="{{ document_id }}">
             <input type="hidden" name="version_id" value="{{ version_id }}">
@@ -92,35 +88,40 @@
           </form>
         {{/if}}
 
-        <div class="article-toolbar"><span class="section-count">{{ section_count }} section{{#if has_multiple}}s{{/if}}</span></div>
-        <div class="section-list" aria-live="polite">
-          {{#if has_sections}}
-            {{#for sections |section|}}
-              {{> section_card section=section csrf_token=csrf_token document_id=document_id version_id=version_id revision=revision details_value=details_value title_value=title_value }}
-            {{/for}}
-          {{#else}}
-            <p class="empty-state">Your article is empty. Add text or an image placeholder to begin.</p>
+        <div id="editor">
+          {{#if has_notice}}
+            <div class="notice {{#if notice_is_error}}notice-error{{#else}}notice-success{{/if}}" role="status">{{ notice }}</div>
           {{/if}}
-        </div>
+          <div class="article-toolbar"><span class="section-count">{{ section_count }} section{{#if has_multiple}}s{{/if}}</span></div>
+          <div class="section-list" aria-live="polite">
+            {{#if has_sections}}
+              {{#for sections |section|}}
+                {{> section_card section=section csrf_token=csrf_token document_id=document_id version_id=version_id revision=revision details_value=details_value title_value=title_value }}
+              {{/for}}
+            {{#else}}
+              <p class="empty-state">Your article is empty. Add text or an image placeholder to begin.</p>
+            {{/if}}
+          </div>
 
-        <div class="add-section">
-          <span class="add-section-label">Add to article</span>
-          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="operation" value="insert-text">
-            <input type="hidden" name="document_id" value="{{ document_id }}">
-            <input type="hidden" name="version_id" value="{{ version_id }}">
-            <input type="hidden" name="expected_revision" value="{{ revision }}">
-            <button class="icon-button icon-button-text" type="submit" aria-label="Add text" title="Add text"><span class="icon">{{> icon_text }}</span></button>
-          </form>
-          <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="operation" value="insert-image">
-            <input type="hidden" name="document_id" value="{{ document_id }}">
-            <input type="hidden" name="version_id" value="{{ version_id }}">
-            <input type="hidden" name="expected_revision" value="{{ revision }}">
-            <button class="icon-button icon-button-image" type="submit" aria-label="Add image placeholder" title="Add image placeholder"><span class="icon">{{> icon_image }}</span></button>
-          </form>
+          <div class="add-section">
+            <span class="add-section-label">Add to article</span>
+            <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="operation" value="insert-text">
+              <input type="hidden" name="document_id" value="{{ document_id }}">
+              <input type="hidden" name="version_id" value="{{ version_id }}">
+              <input type="hidden" name="expected_revision" value="{{ revision }}">
+              <button class="icon-button icon-button-text" type="submit" aria-label="Add text" title="Add text"><span class="icon">{{> icon_text }}</span></button>
+            </form>
+            <form method="post" action="/admin/editor/section" hx-post="/admin/editor/section" hx-target="#editor" hx-select="#editor" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="operation" value="insert-image">
+              <input type="hidden" name="document_id" value="{{ document_id }}">
+              <input type="hidden" name="version_id" value="{{ version_id }}">
+              <input type="hidden" name="expected_revision" value="{{ revision }}">
+              <button class="icon-button icon-button-image" type="submit" aria-label="Add image placeholder" title="Add image placeholder"><span class="icon">{{> icon_image }}</span></button>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -132,6 +133,16 @@
     </main>
     <script>
       (() => {
+        const applyRevision = (revision) => {
+          const value = String(revision);
+          document.querySelectorAll('input[name="expected_revision"]').forEach((input) => input.value = value);
+          const label = document.querySelector("#editor-revision-label");
+          if (label) label.textContent = `Saved draft · revision ${value}`;
+        };
+        const syncRevision = (root) => {
+          const input = root.querySelector('input[name="expected_revision"]');
+          if (input) applyRevision(input.value);
+        };
         const resizeTextareas = (root) => {
           root.querySelectorAll("textarea[data-auto-resize]").forEach((textarea) => {
             textarea.style.height = "auto";
@@ -140,7 +151,15 @@
         };
         resizeTextareas(document);
         window.addEventListener("resize", () => resizeTextareas(document));
-        document.body.addEventListener("htmx:afterSettle", (event) => resizeTextareas(event.target));
+        document.body.addEventListener("editorRevision", (event) => {
+          const revision = event.detail?.revision;
+          if (revision == null) return;
+          applyRevision(revision);
+        });
+        document.body.addEventListener("htmx:afterSettle", (event) => {
+          resizeTextareas(event.target);
+          syncRevision(document);
+        });
       })();
     </script>
   </body>

@@ -19,6 +19,10 @@ const editor_document_css = @embedFile("styles/editor/document.css");
 const editor_sections_css = @embedFile("styles/editor/sections.css");
 const editor_documents_css = @embedFile("styles/editor/documents.css");
 const editor_responsive_css = @embedFile("styles/editor/responsive.css");
+const section_editor_response_headers = [_]std.http.Header{
+    .{ .name = "HX-Retarget", .value = "#editor" },
+    .{ .name = "HX-Reselect", .value = "#editor" },
+};
 const CreateDraftForm = struct {
     csrf_token: ?[]const u8,
     title: []const u8,
@@ -48,6 +52,8 @@ const SectionForm = struct {
     alt: ?[]const u8,
     caption: ?[]const u8,
     display: ?[]const u8,
+    editor_details: ?[]const u8,
+    editor_title: ?[]const u8,
 };
 
 pub const Handler = struct {
@@ -108,7 +114,7 @@ fn getEditor(request: *context.RequestContext, _: layer.Next) anyerror!void {
         web_logging.logDiagnostic(request, "warn", "editor.load_rejected", "editable document could not be selected", .ok, failure, "document lookup failed");
         return renderList(request, csrf, failureMessage(failure), true);
     };
-    return renderDocument(request, csrf, version_id, detailsOpen(request), titleEditing(request), previewId(request), "", false);
+    return renderDocument(request, csrf, version_id, detailsOpen(request), titleEditing(request), editId(request), "", false);
 }
 
 fn createDraft(request: *context.RequestContext, _: layer.Next) anyerror!void {
@@ -220,12 +226,12 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
     }
     var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| {
         web_logging.logDiagnostic(request, "warn", "editor.load_failed", "draft could not be loaded for section mutation", .ok, failure, null);
-        return renderDocumentById(request, csrf, document_id, failureMessage(failure), true);
+        return renderDocumentWithHeaders(request, csrf, version_id, detailsOpen(request), titleEditing(request), section_id, failureMessage(failure), true, &section_editor_response_headers);
     };
     defer loaded.deinit();
     const index = findSection(loaded.document.sections, section_id) orelse {
         web_logging.logDiagnostic(request, "warn", "editor.request_rejected", "section was not found", .ok, error.SectionNotFound, "section not found");
-        return renderDocument(request, csrf, version_id, false, false, null, "Section not found.", true);
+        return renderDocumentWithHeaders(request, csrf, version_id, false, false, section_id, "Section not found.", true, &section_editor_response_headers);
     };
 
     if (std.mem.eql(u8, operation, "move-up") or std.mem.eql(u8, operation, "move-down")) {
@@ -235,35 +241,36 @@ fn mutateSection(request: *context.RequestContext, _: layer.Next) anyerror!void 
             @intCast(@min(index + 1, loaded.document.sections.len - 1));
         _ = request.server.document_service.moveSection(actor, .{ .version_id = version_id, .section_id = section_id, .position = target, .expected_revision = expected_revision }) catch |failure| {
             web_logging.logDiagnostic(request, "warn", "editor.section_mutation_failed", "section move failed", .ok, failure, null);
-            return renderDocument(request, csrf, version_id, false, false, null, failureMessage(failure), true);
+            return renderDocumentWithHeaders(request, csrf, version_id, false, false, null, failureMessage(failure), true, &section_editor_response_headers);
         };
         return renderDocument(request, csrf, version_id, false, false, null, "Section order updated.", false);
     }
     if (std.mem.eql(u8, operation, "duplicate")) {
         _ = request.server.document_service.duplicateSection(actor, .{ .version_id = version_id, .section_id = section_id, .position = @intCast(index + 1), .expected_revision = expected_revision }) catch |failure| {
             web_logging.logDiagnostic(request, "warn", "editor.section_mutation_failed", "section duplication failed", .ok, failure, null);
-            return renderDocument(request, csrf, version_id, false, false, null, failureMessage(failure), true);
+            return renderDocumentWithHeaders(request, csrf, version_id, false, false, null, failureMessage(failure), true, &section_editor_response_headers);
         };
         return renderDocument(request, csrf, version_id, false, false, null, "Section duplicated.", false);
     }
     if (std.mem.eql(u8, operation, "delete")) {
         _ = request.server.document_service.deleteSection(actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision }) catch |failure| {
             web_logging.logDiagnostic(request, "warn", "editor.section_mutation_failed", "section deletion failed", .ok, failure, null);
-            return renderDocument(request, csrf, version_id, false, false, null, failureMessage(failure), true);
+            return renderDocumentWithHeaders(request, csrf, version_id, false, false, null, failureMessage(failure), true, &section_editor_response_headers);
         };
         return renderDocument(request, csrf, version_id, false, false, null, "Section deleted.", false);
     }
 
     const payload = sectionPayload(parsed.value) catch |failure| {
         web_logging.logDiagnostic(request, "warn", "editor.request_rejected", "section payload was rejected", .ok, failure, "invalid section payload");
-        return renderDocument(request, csrf, version_id, false, false, null, failureMessage(failure), true);
+        return renderDocumentWithHeaders(request, csrf, version_id, detailsOpen(request), titleEditing(request), section_id, failureMessage(failure), true, &section_editor_response_headers);
     };
     _ = request.server.document_service.updateSectionWithAllocator(request.allocator(), actor, .{ .version_id = version_id, .section_id = section_id, .expected_revision = expected_revision, .payload = payload }) catch |failure| {
         web_logging.logDiagnostic(request, "warn", "editor.section_mutation_failed", "section update failed", .ok, failure, null);
-        return renderDocument(request, csrf, version_id, false, false, null, failureMessage(failure), true);
+        return renderDocumentWithHeaders(request, csrf, version_id, detailsOpen(request), titleEditing(request), section_id, failureMessage(failure), true, &section_editor_response_headers);
     };
     const show_preview = std.mem.eql(u8, operation, "preview");
-    return renderDocument(request, csrf, version_id, false, false, if (show_preview) section_id else null, if (show_preview) "Section saved and previewed." else "Section saved.", false);
+    if (show_preview) return renderSection(request, csrf, version_id, section_id, parsed.value.editor_details, parsed.value.editor_title);
+    return renderDocument(request, csrf, version_id, false, false, null, "Section saved.", false);
 }
 
 fn renderList(request: *context.RequestContext, csrf: []const u8, notice: []const u8, is_error: bool) !void {
@@ -286,15 +293,41 @@ fn renderDocumentById(request: *context.RequestContext, csrf: []const u8, docume
     return renderDocument(request, csrf, version_id, false, false, null, notice, is_error);
 }
 
-fn renderDocument(request: *context.RequestContext, csrf: []const u8, version_id: i64, details_open: bool, title_editing: bool, preview_id: ?i64, notice: []const u8, is_error: bool) !void {
+fn renderDocument(request: *context.RequestContext, csrf: []const u8, version_id: i64, details_open: bool, title_editing: bool, edit_id: ?i64, notice: []const u8, is_error: bool) !void {
+    return renderDocumentWithHeaders(request, csrf, version_id, details_open, title_editing, edit_id, notice, is_error, &.{});
+}
+
+fn renderDocumentWithHeaders(request: *context.RequestContext, csrf: []const u8, version_id: i64, details_open: bool, title_editing: bool, edit_id: ?i64, notice: []const u8, is_error: bool, extra_headers: []const std.http.Header) !void {
     const actor = try currentActor(request);
     var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| return editorFailure(request, failure);
     defer loaded.deinit();
-    const page = views.editor(request.allocator(), csrf, loaded.document, details_open, title_editing, preview_id, notice, is_error) catch |failure| {
+    const page = views.editor(request.allocator(), csrf, loaded.document, details_open, title_editing, edit_id, notice, is_error) catch |failure| {
         web_logging.logDiagnostic(request, "error", "editor.render_failed", "editor document rendering failed", .internal_server_error, failure, null);
         return failure;
     };
-    return respondPage(request, page);
+    return respondPageWithHeaders(request, page, extra_headers);
+}
+
+fn renderSection(request: *context.RequestContext, csrf: []const u8, version_id: i64, section_id: i64, details_value: ?[]const u8, title_value: ?[]const u8) !void {
+    const actor = try currentActor(request);
+    var loaded = request.server.document_service.loadDraftWithAllocator(request.allocator(), actor, version_id) catch |failure| {
+        web_logging.logDiagnostic(request, "error", "editor.section_load_failed", "updated section could not be loaded for rendering", .internal_server_error, failure, null);
+        return editorFailure(request, failure);
+    };
+    defer loaded.deinit();
+    const details_open = if (details_value) |value| std.mem.eql(u8, value, "1") else detailsOpen(request);
+    const title_editing = if (title_value) |value| std.mem.eql(u8, value, "1") else titleEditing(request);
+    const target = try std.fmt.allocPrint(request.allocator(), "#section-{}", .{section_id});
+    const trigger = try std.fmt.allocPrint(request.allocator(), "{{\"editorRevision\":{{\"revision\":\"{}\"}}}}", .{loaded.document.revision_number});
+    const headers = [_]std.http.Header{
+        .{ .name = "HX-Retarget", .value = target },
+        .{ .name = "HX-Reselect", .value = target },
+        .{ .name = "HX-Trigger", .value = trigger },
+    };
+    return renderDocumentWithHeaders(request, csrf, version_id, details_open, title_editing, null, "Section saved and previewed.", false, &headers) catch |failure| {
+        web_logging.logDiagnostic(request, "error", "editor.section_render_failed", "updated section view could not be built", .internal_server_error, failure, null);
+        return renderDocumentWithHeaders(request, csrf, version_id, details_open, title_editing, section_id, "Section saved, but the preview could not be rendered.", true, &section_editor_response_headers);
+    };
 }
 
 fn currentActor(request: *const context.RequestContext) !application.Actor {
@@ -319,6 +352,10 @@ fn editorFailure(request: *context.RequestContext, failure: anyerror) !void {
 }
 
 fn respondPage(request: *context.RequestContext, page: views.Page) !void {
+    return respondPageWithHeaders(request, page, &.{});
+}
+
+fn respondPageWithHeaders(request: *context.RequestContext, page: views.Page, extra_headers: []const std.http.Header) !void {
     const content = switch (page.kind) {
         .editor => templates.pages.editor.renderAlloc(request.allocator(), page),
         .document_list => templates.pages.document_list.renderAlloc(request.allocator(), page),
@@ -327,7 +364,14 @@ fn respondPage(request: *context.RequestContext, page: views.Page) !void {
         return failure;
     };
     defer request.allocator().free(content);
-    return auth.respond(request, content, "text/html; charset=utf-8", &.{.{ .name = "cache-control", .value = "no-store" }}, .ok);
+    if (extra_headers.len > 3) {
+        web_logging.logDiagnostic(request, "error", "http.response_failed", "editor response contained too many headers", .internal_server_error, error.TooManyResponseHeaders, null);
+        return error.TooManyResponseHeaders;
+    }
+    var headers: [4]std.http.Header = undefined;
+    headers[0] = .{ .name = "cache-control", .value = "no-store" };
+    for (extra_headers, 0..) |header, index| headers[index + 1] = header;
+    return auth.respond(request, content, "text/html; charset=utf-8", headers[0 .. extra_headers.len + 1], .ok);
 }
 
 fn sectionPayload(values: SectionForm) !section_domain.Payload {
@@ -382,11 +426,11 @@ fn detailsOpen(request: *const context.RequestContext) bool {
 }
 
 fn titleEditing(request: *const context.RequestContext) bool {
-    return std.mem.eql(u8, queryParam(request, "title") orelse "1", "1");
+    return std.mem.eql(u8, queryParam(request, "title") orelse "0", "1");
 }
 
-fn previewId(request: *const context.RequestContext) ?i64 {
-    const value = queryParam(request, "preview") orelse return null;
+fn editId(request: *const context.RequestContext) ?i64 {
+    const value = queryParam(request, "edit") orelse return null;
     return parseId(value) catch null;
 }
 

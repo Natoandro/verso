@@ -108,13 +108,13 @@ pub fn editor(
     draft: document.DraftDocument,
     details_open: bool,
     title_editing: bool,
-    preview_id: ?i64,
+    edit_id: ?i64,
     notice: []const u8,
     notice_is_error: bool,
 ) !Page {
     const items = try allocator.alloc(SectionItem, draft.sections.len);
     for (draft.sections, 0..) |draft_section, index| {
-        items[index] = try makeSectionItem(allocator, draft_section, index, draft.sections.len, preview_id);
+        items[index] = try makeSectionItem(allocator, draft_section, index, draft.sections.len, edit_id);
     }
     return .{
         .page_title = draft.title,
@@ -149,11 +149,11 @@ pub fn sectionItem(
     allocator: std.mem.Allocator,
     draft: document.DraftDocument,
     section_id: i64,
-    preview_id: ?i64,
+    edit_id: ?i64,
 ) !SectionItem {
     for (draft.sections, 0..) |section_value, index| {
         const id = section_value.id orelse return error.InvalidStoredSection;
-        if (id == section_id) return makeSectionItem(allocator, section_value, index, draft.sections.len, preview_id);
+        if (id == section_id) return makeSectionItem(allocator, section_value, index, draft.sections.len, edit_id);
     }
     return error.SectionNotFound;
 }
@@ -163,7 +163,7 @@ fn makeSectionItem(
     draft_section: document.DraftSection,
     index: usize,
     section_count: usize,
-    preview_id: ?i64,
+    edit_id: ?i64,
 ) !SectionItem {
     const id = draft_section.id orelse return error.InvalidStoredSection;
     var item = SectionItem{
@@ -173,7 +173,7 @@ fn makeSectionItem(
             .text => true,
             .image => false,
         },
-        .is_preview = preview_id != null and preview_id.? == id,
+        .is_preview = edit_id == null or edit_id.? != id,
         .is_first = index == 0,
         .is_last = index + 1 == section_count,
         .markdown = "",
@@ -220,9 +220,13 @@ test "editor view preserves draft sections and presentation flags" {
         .language = "en",
         .sections = &sections,
     };
-    const page = try editor(std.testing.allocator, "csrf", draft, false, false, 8, "", false);
+    const page = try editor(std.testing.allocator, "csrf", draft, false, false, null, "", false);
     defer std.testing.allocator.free(page.sections);
     defer std.testing.allocator.free(page.sections[0].preview_html);
     try std.testing.expect(page.sections[0].is_preview);
     try std.testing.expectEqualStrings("<h1>Title</h1>", page.sections[0].preview_html);
+
+    const edit_page = try editor(std.testing.allocator, "csrf", draft, false, false, 8, "", false);
+    defer std.testing.allocator.free(edit_page.sections);
+    try std.testing.expect(!edit_page.sections[0].is_preview);
 }
