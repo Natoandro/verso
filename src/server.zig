@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const config_types = @import("config.zig");
 const application_identity = @import("application/identity.zig");
 const application_documents = @import("application/documents.zig");
@@ -11,13 +10,7 @@ const migration_directory = @import("storage/migration_directory.zig");
 const migrations = @import("storage/migrations.zig");
 const database = @import("storage/sqlite.zig");
 const web = @import("web.zig");
-
-var shutdown_requested = std.atomic.Value(bool).init(false);
-
-const SignalHandlerState = if (builtin.os.tag == .linux) struct {
-    previous_int: std.c.Sigaction,
-    previous_term: std.c.Sigaction,
-} else struct {};
+const runtime = @import("server_runtime.zig");
 
 const ServerListeningLogRecord = struct {
     comptime format: []const u8 = "server listening on {host}:{port}",
@@ -28,41 +21,8 @@ const ServerListeningLogRecord = struct {
     port: u16,
 };
 
-const ConnectionFailureLogRecord = struct {
-    comptime format: []const u8 = "HTTP connection failed after {duration_ms}: {error_name}",
-    level: []const u8,
-    event: []const u8,
-    message: []const u8,
-    duration_ms: web.logging.DurationMilliseconds,
-    error_name: []const u8,
-};
-
-test "connection failure records contain only connection details" {
-    var buffer: [512]u8 = undefined;
-    var writer = std.Io.Writer.fixed(&buffer);
-    try logging.writeRecord(
-        &writer,
-        std.testing.allocator,
-        .json,
-        42,
-        false,
-        false,
-        ConnectionFailureLogRecord{
-            .level = "warn",
-            .event = "http.connection_failed",
-            .message = "HTTP connection failed",
-            .duration_ms = .{ .milliseconds = 3.25 },
-            .error_name = "ConnectionReset",
-        },
-    );
-    try std.testing.expectEqualStrings(
-        "{\"timestamp\":\"1970-01-01T00:00:00.042Z\",\"level\":\"warn\",\"event\":\"http.connection_failed\",\"message\":\"HTTP connection failed\",\"duration_ms\":3.25,\"error_name\":\"ConnectionReset\"}\n",
-        writer.buffered(),
-    );
-}
-
 pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Config) !void {
-    shutdown_requested.store(false, .seq_cst);
+    runtime.resetShutdown();
 
     const stderr_is_tty = std.Io.File.stderr().isTty(io) catch false;
     var logger = logging.Logger.initWithOptions(
@@ -82,11 +42,11 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .port = app_config.server.port,
     });
 
-    var signal_handlers = installSignalHandlers() catch |startup_error| {
+    var signal_handlers = runtime.installSignalHandlers() catch |startup_error| {
         logStartupFailure(&logger, io, "signals", startup_error);
         return startup_error;
     };
-    defer restoreSignalHandlers(&signal_handlers);
+    defer runtime.restoreSignalHandlers(&signal_handlers);
 
     bootstrap.prepareConfiguredDirectories(io, std.Io.Dir.cwd(), allocator, app_config) catch |startup_error| {
         logStartupFailure(&logger, io, "directories", startup_error);
@@ -178,7 +138,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         return startup_error;
     };
 
-    var listen_address = resolveListenAddress(io, app_config.server.host, app_config.server.port) catch |startup_error| {
+    var listen_address = runtime.resolveListenAddress(io, app_config.server.host, app_config.server.port) catch |startup_error| {
         logStartupFailure(&logger, io, "address", startup_error);
         return startup_error;
     };
@@ -262,8 +222,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
     var handlers: std.Io.Group = .init;
     errdefer handlers.cancel(io);
 
-    while (!shutdown_requested.load(.seq_cst)) {
-        const listener_ready = waitForListener(listener.socket.handle) catch |runtime_error| {
+    while (!runtime.isShutdownRequested()) {
+        const listener_ready = runtime.waitForListener(listener.socket.handle) catch |runtime_error| {
             shutdown_reason = "failure";
             logRuntimeFailure(&logger, io, "wait_for_connection", runtime_error);
             return runtime_error;
@@ -279,7 +239,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
             },
         };
 
-        handlers.concurrent(io, handleHttpConnection, .{ connection, &server_context, &pipeline }) catch |dispatch_error| {
+        handlers.concurrent(io, runtime.handleHttpConnection, .{ connection, &server_context, &pipeline }) catch |dispatch_error| {
             connection.close(io);
             shutdown_reason = "failure";
             logRuntimeFailure(&logger, io, "handler_dispatch", dispatch_error);
@@ -295,65 +255,6 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, app_config: config_types.Co
         .message = "server shut down",
         .reason = shutdown_reason,
     });
-}
-
-fn handleHttpConnection(
-    connection: std.Io.net.Stream,
-    server_context: *web.ServerContext,
-    pipeline: *const web.Pipeline,
-) std.Io.Cancelable!void {
-    const io = server_context.io;
-    const allocator = server_context.allocator;
-    defer connection.close(io);
-
-    const started_at = std.Io.Clock.now(.awake, io);
-    const read_buffer = allocator.alloc(u8, 8192) catch |allocation_error| {
-        logConnectionFailure(server_context, started_at, allocation_error) catch {};
-        return;
-    };
-    defer allocator.free(read_buffer);
-    const write_buffer = allocator.alloc(u8, 8192) catch |allocation_error| {
-        logConnectionFailure(server_context, started_at, allocation_error) catch {};
-        return;
-    };
-    defer allocator.free(write_buffer);
-    var reader = connection.reader(io, read_buffer);
-    var writer = connection.writer(io, write_buffer);
-    var http_server = std.http.Server.init(&reader.interface, &writer.interface);
-    var request_head = http_server.receiveHead() catch |connection_error| {
-        if (connection_error == error.Canceled) return error.Canceled;
-        try logConnectionFailure(server_context, started_at, connection_error);
-        return;
-    };
-
-    var remote_address_buffer: [64]u8 = undefined;
-    var remote_address_writer = std.Io.Writer.fixed(&remote_address_buffer);
-    connection.socket.address.format(&remote_address_writer) catch |address_error| {
-        logConnectionFailure(server_context, started_at, address_error) catch {};
-        return;
-    };
-    const formatted_remote_address = remote_address_writer.buffered();
-    const remote_address = formatted_remote_address[0 .. std.mem.lastIndexOfScalar(
-        u8,
-        formatted_remote_address,
-        ':',
-    ) orelse formatted_remote_address.len];
-    var http_request = web.RequestContext.init(
-        server_context,
-        &connection,
-        &request_head,
-        started_at,
-        remote_address,
-    ) catch |init_error| {
-        if (init_error == error.Canceled) return error.Canceled;
-        logConnectionFailure(server_context, started_at, init_error) catch {};
-        return;
-    };
-    defer http_request.deinit();
-    pipeline.handle(&http_request) catch |request_error| {
-        if (request_error == error.Canceled) return error.Canceled;
-        return;
-    };
 }
 
 const StatusHandler = struct {
@@ -389,22 +290,6 @@ const ProtectedAdmin = struct {
     }
 };
 
-fn logConnectionFailure(
-    server_context: *web.ServerContext,
-    started_at: std.Io.Timestamp,
-    connection_error: anyerror,
-) std.Io.Cancelable!void {
-    const io = server_context.io;
-    const finished_at = std.Io.Clock.now(.awake, io);
-    server_context.logger.log(io, ConnectionFailureLogRecord{
-        .level = "warn",
-        .event = "http.connection_failed",
-        .message = "HTTP connection failed",
-        .duration_ms = .{ .milliseconds = web.logging.durationMilliseconds(started_at.durationTo(finished_at)) },
-        .error_name = @errorName(connection_error),
-    }) catch {};
-}
-
 fn logBestEffort(logger: *logging.Logger, io: std.Io, record: anytype) void {
     logger.log(io, record) catch {};
 }
@@ -427,73 +312,4 @@ fn logRuntimeFailure(logger: *logging.Logger, io: std.Io, stage: []const u8, run
         .stage = stage,
         .error_name = @errorName(runtime_error),
     });
-}
-
-fn handleShutdownSignal(_: std.c.SIG) callconv(.c) void {
-    shutdown_requested.store(true, .seq_cst);
-}
-
-fn installSignalHandlers() !SignalHandlerState {
-    if (builtin.os.tag != .linux) return .{};
-
-    var action: std.c.Sigaction = std.mem.zeroes(std.c.Sigaction);
-    action.handler.handler = handleShutdownSignal;
-    if (std.c.sigemptyset(&action.mask) != 0) return error.SignalSetupFailed;
-
-    var previous_int: std.c.Sigaction = undefined;
-    if (std.c.sigaction(.INT, &action, &previous_int) != 0) return error.SignalSetupFailed;
-
-    var previous_term: std.c.Sigaction = undefined;
-    if (std.c.sigaction(.TERM, &action, &previous_term) != 0) {
-        _ = std.c.sigaction(.INT, &previous_int, null);
-        return error.SignalSetupFailed;
-    }
-
-    return .{
-        .previous_int = previous_int,
-        .previous_term = previous_term,
-    };
-}
-
-fn restoreSignalHandlers(state: *SignalHandlerState) void {
-    if (builtin.os.tag != .linux) return;
-    _ = std.c.sigaction(.INT, &state.previous_int, null);
-    _ = std.c.sigaction(.TERM, &state.previous_term, null);
-}
-
-fn waitForListener(listener_handle: std.Io.net.Socket.Handle) !bool {
-    if (builtin.os.tag != .linux) return true;
-
-    var poll_fds = [_]std.posix.pollfd{.{
-        .fd = listener_handle,
-        .events = std.posix.POLL.IN,
-        .revents = 0,
-    }};
-    var timeout = std.posix.timespec{ .sec = 0, .nsec = 50 * std.time.ns_per_ms };
-
-    const poll_result = std.posix.ppoll(&poll_fds, &timeout, null) catch |poll_error| switch (poll_error) {
-        error.SignalInterrupt => return false,
-        else => return poll_error,
-    };
-    if (poll_result == 0) return false;
-
-    return poll_fds[0].revents & (std.posix.POLL.IN | std.posix.POLL.ERR | std.posix.POLL.HUP) != 0;
-}
-
-fn resolveListenAddress(io: std.Io, host: []const u8, port: u16) !std.Io.net.IpAddress {
-    if (std.Io.net.IpAddress.parse(host, port)) |address| return address else |_| {}
-
-    var host_name = try std.Io.net.HostName.init(host);
-    var lookup_buffer: [32]std.Io.net.HostName.LookupResult = undefined;
-    var lookup_queue: std.Io.Queue(std.Io.net.HostName.LookupResult) = .init(&lookup_buffer);
-    try host_name.lookup(io, &lookup_queue, .{ .port = port });
-
-    while (lookup_queue.getOneUncancelable(io)) |lookup_result| {
-        switch (lookup_result) {
-            .address => |address| return address,
-            .canonical_name => {},
-        }
-    } else |lookup_error| switch (lookup_error) {
-        error.Closed => return error.NoAddressReturned,
-    }
 }

@@ -40,10 +40,13 @@ test {
     _ = @import("application/documents.zig");
     _ = @import("application/document_access.zig");
     _ = @import("application/identity.zig");
+    _ = @import("application/identity_test.zig");
     _ = @import("application/identity_local_test.zig");
     _ = @import("application/initial_owner.zig");
     _ = @import("application/identity_management.zig");
-    _ = @import("application/documents_test.zig");
+    _ = @import("application/documents_draft_test.zig");
+    _ = @import("application/documents_sections_test.zig");
+    _ = @import("application/documents_versions_test.zig");
     _ = @import("application/documents_authorization_test.zig");
     _ = @import("storage/documents.zig");
     _ = @import("storage/assets.zig");

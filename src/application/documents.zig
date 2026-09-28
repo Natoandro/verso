@@ -6,6 +6,7 @@ const version_storage = @import("../storage/document_versions.zig");
 const section_storage = @import("../storage/sections.zig");
 const identity_application = @import("identity.zig");
 const document_access = @import("document_access.zig");
+const section_codec = @import("section_codec.zig");
 
 pub const Actor = union(enum) {
     local_operator,
@@ -103,7 +104,7 @@ pub const Service = struct {
             encoded[index] = .{
                 .id = section.id,
                 .kind = section.payload.kind().name(),
-                .data = try encodeSection(allocator, section.payload),
+                .data = try section_codec.encode(allocator, section.payload),
             };
             encoded_count += 1;
         }
@@ -155,7 +156,7 @@ pub const Service = struct {
             if (position != index) return error.InvalidStoredDocument;
             sections[index] = .{
                 .id = section.id,
-                .payload = try decodeSection(allocator, section.kind, section.data),
+                .payload = try section_codec.decode(allocator, section.kind, section.data),
             };
         }
 
@@ -212,7 +213,7 @@ pub const Service = struct {
     ) !section_storage.MutationResult {
         try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateInsert(request);
-        const data = try encodeSection(allocator, request.payload);
+        const data = try section_codec.encode(allocator, request.payload);
         defer allocator.free(data);
         return section_storage.insertSection(
             self.store,
@@ -241,7 +242,7 @@ pub const Service = struct {
     ) !section_storage.MutationResult {
         try authorizeVersionMutation(self, actor, request.version_id);
         try section_domain.validateUpdate(request);
-        const data = try encodeSection(allocator, request.payload);
+        const data = try section_codec.encode(allocator, request.payload);
         defer allocator.free(data);
         return section_storage.updateSection(
             self.store,
@@ -372,75 +373,4 @@ fn buildTextSection(allocator: std.mem.Allocator, markdown: []const u8) ![]u8 {
     defer output.deinit();
     try output.writer.print("{f}", .{std.json.fmt(.{ .markdown = markdown }, .{})});
     return output.toOwnedSlice();
-}
-
-fn encodeSection(allocator: std.mem.Allocator, payload: section_domain.Payload) ![]u8 {
-    var output: std.Io.Writer.Allocating = .init(allocator);
-    defer output.deinit();
-    switch (payload) {
-        .text => |text| try output.writer.print("{f}", .{std.json.fmt(text, .{})}),
-        .image => |image| {
-            const json = struct {
-                asset: []const u8,
-                alt: []const u8,
-                caption: ?[]const u8,
-                display: ?[]const u8,
-            }{
-                .asset = image.asset,
-                .alt = image.alt,
-                .caption = image.caption,
-                .display = if (image.display) |display| display.text() else null,
-            };
-            try output.writer.print("{f}", .{std.json.fmt(json, .{})});
-        },
-    }
-    return output.toOwnedSlice();
-}
-
-fn decodeSection(allocator: std.mem.Allocator, kind: []const u8, data: []const u8) !section_domain.Payload {
-    const section_kind = section_domain.SectionKind.parse(kind) catch return error.InvalidStoredSection;
-    return switch (section_kind) {
-        .text => {
-            const parsed = std.json.parseFromSliceLeaky(
-                struct { markdown: []const u8 },
-                allocator,
-                data,
-                .{},
-            ) catch |failure| switch (failure) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => return error.InvalidStoredSection,
-            };
-            const payload = section_domain.Payload{ .text = .{ .markdown = parsed.markdown } };
-            section_domain.validatePayload(payload) catch return error.InvalidStoredSection;
-            return payload;
-        },
-        .image => {
-            const parsed = std.json.parseFromSliceLeaky(
-                struct {
-                    asset: []const u8,
-                    alt: []const u8,
-                    caption: ?[]const u8 = null,
-                    display: ?[]const u8 = null,
-                },
-                allocator,
-                data,
-                .{},
-            ) catch |failure| switch (failure) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => return error.InvalidStoredSection,
-            };
-            const display = if (parsed.display) |value|
-                section_domain.ImageDisplay.parse(value) catch return error.InvalidStoredSection
-            else
-                null;
-            const payload = section_domain.Payload{ .image = .{
-                .asset = parsed.asset,
-                .alt = parsed.alt,
-                .caption = parsed.caption,
-                .display = display,
-            } };
-            section_domain.validatePayload(payload) catch return error.InvalidStoredSection;
-            return payload;
-        },
-    };
 }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const context = @import("context.zig");
 const layer = @import("layer.zig");
+const target_parser = @import("target_parser.zig");
 
 pub const RequestContext = context.RequestContext;
 pub const RouteCapture = context.RouteCapture;
@@ -8,8 +9,6 @@ pub const Next = layer.Next;
 pub const Layer = layer.Layer;
 pub const Error = anyerror;
 const max_route_segments = 32;
-const max_target_segments = 64;
-const max_decoded_segment = 4096;
 
 const SegmentKind = enum { literal, parameter };
 
@@ -20,14 +19,9 @@ const Segment = struct {
 
 const RouteScore = struct { literal_segments: usize, segment_count: usize };
 
-const TargetSegment = struct { raw: []const u8 };
-
-const Target = struct {
-    path: []const u8,
-    segments: [max_target_segments]TargetSegment = undefined,
-    segment_count: usize = 0,
-    trailing_slash: bool = false,
-};
+const max_target_segments = target_parser.max_target_segments;
+const max_decoded_segment = target_parser.max_decoded_segment;
+const Target = target_parser.Target;
 
 pub const Route = struct {
     method: std.http.Method,
@@ -263,7 +257,7 @@ pub const Router = struct {
 };
 
 fn dispatch(routes_table: []const Route, request: *RequestContext, next: Next) Error!void {
-    const target = parseTarget(request.request.head.target) orelse return next.call(request);
+    const target = target_parser.parseTarget(request.request.head.target) orelse return next.call(request);
     const index = findBest(routes_table, request.request.head.method, target) orelse
         return next.call(request);
 
@@ -292,7 +286,7 @@ fn routeCaptureNames(route: *const Route, names: *[max_route_segments][]const u8
 }
 
 pub fn resolve(routes_table: []const Route, method: std.http.Method, target: []const u8) ?usize {
-    const parsed_target = parseTarget(target) orelse return null;
+    const parsed_target = target_parser.parseTarget(target) orelse return null;
     return findBest(routes_table, method, parsed_target);
 }
 
@@ -312,7 +306,7 @@ fn findBest(routes_table: []const Route, method: std.http.Method, target: Target
 
 fn score(route: Route) RouteScore {
     if (!route.compiled) {
-        const segment_count = countPathSegments(route.path);
+        const segment_count = target_parser.countPathSegments(route.path);
         return .{ .literal_segments = segment_count, .segment_count = segment_count };
     }
     return .{ .literal_segments = route.literal_segment_count, .segment_count = route.segment_count };
@@ -333,7 +327,7 @@ fn matches(route: Route, target: Target) bool {
 
     for (route.segments[0..route.segment_count], target.segments[0..target.segment_count]) |route_segment, target_segment| {
         var decoded: [max_decoded_segment]u8 = undefined;
-        const value = decodeSegment(target_segment.raw, &decoded) catch return false;
+        const value = target_parser.decodeSegment(target_segment.raw, &decoded) catch return false;
         if (route_segment.kind == .literal and !std.mem.eql(u8, route_segment.text, value)) return false;
         if (route_segment.kind == .parameter and (value.len == 0 or std.mem.eql(u8, value, ".") or std.mem.eql(u8, value, ".."))) return false;
     }
@@ -345,85 +339,7 @@ fn populateCaptures(route: *const Route, target: Target, request: *RequestContex
     for (route.segments[0..route.segment_count], target.segments[0..target.segment_count]) |route_segment, target_segment| {
         if (route_segment.kind != .parameter) continue;
         var decoded: [max_decoded_segment]u8 = undefined;
-        const value = try decodeSegment(target_segment.raw, &decoded);
+        const value = try target_parser.decodeSegment(target_segment.raw, &decoded);
         try request.addRouteCapture(route_segment.text, value);
     }
-}
-
-fn parseTarget(target: []const u8) ?Target {
-    const query_start = std.mem.indexOfScalar(u8, target, '?') orelse target.len;
-    const path = target[0..query_start];
-    if (path.len == 0 or path[0] != '/' or std.mem.indexOfScalar(u8, path, '#') != null) return null;
-
-    var parsed = Target{ .path = path };
-    if (path.len == 1) {
-        parsed.trailing_slash = true;
-        return parsed;
-    }
-
-    var path_end = path.len;
-    if (path[path_end - 1] == '/') {
-        parsed.trailing_slash = true;
-        path_end -= 1;
-        if (path_end == 0 or path[path_end - 1] == '/') return null;
-    }
-
-    var cursor: usize = 1;
-    while (cursor < path_end) {
-        if (parsed.segment_count == max_target_segments) return null;
-        const segment_start = cursor;
-        while (cursor < path_end and path[cursor] != '/') : (cursor += 1) {}
-        if (cursor == segment_start) return null;
-        const raw = path[segment_start..cursor];
-        var decoded: [max_decoded_segment]u8 = undefined;
-        const value = decodeSegment(raw, &decoded) catch return null;
-        if (std.mem.eql(u8, value, ".") or std.mem.eql(u8, value, "..")) return null;
-        parsed.segments[parsed.segment_count] = .{ .raw = raw };
-        parsed.segment_count += 1;
-        if (cursor < path_end) cursor += 1;
-    }
-    return parsed;
-}
-
-fn decodeSegment(raw: []const u8, output: []u8) ![]const u8 {
-    var output_len: usize = 0;
-    var cursor: usize = 0;
-    while (cursor < raw.len) {
-        if (output_len == output.len) return error.TargetTooLong;
-        var value = raw[cursor];
-        if (value == '%') {
-            if (cursor + 2 >= raw.len) return error.MalformedTarget;
-            const high = hexValue(raw[cursor + 1]) orelse return error.MalformedTarget;
-            const low = hexValue(raw[cursor + 2]) orelse return error.MalformedTarget;
-            value = (high << 4) | low;
-            cursor += 3;
-        } else {
-            cursor += 1;
-        }
-        if (value == '/' or value == '\\' or value < 0x20 or value == 0x7f) {
-            return error.UnsafeTarget;
-        }
-        output[output_len] = value;
-        output_len += 1;
-    }
-    return output[0..output_len];
-}
-
-fn hexValue(value: u8) ?u8 {
-    return switch (value) {
-        '0'...'9' => value - '0',
-        'a'...'f' => value - 'a' + 10,
-        'A'...'F' => value - 'A' + 10,
-        else => null,
-    };
-}
-
-fn countPathSegments(path: []const u8) usize {
-    if (std.mem.eql(u8, path, "/")) return 0;
-    var count: usize = 1;
-    for (path) |character| {
-        if (character == '/') count += 1;
-    }
-    if (path[path.len - 1] == '/') count -= 1;
-    return count;
 }
