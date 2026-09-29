@@ -197,33 +197,39 @@ pub fn isSafeRelativePath(path: []const u8) bool {
     return true;
 }
 
+const content_type_map = [_]struct {
+    extension: []const u8,
+    content_type: []const u8,
+}{
+    .{ .extension = ".html", .content_type = "text/html; charset=utf-8" },
+    .{ .extension = ".htm", .content_type = "text/html; charset=utf-8" },
+    .{ .extension = ".css", .content_type = "text/css; charset=utf-8" },
+    .{ .extension = ".js", .content_type = "text/javascript; charset=utf-8" },
+    .{ .extension = ".mjs", .content_type = "text/javascript; charset=utf-8" },
+    .{ .extension = ".json", .content_type = "application/json" },
+    .{ .extension = ".svg", .content_type = "image/svg+xml" },
+    .{ .extension = ".xml", .content_type = "application/xml" },
+    .{ .extension = ".txt", .content_type = "text/plain; charset=utf-8" },
+    .{ .extension = ".wasm", .content_type = "application/wasm" },
+    .{ .extension = ".png", .content_type = "image/png" },
+    .{ .extension = ".jpg", .content_type = "image/jpeg" },
+    .{ .extension = ".jpeg", .content_type = "image/jpeg" },
+    .{ .extension = ".gif", .content_type = "image/gif" },
+    .{ .extension = ".webp", .content_type = "image/webp" },
+    .{ .extension = ".avif", .content_type = "image/avif" },
+    .{ .extension = ".ico", .content_type = "image/x-icon" },
+    .{ .extension = ".woff", .content_type = "font/woff" },
+    .{ .extension = ".woff2", .content_type = "font/woff2" },
+    .{ .extension = ".ttf", .content_type = "font/ttf" },
+    .{ .extension = ".otf", .content_type = "font/otf" },
+    .{ .extension = ".pdf", .content_type = "application/pdf" },
+};
+
 pub fn contentTypeForPath(path: []const u8) []const u8 {
     const extension = std.fs.path.extension(path);
-    if (std.ascii.eqlIgnoreCase(extension, ".html") or std.ascii.eqlIgnoreCase(extension, ".htm")) {
-        return "text/html; charset=utf-8";
+    inline for (content_type_map) |entry| {
+        if (std.ascii.eqlIgnoreCase(extension, entry.extension)) return entry.content_type;
     }
-    if (std.ascii.eqlIgnoreCase(extension, ".css")) return "text/css; charset=utf-8";
-    if (std.ascii.eqlIgnoreCase(extension, ".js") or std.ascii.eqlIgnoreCase(extension, ".mjs")) {
-        return "text/javascript; charset=utf-8";
-    }
-    if (std.ascii.eqlIgnoreCase(extension, ".json")) return "application/json";
-    if (std.ascii.eqlIgnoreCase(extension, ".svg")) return "image/svg+xml";
-    if (std.ascii.eqlIgnoreCase(extension, ".xml")) return "application/xml";
-    if (std.ascii.eqlIgnoreCase(extension, ".txt")) return "text/plain; charset=utf-8";
-    if (std.ascii.eqlIgnoreCase(extension, ".wasm")) return "application/wasm";
-    if (std.ascii.eqlIgnoreCase(extension, ".png")) return "image/png";
-    if (std.ascii.eqlIgnoreCase(extension, ".jpg") or std.ascii.eqlIgnoreCase(extension, ".jpeg")) {
-        return "image/jpeg";
-    }
-    if (std.ascii.eqlIgnoreCase(extension, ".gif")) return "image/gif";
-    if (std.ascii.eqlIgnoreCase(extension, ".webp")) return "image/webp";
-    if (std.ascii.eqlIgnoreCase(extension, ".avif")) return "image/avif";
-    if (std.ascii.eqlIgnoreCase(extension, ".ico")) return "image/x-icon";
-    if (std.ascii.eqlIgnoreCase(extension, ".woff")) return "font/woff";
-    if (std.ascii.eqlIgnoreCase(extension, ".woff2")) return "font/woff2";
-    if (std.ascii.eqlIgnoreCase(extension, ".ttf")) return "font/ttf";
-    if (std.ascii.eqlIgnoreCase(extension, ".otf")) return "font/otf";
-    if (std.ascii.eqlIgnoreCase(extension, ".pdf")) return "application/pdf";
     return "application/octet-stream";
 }
 
