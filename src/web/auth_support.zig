@@ -5,6 +5,7 @@ const auth_security = @import("../auth/security.zig");
 const application_identity = @import("../application/identity.zig");
 const context = @import("context.zig");
 const errors = @import("errors.zig");
+const form = @import("form.zig");
 const layer = @import("layer.zig");
 const web_logging = @import("logging.zig");
 
@@ -53,9 +54,7 @@ pub const SessionGuard = struct {
                         return errors.respond(request, .internal_server_error);
                     },
                 };
-            } else if (request.request.head.content_type == null or
-                !std.ascii.eqlIgnoreCase(request.request.head.content_type.?, "application/x-www-form-urlencoded"))
-            {
+            } else if (!form.isUrlEncodedContentType(request.request.head.content_type)) {
                 web_logging.logDiagnostic(request, "warn", "auth.csrf_rejected", "unsafe request had no acceptable CSRF form", .forbidden, null, "missing CSRF token");
                 return errors.respond(request, .forbidden);
             }

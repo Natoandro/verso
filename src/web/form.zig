@@ -1,7 +1,15 @@
 const std = @import("std");
 const context = @import("context.zig");
+const web_logging = @import("logging.zig");
 
 pub const max_body_bytes = 16 * 1024;
+
+pub fn isUrlEncodedContentType(content_type: ?[]const u8) bool {
+    const value = content_type orelse return false;
+    const parameter_start = std.mem.indexOfScalar(u8, value, ';') orelse value.len;
+    const media_type = std.mem.trim(u8, value[0..parameter_start], &std.ascii.whitespace);
+    return std.ascii.eqlIgnoreCase(media_type, "application/x-www-form-urlencoded");
+}
 
 pub fn Extracted(comptime Schema: type) type {
     validateSchema(Schema);
@@ -17,7 +25,18 @@ pub fn Extracted(comptime Schema: type) type {
 }
 
 pub fn extract(comptime Schema: type, request: *context.RequestContext) !Extracted(Schema) {
-    try validateContentType(request.request.head.content_type);
+    validateContentType(request.request.head.content_type) catch |failure| {
+        web_logging.logDiagnostic(
+            request,
+            "warn",
+            "http.form_content_type_rejected",
+            "request form content type was rejected",
+            .unsupported_media_type,
+            failure,
+            "expected application/x-www-form-urlencoded",
+        );
+        return failure;
+    };
     try validateContentLength(request.request.head.content_length);
 
     const read_buffer = try request.allocator().alloc(u8, 4096);
@@ -30,8 +49,7 @@ pub fn extract(comptime Schema: type, request: *context.RequestContext) !Extract
 }
 
 fn validateContentType(content_type: ?[]const u8) !void {
-    const value = content_type orelse return error.InvalidForm;
-    if (!std.ascii.eqlIgnoreCase(value, "application/x-www-form-urlencoded")) return error.InvalidForm;
+    if (!isUrlEncodedContentType(content_type)) return error.InvalidForm;
 }
 
 fn validateContentLength(content_length: ?u64) !void {
@@ -210,6 +228,7 @@ test "form transport constraints enforce content type and body limit" {
     try std.testing.expectError(error.InvalidForm, validateContentType(null));
     try std.testing.expectError(error.InvalidForm, validateContentType("text/plain"));
     try validateContentType("Application/X-WWW-Form-Urlencoded");
+    try validateContentType("application/x-www-form-urlencoded; charset=UTF-8");
     try validateContentLength(max_body_bytes);
     try std.testing.expectError(error.BodyTooLarge, validateContentLength(max_body_bytes + 1));
 }
