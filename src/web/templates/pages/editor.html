@@ -34,14 +34,14 @@
         <div class="article-title-row">
           <div class="article-title-content">
             {{#if title_editing}}
-              <form class="title-edit-form" method="post" action="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-post="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-target="#editor-page" hx-select="#editor-page" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
+              <form id="title-editor" class="title-edit-form" method="post" action="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-post="/admin/editor/document?title=1&amp;details={{ details_value }}" hx-target="#editor-page" hx-select="#editor-page" hx-swap="outerHTML" hx-headers='{"x-csrf-token":"{{ csrf_token }}"}'>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="document_id" value="{{ document_id }}">
                 <input type="hidden" name="version_id" value="{{ version_id }}">
                 <input type="hidden" name="expected_revision" value="{{ revision }}">
                 <input type="hidden" name="slug" value="{{ slug }}">
                 <input type="hidden" name="description" value="{{ description }}">
-                <input id="document-title" class="document-title" name="title" value="{{ title }}" aria-label="Edit document title" autocomplete="off" required autofocus>
+                <textarea id="document-title" class="document-title" name="title" rows="1" wrap="soft" data-auto-resize aria-label="Edit document title" autocomplete="off" required autofocus oninput="this.value = this.value.replace(/[\r\n]+/g, ' '); this.style.height='0px'; this.style.height=this.scrollHeight+'px'" onkeydown="if (event.key === 'Enter') { event.preventDefault(); this.form.requestSubmit(); }">{{ title }}</textarea>
                 <button class="icon-button icon-button-check title-action" type="submit" title="Validate title" aria-label="Validate title">
                   <span class="icon">{{> icon_check }}</span>
                 </button>
@@ -147,20 +147,24 @@
           if (input) applyRevision(input.value);
         };
         const resizeTextareas = (root) => {
-          root.querySelectorAll("textarea[data-auto-resize]").forEach((textarea) => {
-            textarea.style.height = "auto";
+          const textareas = root.matches?.("textarea[data-auto-resize]")
+            ? [root]
+            : root.querySelectorAll("textarea[data-auto-resize]");
+          textareas.forEach((textarea) => {
+            textarea.style.height = "0px";
             textarea.style.height = `${textarea.scrollHeight}px`;
           });
         };
-        resizeTextareas(document);
-        window.addEventListener("resize", () => resizeTextareas(document));
+        const scheduleResize = (root) => window.requestAnimationFrame(() => resizeTextareas(root));
+        scheduleResize(document);
+        window.addEventListener("resize", () => scheduleResize(document));
         document.body.addEventListener("editorRevision", (event) => {
           const revision = event.detail?.revision;
           if (revision == null) return;
           applyRevision(revision);
         });
         document.body.addEventListener("htmx:afterSettle", (event) => {
-          resizeTextareas(event.target);
+          scheduleResize(event.target);
           syncRevision(document);
         });
       })();

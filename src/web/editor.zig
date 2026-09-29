@@ -368,4 +368,12 @@ test "editor template renders a text section" {
     try std.testing.expect(std.mem.indexOf(u8, rendered, "<svg") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "Signed in") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "href=\"/admin/theme.css?v=") != null);
+
+    var title_edit_page = page;
+    title_edit_page.title_editing = true;
+    title_edit_page.title_value = "1";
+    const title_edit_rendered = try templates.pages.editor.renderAlloc(std.testing.allocator, title_edit_page);
+    defer std.testing.allocator.free(title_edit_rendered);
+    try std.testing.expect(std.mem.indexOf(u8, title_edit_rendered, "<textarea id=\"document-title\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, title_edit_rendered, "onkeydown=\"if (event.key === 'Enter')") != null);
 }

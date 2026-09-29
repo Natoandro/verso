@@ -15,12 +15,14 @@
 }
 .title-edit-form {
   display: flex;
+  width: calc(100% - 12px);
   align-items: flex-start;
   gap: 12px;
 }
 .document-title {
   display: block;
   width: 100%;
+  min-height: 1em;
   margin: 0;
   border: 0;
   border-radius: 8px;
@@ -32,11 +34,10 @@
   letter-spacing: -.065em;
   line-height: .98;
   outline: none;
+  field-sizing: content;
   overflow-wrap: anywhere;
+  overflow: hidden;
   resize: none;
-}
-.title-edit-form .document-title {
-  flex: 1;
 }
 .title-action {
   flex: 0 0 auto;
@@ -48,6 +49,9 @@
 }
 .document-title:focus {
   box-shadow: 0 0 0 5px rgb(63 139 112 / 12%);
+}
+.title-edit-form .document-title {
+  flex: 1;
 }
 .article-description {
   max-width: 620px;

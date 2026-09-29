@@ -227,6 +227,7 @@ test "editor view preserves draft sections and presentation flags" {
     const page = try editor(std.testing.allocator, "csrf", draft, false, false, null, "", false);
     defer std.testing.allocator.free(page.sections);
     defer std.testing.allocator.free(page.sections[0].preview_html);
+    try std.testing.expect(!page.title_editing);
     try std.testing.expect(page.sections[0].is_preview);
     try std.testing.expectEqualStrings("<h1>Title</h1>", page.sections[0].preview_html);
 
