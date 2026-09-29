@@ -86,6 +86,8 @@ The initial semantics are:
   segments;
 - trailing-slash behavior is explicit and is not silently redirected;
 - query strings are not part of route matching;
+- `HEAD` requests use the matching `GET` route and return its headers without a
+  response body;
 - unsupported methods produce no match and fall through to `next`.
 
 The first matcher may support literal paths and single-segment parameters
@@ -205,7 +207,7 @@ Embedded assets are declared as `StaticResource` values. A resource is a
 compile-time declaration that owns the route pattern, embedded bytes, content
 metadata, cache policy, and optional content-derived version:
 
-The planned declaration has this shape:
+The declaration has this shape:
 
 ```zig
 const editor_base_css = web.StaticResource.init(
@@ -311,9 +313,7 @@ authorization.
 
 Both forms use the shared layer composition API. Cache headers, ETags, and
 `HEAD` behavior are explicit handler policy.
-The current `EmbeddedStatic` editor bundle routes remain `no-store` until the
-planned `StaticResource` migration defines their asset versioning and cache
-policy.
+Embedded editor bundle routes use content-hash URLs and immutable cache policy.
 
 ## 6. Initial Boundaries and Non-Goals
 

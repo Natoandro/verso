@@ -7,6 +7,7 @@ const form = @import("form.zig");
 const layer = @import("layer.zig");
 const management = @import("../application/identity_management.zig");
 const routing = @import("router.zig");
+const resources = @import("resources.zig");
 const escape = @import("tmpl").escape;
 const tmpl = @import("tmpl");
 const web_logging = @import("logging.zig");
@@ -217,12 +218,12 @@ fn renderAuthors(request: *RequestContext, snapshot: management.Snapshot) Error!
     defer output.deinit();
     const writer = &output.writer;
     const csrf_token = auth.cookieValue(request, auth.csrf_cookie_name) orelse return error.InvalidCsrfToken;
-    try writer.writeAll(
+    try writer.print(
         \\<!doctype html><html lang="en"><head><meta charset="utf-8">
         \\<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
-        \\<title>Authors and assignments - Verso</title><link rel="stylesheet" href="/admin/theme.css"><link rel="stylesheet" href="/admin/admin.css"></head>
+        \\<title>Authors and assignments - Verso</title><link rel="stylesheet" href="{s}"><link rel="stylesheet" href="{s}"></head>
         \\<body class="standalone-page"><main class="management-page">
-    );
+    , .{ resources.css.theme, resources.css.admin });
     try admin_header.render(writer, .{ .csrf_token = csrf_token, .is_authenticated = true });
     try writer.writeAll(
         \\<header class="management-header"><div>

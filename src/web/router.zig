@@ -66,9 +66,13 @@ pub fn routes(comptime declarations: anytype) RouteTable(declarations.len) {
 
     inline for (declarations, 0..) |declaration, index| {
         const declaration_type = @TypeOf(declaration);
-        const pattern = if (@hasField(declaration_type, "pattern")) declaration.pattern else declaration[0];
-        const handler_value = if (@hasField(declaration_type, "handler")) declaration.handler else declaration[1];
-        compiled[index] = compilePattern(pattern, handler_value);
+        if (comptime declaration_type == Route) {
+            compiled[index] = declaration;
+        } else {
+            const pattern = if (@hasField(declaration_type, "pattern")) declaration.pattern else declaration[0];
+            const handler_value = if (@hasField(declaration_type, "handler")) declaration.handler else declaration[1];
+            compiled[index] = compilePattern(pattern, handler_value);
+        }
     }
 
     comptime validateDeclarations(declarations);
@@ -76,6 +80,7 @@ pub fn routes(comptime declarations: anytype) RouteTable(declarations.len) {
 }
 
 pub fn compile(comptime pattern: []const u8, handler: anytype) Route {
+    @setEvalBranchQuota(20_000);
     return compilePattern(pattern, handler);
 }
 
@@ -200,13 +205,17 @@ fn isIdentifier(value: []const u8) bool {
 fn validateDeclarations(comptime declarations: anytype) void {
     inline for (declarations, 0..) |left_declaration, left_index| {
         const left_type = @TypeOf(left_declaration);
-        const left_pattern = if (@hasField(left_type, "pattern")) left_declaration.pattern else left_declaration[0];
-        const left = compilePatternStructure(left_pattern);
+        const left = if (comptime left_type == Route) left_declaration else blk: {
+            const left_pattern = if (@hasField(left_type, "pattern")) left_declaration.pattern else left_declaration[0];
+            break :blk compilePatternStructure(left_pattern);
+        };
         inline for (declarations, 0..) |right_declaration, right_index| {
             if (right_index <= left_index) continue;
             const right_type = @TypeOf(right_declaration);
-            const right_pattern = if (@hasField(right_type, "pattern")) right_declaration.pattern else right_declaration[0];
-            const right = compilePatternStructure(right_pattern);
+            const right = if (comptime right_type == Route) right_declaration else blk: {
+                const right_pattern = if (@hasField(right_type, "pattern")) right_declaration.pattern else right_declaration[0];
+                break :blk compilePatternStructure(right_pattern);
+            };
             if (left.method != right.method) continue;
             if (!sameScore(left, right)) continue;
             if (!patternsOverlap(left, right)) continue;
@@ -292,16 +301,27 @@ pub fn resolve(routes_table: []const Route, method: std.http.Method, target: []c
 
 fn findBest(routes_table: []const Route, method: std.http.Method, target: Target) ?usize {
     var best: ?usize = null;
+    var best_method_exact = false;
     var best_score = RouteScore{ .literal_segments = 0, .segment_count = 0 };
     for (routes_table, 0..) |route, index| {
-        if (route.method != method or !matches(route, target)) continue;
+        if (!methodMatches(route.method, method) or !matches(route, target)) continue;
         const route_score = score(route);
-        if (best == null or scoreIsMoreSpecific(route_score, best_score)) {
+        const method_exact = route.method == method;
+        if (best == null or
+            (method_exact and !best_method_exact) or
+            (method_exact == best_method_exact and scoreIsMoreSpecific(route_score, best_score)))
+        {
             best = index;
+            best_method_exact = method_exact;
             best_score = route_score;
         }
     }
     return best;
+}
+
+fn methodMatches(route_method: std.http.Method, request_method: std.http.Method) bool {
+    return route_method == request_method or
+        (request_method == .HEAD and route_method == .GET);
 }
 
 fn score(route: Route) RouteScore {

@@ -7,17 +7,11 @@ const helpers = @import("editor_helpers.zig");
 const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
-const static_content = @import("static.zig");
+const resources = @import("resources.zig");
 const templates = @import("templates/root.zig");
 const views = @import("editor_view.zig");
 const web_logging = @import("logging.zig");
 
-const theme_css = @embedFile("styles/theme.css");
-const editor_base_css = @embedFile("styles/editor/base.css");
-const editor_document_css = @embedFile("styles/editor/document.css");
-const editor_sections_css = @embedFile("styles/editor/sections.css");
-const editor_documents_css = @embedFile("styles/editor/documents.css");
-const editor_responsive_css = @embedFile("styles/editor/responsive.css");
 const section_editor_response_headers = [_]std.http.Header{
     .{ .name = "HX-Retarget", .value = "#editor" },
     .{ .name = "HX-Reselect", .value = "#editor" },
@@ -69,36 +63,12 @@ const routes_table = route.routes(.{
     .{ "POST /admin/editor/create", createDraft },
     .{ "POST /admin/editor/document", saveDocument },
     .{ "POST /admin/editor/section", mutateSection },
-    .{ "GET /admin/theme.css", static_content.EmbeddedStatic.handler(
-        theme_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/editor-base.css", static_content.EmbeddedStatic.handler(
-        editor_base_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/editor-document.css", static_content.EmbeddedStatic.handler(
-        editor_document_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/editor-sections.css", static_content.EmbeddedStatic.handler(
-        editor_sections_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/editor-documents.css", static_content.EmbeddedStatic.handler(
-        editor_documents_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/editor-responsive.css", static_content.EmbeddedStatic.handler(
-        editor_responsive_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
+    resources.theme_css.route(),
+    resources.editor_base_css.route(),
+    resources.editor_document_css.route(),
+    resources.editor_sections_css.route(),
+    resources.editor_documents_css.route(),
+    resources.editor_responsive_css.route(),
 });
 
 fn getEditor(request: *context.RequestContext, _: layer.Next) anyerror!void {
@@ -366,6 +336,7 @@ test "editor template renders a text section" {
     }};
     const page = views.Page{
         .page_title = "Draft",
+        .css = resources.css,
         .kind = .editor,
         .csrf_token = "csrf",
         .has_notice = false,
@@ -396,4 +367,5 @@ test "editor template renders a text section" {
     try std.testing.expect(std.mem.indexOf(u8, rendered, "name=\"markdown\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "<svg") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "Signed in") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "href=\"/admin/theme.css?v=") != null);
 }

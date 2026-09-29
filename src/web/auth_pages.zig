@@ -4,7 +4,7 @@ const context = @import("context.zig");
 const form = @import("form.zig");
 const layer = @import("layer.zig");
 const route = @import("router.zig");
-const static_content = @import("static.zig");
+const resources = @import("resources.zig");
 const support = @import("auth_support.zig");
 const web_logging = @import("logging.zig");
 const views = @import("auth_views.zig");
@@ -12,10 +12,6 @@ const views = @import("auth_views.zig");
 const RequestContext = context.RequestContext;
 const Next = layer.Next;
 const Error = anyerror;
-
-const theme_css = @embedFile("styles/theme.css");
-const auth_css = @embedFile("styles/auth.css");
-const admin_css = @embedFile("styles/admin.css");
 
 const RegistrationForm = struct {
     csrf_token: ?[]const u8,
@@ -67,21 +63,9 @@ const routes_table = route.routes(.{
     .{ "POST /admin/password", postPassword },
     .{ "GET /admin/recover/complete", getRecoveryComplete },
     .{ "POST /admin/recover/complete", postRecoveryComplete },
-    .{ "GET /admin/theme.css", static_content.EmbeddedStatic.handler(
-        theme_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/auth.css", static_content.EmbeddedStatic.handler(
-        auth_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
-    .{ "GET /admin/admin.css", static_content.EmbeddedStatic.handler(
-        admin_css,
-        "text/css; charset=utf-8",
-        .{ .status = .ok, .cache_control = "no-store" },
-    ) },
+    resources.theme_css.route(),
+    resources.auth_css.route(),
+    resources.admin_css.route(),
     .{ "GET /admin", getLogin },
     .{ "GET /admin/", getLogin },
 });

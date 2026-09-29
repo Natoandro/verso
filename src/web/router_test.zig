@@ -21,6 +21,30 @@ test "comptime routes compile parameters and select the most specific match" {
     try std.testing.expectEqual(@as(?usize, null), router.resolve(table.asSlice(), .POST, "/articles/42"));
 }
 
+test "HEAD resolves through a GET route" {
+    const handler = struct {
+        fn handle(_: *RequestContext, _: Next) Error!void {}
+    }.handle;
+    const table = router.routes(.{.{ "GET /assets/site.css", Layer.initFn(handler) }});
+
+    try std.testing.expectEqual(@as(?usize, 0), router.resolve(table.asSlice(), .HEAD, "/assets/site.css"));
+}
+
+test "an explicit HEAD route wins over GET fallback regardless of order" {
+    const get_handler = struct {
+        fn handle(_: *RequestContext, _: Next) Error!void {}
+    }.handle;
+    const head_handler = struct {
+        fn handle(_: *RequestContext, _: Next) Error!void {}
+    }.handle;
+    const table = router.routes(.{
+        .{ "GET /assets/site.css", Layer.initFn(get_handler) },
+        .{ "HEAD /assets/site.css", Layer.initFn(head_handler) },
+    });
+
+    try std.testing.expectEqual(@as(?usize, 1), router.resolve(table.asSlice(), .HEAD, "/assets/site.css"));
+}
+
 test "distinct literal routes with equal specificity are not ambiguous" {
     const handler = struct {
         fn handle(_: *RequestContext, _: Next) Error!void {}

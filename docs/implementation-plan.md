@@ -389,7 +389,7 @@ outside the initial implementation.
   - [x] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.
 
-- [ ] **WEB-005 — Add compile-time static resources**
+- [x] **WEB-005 — Add compile-time static resources**
 
   Introduce a `StaticResource` declaration for embedded assets. A declaration
   owns an exact route pattern, embedded bytes, content metadata, cache policy,
@@ -397,21 +397,21 @@ outside the initial implementation.
   registration and `href()` for server-rendered HTML attributes. Route tables
   continue to use the shared route and layer APIs.
 
-  - [ ] **Resource declaration:** Add the compile-time `StaticResource` value
+  - [x] **Resource declaration:** Add the compile-time `StaticResource` value
     and options, infer known content types from the literal route extension,
     require an explicit type for unknown extensions, and preserve ordinary
     `Route` and `Layer` composition below the convenience API.
-  - [ ] **URL generation:** Implement deterministic `href()` output with an
+  - [x] **URL generation:** Implement deterministic `href()` output with an
     optional `?v=<content-hash>` suffix. Keep the route pattern query-free and
     reject incompatible cache/version combinations at compile time.
-  - [ ] **HTTP policy:** Define `.no_store`, `.revalidate`, and `.immutable`
+  - [x] **HTTP policy:** Define `.no_store`, `.revalidate`, and `.immutable`
     cache modes, default `.immutable` for content-hash versions, content-derived
     ETags, `200`/`304` behavior, and built-in `HEAD` handling. Do not allow
     arbitrary success statuses for resources.
-  - [ ] **Editor migration:** Replace manual embedded editor and authentication
+  - [x] **Editor migration:** Replace manual embedded editor and authentication
     asset route declarations with `StaticResource` values and use `href()` in
     rendered templates.
-  - [ ] **Tests:** Cover compile-time route and URL values, stable and changed
+  - [x] **Tests:** Cover compile-time route and URL values, stable and changed
     content versions, option validation, cache headers, ETags, conditional
     requests, `HEAD`, and preservation of filesystem-static boundaries.
 

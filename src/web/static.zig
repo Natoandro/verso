@@ -253,12 +253,17 @@ fn respond(
     const not_modified = policy.status == .ok and policy.etag != null and
         matchesIfNoneMatch(request.request.head_buffer, policy.etag.?);
     const status: std.http.Status = if (not_modified) .not_modified else policy.status;
-    const body: []const u8 = if (not_modified) &.{} else content;
-    request.request.respond(body, .{
+    const original_method = request.request.head.method;
+    if (not_modified) request.request.head.method = .HEAD;
+    defer {
+        if (not_modified) request.request.head.method = original_method;
+    }
+    request.request.respond(content, .{
         .status = status,
         .keep_alive = true,
         .extra_headers = headers[0..header_count],
     }) catch |response_error| {
+        if (not_modified) request.request.head.method = original_method;
         if (response_error == error.Canceled) return error.Canceled;
         web_logging.logDiagnostic(request, "error", "http.response_failed", "failed to write static response", status, response_error, null);
         return response_error;
@@ -274,14 +279,19 @@ fn matchesIfNoneMatch(head_buffer: []const u8, etag: []const u8) bool {
         if (!std.ascii.eqlIgnoreCase(line[0..separator], "if-none-match")) continue;
         var values = std.mem.splitScalar(u8, std.mem.trim(u8, line[separator + 1 ..], " \t"), ',');
         while (values.next()) |value| {
-            if (std.mem.eql(u8, std.mem.trim(u8, value, " \t"), "*") or
-                std.mem.eql(u8, std.mem.trim(u8, value, " \t"), etag))
-            {
+            const candidate = std.mem.trim(u8, value, " \t");
+            if (std.mem.eql(u8, candidate, "*") or weakEtagsEqual(candidate, etag)) {
                 return true;
             }
         }
     }
     return false;
+}
+
+fn weakEtagsEqual(left: []const u8, right: []const u8) bool {
+    const left_tag = if (std.mem.startsWith(u8, left, "W/")) left[2..] else left;
+    const right_tag = if (std.mem.startsWith(u8, right, "W/")) right[2..] else right;
+    return std.mem.eql(u8, left_tag, right_tag);
 }
 
 test "static paths reject traversal and encoded or platform separators" {
@@ -335,4 +345,9 @@ test "if-none-match accepts a matching ETag without accepting a different tag" {
     const head = "GET /site.css HTTP/1.1\r\nIf-None-Match: \"abc\", \"def\"\r\n\r\n";
     try std.testing.expect(matchesIfNoneMatch(head, "\"def\""));
     try std.testing.expect(!matchesIfNoneMatch(head, "\"xyz\""));
+}
+
+test "if-none-match uses weak comparison for validators" {
+    const head = "GET /site.css HTTP/1.1\r\nIf-None-Match: W/\"abc\"\r\n\r\n";
+    try std.testing.expect(matchesIfNoneMatch(head, "\"abc\""));
 }

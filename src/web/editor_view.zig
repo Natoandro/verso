@@ -2,6 +2,7 @@ const std = @import("std");
 const document = @import("../domain/document.zig");
 const markdown = @import("../render/markdown.zig");
 const application = @import("../application/documents.zig");
+const resources = @import("resources.zig");
 
 pub const DocumentItem = struct {
     document_id: i64,
@@ -31,6 +32,7 @@ pub const SectionItem = struct {
 
 pub const Page = struct {
     page_title: []const u8,
+    css: resources.Css,
     kind: PageKind,
     csrf_token: []const u8,
     has_notice: bool,
@@ -75,6 +77,7 @@ pub fn list(
     }
     return .{
         .page_title = "Documents",
+        .css = resources.css,
         .kind = .document_list,
         .csrf_token = csrf_token,
         .has_notice = notice.len > 0,
@@ -118,6 +121,7 @@ pub fn editor(
     }
     return .{
         .page_title = draft.title,
+        .css = resources.css,
         .kind = .editor,
         .csrf_token = csrf_token,
         .has_notice = notice.len > 0,

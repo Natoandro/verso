@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="en">
-  {{> head page_title=page_title }}
+  {{> head
+    page_title=page_title
+    css=css
+  }}
   <body>
     <main class="admin-page" id="document-list" data-document-list>
       {{> admin_header csrf_token=csrf_token is_authenticated=true }}

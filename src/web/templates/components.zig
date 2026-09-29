@@ -5,7 +5,10 @@ pub const admin_header = tmpl.parse(@embedFile("components/admin_header.html"), 
 });
 
 pub const editor_head = tmpl.parse(@embedFile("components/editor_head.html"), .{
-    .parameters = .{ .page_title = {} },
+    .parameters = .{
+        .page_title = {},
+        .css = {},
+    },
 });
 
 pub const icon_check = tmpl.parse(@embedFile("components/icon_check.html"), .{});

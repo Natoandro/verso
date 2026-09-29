@@ -1,5 +1,6 @@
 const std = @import("std");
 const tmpl = @import("tmpl");
+const resources = @import("resources.zig");
 
 const admin_header = tmpl.parse(@embedFile("templates/components/admin_header.html"), .{
     .parameters = .{ .csrf_token = {}, .is_authenticated = {} },
@@ -23,6 +24,7 @@ pub fn login(allocator: std.mem.Allocator, message: ?[]const u8) ![]u8 {
         .error_message = message orelse "",
         .csrf_token = "",
         .is_authenticated = false,
+        .css = resources.css,
     });
 }
 
@@ -30,6 +32,7 @@ pub fn register(allocator: std.mem.Allocator, csrf_token: []const u8) ![]u8 {
     return register_template.renderAlloc(allocator, .{
         .csrf_token = csrf_token,
         .is_authenticated = false,
+        .css = resources.css,
     });
 }
 
@@ -37,6 +40,7 @@ pub fn password(allocator: std.mem.Allocator, csrf_token: []const u8) ![]u8 {
     return password_template.renderAlloc(allocator, .{
         .csrf_token = csrf_token,
         .is_authenticated = true,
+        .css = resources.css,
     });
 }
 
@@ -45,6 +49,7 @@ pub fn recoveryComplete(allocator: std.mem.Allocator, token: []const u8) ![]u8 {
         .csrf_token = "",
         .is_authenticated = false,
         .token = token,
+        .css = resources.css,
     });
 }
 
