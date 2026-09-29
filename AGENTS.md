@@ -130,6 +130,20 @@ Update documentation when behavior or architectural decisions change.
   deployment overview.
 - `docs/design.md` is the architecture index; its linked files in
   `docs/design/` contain the detailed specifications by concern.
+- Design documentation is normative: describe the desired architecture,
+  behavior, interfaces, and constraints as they should exist, unless the user
+  explicitly requests alternatives, history, or rationale.
+- Do not document rejected alternatives, abandoned proposals, or discussions
+  that led to the design. Do not describe historical implementation details
+  unless they are necessary to understand a current compatibility constraint,
+  migration, or operational behavior.
+- Prefer direct requirements over comparative wording such as "rather than",
+  "instead of", or "preferred over". Record rationale only when it explains a
+  current constraint that implementers must preserve.
+- Do not add speculative future APIs, uncommitted extension points, or
+  hypothetical alternatives to design documents. Document a future feature
+  only when it is an explicit planned requirement, and state its required
+  behavior rather than proposing multiple designs.
 - Keep examples clearly labeled as intended/planned until they are actually
   implemented.
 - Do not claim that commands, routes, storage backends, or integrations work

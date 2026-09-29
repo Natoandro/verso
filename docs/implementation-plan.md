@@ -264,8 +264,7 @@ The initial editor is online-first and server-transactional. HTMX is the
 intended browser interaction layer; the server owns the working draft and
 returns HTML fragments after application-service operations. Browser-local
 offline editing, local draft recovery, and a separate client-side renderer are
-deferred alternatives documented in
-[`docs/design/editor-approaches.md`](design/editor-approaches.md).
+outside the initial implementation.
 
 - [ ] **ED-001 — Render the protected section editor**
 
@@ -309,12 +308,11 @@ deferred alternatives documented in
   - [ ] **Rendering tests:** Verify output parity, authorization, cache
     isolation, safe links, and draft/public route separation.
 
-- [ ] **ED-004 — Defer browser-local editing alternatives**
+- [ ] **ED-004 — Keep the initial editor server-transactional**
 
   Do not add offline editing, browser-local draft recovery, or a separate
-  client-side Markdown renderer to the initial implementation. Reconsider only
-  when actual editorial use demonstrates that server-transactional HTMX
-  editing is insufficient.
+  client-side Markdown renderer to the initial implementation. Keep editing
+  server-transactional through HTMX and the application services.
 
 ## 3. Web routing and static delivery
 
@@ -391,7 +389,33 @@ deferred alternatives documented in
   - [x] **End-to-end verification:** Exercise editor and editor-asset routes,
     unknown paths, method fallthrough, and route isolation.
 
-- [x] **WEB-005 — Extract typed endpoint form values**
+- [ ] **WEB-005 — Add compile-time static resources**
+
+  Introduce a `StaticResource` declaration for embedded assets. A declaration
+  owns an exact route pattern, embedded bytes, content metadata, cache policy,
+  and optional content-derived URL version. It exposes `route()` for route-table
+  registration and `href()` for server-rendered HTML attributes. Route tables
+  continue to use the shared route and layer APIs.
+
+  - [ ] **Resource declaration:** Add the compile-time `StaticResource` value
+    and options, infer known content types from the literal route extension,
+    require an explicit type for unknown extensions, and preserve ordinary
+    `Route` and `Layer` composition below the convenience API.
+  - [ ] **URL generation:** Implement deterministic `href()` output with an
+    optional `?v=<content-hash>` suffix. Keep the route pattern query-free and
+    reject incompatible cache/version combinations at compile time.
+  - [ ] **HTTP policy:** Define `.no_store`, `.revalidate`, and `.immutable`
+    cache modes, default `.immutable` for content-hash versions, content-derived
+    ETags, `200`/`304` behavior, and built-in `HEAD` handling. Do not allow
+    arbitrary success statuses for resources.
+  - [ ] **Editor migration:** Replace manual embedded editor and authentication
+    asset route declarations with `StaticResource` values and use `href()` in
+    rendered templates.
+  - [ ] **Tests:** Cover compile-time route and URL values, stable and changed
+    content versions, option validation, cache headers, ETags, conditional
+    requests, `HEAD`, and preservation of filesystem-static boundaries.
+
+- [x] **WEB-006 — Extract typed endpoint form values**
 
   Replace the generic all-fields `web.form.Values` bag with endpoint-owned
   comptime-known schema structs. A typed extractor decodes the bounded
@@ -422,12 +446,11 @@ deferred alternatives documented in
     size limits, cleanup, and compilation of all migrated endpoint handlers
     without direct storage or authorization logic.
 
-- [ ] **WEB-006 — Add configurable strict form policies**
+- [ ] **WEB-007 — Add configurable strict form policies**
 
   Add an opt-in policy for rejecting fields not declared by an endpoint schema,
-  without changing the permissive default established by `WEB-005`. The API
-  may use an options value or a separately named strict extraction operation;
-  choose the smallest form justified by an actual endpoint need. This remains
+  without changing the permissive default established by `WEB-006`. The form
+  extractor accepts the strictness policy as an options value. This remains
   independent from required-field typing and application/domain validation.
 
   - [ ] **Policy API:** Define the strict mode's public shape and its default
@@ -596,8 +619,8 @@ deferred alternatives documented in
     authorization-code flow with PKCE inside Verso, including exact redirect
     URI validation, state and nonce checks, issuer and audience validation,
     signed discovery/JWKS verification, explicit account linking, and mapping
-    to the shared local user/session service. Do not accept proxy identity
-    headers as an alternative implementation.
+    to the shared local user/session service. Proxy identity headers are not
+    accepted.
   - [ ] **Security tests:** Verify the complete native-auth session flow, CSRF
     failures, origin handling, cookie flags, and provider behavior.
 
@@ -632,7 +655,7 @@ deferred alternatives documented in
   Unauthorized and stale requests fail safely, while published and archived
   versions remain read-only. This ticket adds the IAM and backend boundary
   around the persistence and revision services delivered by the DOC tickets;
-  frontend pages and editor wiring belong to `ED-004`.
+  frontend pages and editor wiring belong to `ED-001` through `ED-003`.
 
    - [x] **Auth:** Enforce editor assignment scope and read-only boundaries for
      published and archived versions.

@@ -84,7 +84,7 @@ The initial semantics are:
 - parameter names are unique within one pattern;
 - a trailing wildcard is the only wildcard allowed to consume multiple
   segments;
-- trailing-slash behavior is explicit rather than silently redirected;
+- trailing-slash behavior is explicit and is not silently redirected;
 - query strings are not part of route matching;
 - unsupported methods produce no match and fall through to `next`.
 
@@ -134,17 +134,18 @@ Route captures have dynamic scope. A router pushes a capture frame only after
 it has selected a matching route, then keeps that frame active while the
 matched route layer runs. Nested routing may read captures from active parent
 frames; the nearest frame is searched first. A parameter name may appear only
-once across the active frame stack, so a nested route that reuses a parent
-parameter name is a routing error rather than an implicit shadowing case.
+once across the active frame stack. A nested route that reuses a parent
+parameter name is a routing error.
 The frame is popped when the matched route layer returns, including when it
 delegates through `next`. A router that finds no match does not create a frame.
 
 Percent-decoding, encoded separators, malformed targets, and normalization
 rules must be specified before wildcard routes are used for security-sensitive
-paths. Until then, route declarations should prefer literal paths and
-application-level validation must not assume that a URL path has already been
-canonicalized. The `:slug` and `<document-id>` forms used in other architecture
-examples are descriptive URL placeholders; route declarations use `{name}`.
+paths. Route declarations use literal paths until those rules are specified,
+and application-level validation must not assume that a URL path has already
+been canonicalized. The `:slug` and `<document-id>` forms used in other
+architecture examples are descriptive URL placeholders; route declarations
+use `{name}`.
 
 ## 4. Routing Layers
 
@@ -169,10 +170,9 @@ authorization layer, validation layer, and final response handler usable as a
 single route target without adding route-specific middleware semantics.
 
 An explicit namespace mount can claim a protected prefix. Once claimed, an
-unmatched method or path is terminated inside that mount, or sent to its
-explicit protected fallback, rather than falling through to a later public
-layer. Requests outside the namespace continue through the ordinary outer
-pipeline.
+unmatched method or path is terminated inside that mount or sent to its
+explicit protected fallback. Requests outside the namespace continue through
+the ordinary outer pipeline.
 
 Separate route layers are useful for distinct concerns:
 
@@ -198,6 +198,73 @@ loaded.
 
 Static responses are handlers, not special cases in the router. The initial
 static handler forms are:
+
+### Static resource declarations
+
+Embedded assets are declared as `StaticResource` values. A resource is a
+compile-time declaration that owns the route pattern, embedded bytes, content
+metadata, cache policy, and optional content-derived version:
+
+The planned declaration has this shape:
+
+```zig
+const editor_base_css = web.StaticResource.init(
+    "GET /admin/editor-base.css",
+    @embedFile("editor-base.css"),
+    .{
+        .version = .content_hash,
+    },
+);
+
+const routes_table = web.routes(.{
+    editor_base_css.route(),
+});
+
+const editor_shell = templates.page(.{
+    .stylesheet = editor_base_css.href(),
+});
+```
+
+`route()` returns the ordinary `Route` value accepted by the route table. The
+resource handler participates in the normal layer and namespace boundaries.
+
+`href()` returns the application-relative URL for the resource. The value may
+be used in an HTML `href` or `src` attribute and is not itself an HTML element.
+With content versioning enabled, it appends a query value such as
+`?v=<content-hash>`; otherwise it returns the route path unchanged. Query
+values are not part of route matching. The version is derived only from the
+embedded bytes, so identical content produces a stable URL and changed content
+produces a new cache key.
+
+The initial resource options are deliberately small:
+
+- `content_type` is inferred at comptime from the literal route extension.
+  An explicit value may override the inferred type; a route with an unknown
+  extension requires an explicit type and is never sniffed;
+- `cache = .no_store` preserves the default for unversioned resources;
+- `cache = .revalidate` permits storage but requires validation before reuse;
+- `cache = .immutable` emits a long-lived public cache policy and requires
+  `version = .content_hash`;
+- `version = .none` omits the query version, while
+  `version = .content_hash` uses a deterministic compile-time digest.
+
+When `cache` is omitted, the effective policy is `.immutable` for
+`version = .content_hash` and `.no_store` for `version = .none`. An explicit
+cache policy always takes precedence, subject to the immutable-version
+constraint.
+
+The declaration should reject incompatible options at compile time, especially
+an immutable policy without content-derived versioning. The resource API should
+not expose arbitrary response statuses: a successful resource response is
+`200 OK`, including `HEAD` with an empty body. A matching conditional request
+may correctly produce `304 Not Modified`; malformed requests and operational
+failures retain their normal error statuses. ETags may be derived from the
+same content digest and remain independent of whether the digest is included
+in the URL.
+
+`StaticResource` applies to embedded resources. Configured public files use
+`FilesystemStatic`, with runtime file handling and response policy defined by
+that handler.
 
 ### Embedded static content
 
@@ -243,9 +310,10 @@ document-version checks; a filesystem path alone is not publication
 authorization.
 
 Both forms use the shared layer composition API. Cache headers, ETags, and
-`HEAD` behavior are explicit handler policy rather than hidden router behavior.
-Editor bundles initially remain `no-store` until their asset versioning and
-deployment cache policy are specified.
+`HEAD` behavior are explicit handler policy.
+The current `EmbeddedStatic` editor bundle routes remain `no-store` until the
+planned `StaticResource` migration defines their asset versioning and cache
+policy.
 
 ## 6. Initial Boundaries and Non-Goals
 

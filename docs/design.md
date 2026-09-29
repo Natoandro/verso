@@ -83,8 +83,6 @@ The initial system should deliberately avoid generalizing for hypothetical futur
   writer-based HTML rendering.
 - [Web editor and preview](design/editor.md) — HTMX-oriented section editing
   and server-rendered previews of persisted drafts.
-- [Editor architecture alternatives](design/editor-approaches.md) — deferred
-  editor alternatives and the rationale for the current HTMX direction.
 - [Identity and MCP](design/identity-and-mcp.md) — users, permissions, OAuth,
   MCP tools, and optimistic concurrency.
 - [Operations and boundaries](design/operations.md) — publication workflow,

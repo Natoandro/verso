@@ -5,8 +5,7 @@
 This document defines the initial server-transactional editorial interface.
 It covers section-oriented editing, HTMX fragment updates, persisted-draft
 previews, and the boundary between editorial state and publication state. A
-deferred browser-local editor alternative is documented separately in
-[editor architecture alternatives](editor-approaches.md).
+browser-local document model is outside the initial editor architecture.
 
 Related: [content model](content.md), [rendering and cache](rendering.md),
 [identity and MCP](identity-and-mcp.md), and [operations and boundaries](operations.md).

@@ -10,7 +10,7 @@ services.
 
 The typed extractor described here is implemented by `src/web/form.zig`.
 Configurable strict unknown-field handling remains planned follow-up work in
-`WEB-006`.
+`WEB-007`.
 
 ## 1. Why the generic field bag is insufficient
 
