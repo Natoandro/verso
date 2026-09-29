@@ -184,6 +184,102 @@ Comments produce no output:
 {{! This is a template comment }}
 ```
 
+### 3.6 Static style and script resources
+
+Trusted application templates may declare CSS and JavaScript resources through
+the template engine. This is a presentation feature for developer-authored
+templates and themes; it is not a document-content or editor-authored HTML
+feature.
+
+The template registers named compile-time `web.StaticResource` values:
+
+```zig
+const site_css = web.StaticResource.init(
+    "GET /assets/site.css",
+    @embedFile("site.css"),
+    .{ .version = .content_hash },
+);
+
+const site_js = web.StaticResource.init(
+    "GET /assets/site.js",
+    @embedFile("site.js"),
+    .{ .version = .content_hash },
+);
+
+const page = tmpl.parse(@embedFile("page.html"), .{
+    .surface = .document,
+    .resources = .{
+        .site_css = site_css,
+        .site_js = site_js,
+    },
+});
+
+const resource_routes = web.routes(.{
+    site_css.route(),
+    site_js.route(),
+});
+```
+
+The template selects the output mode explicitly:
+
+```html
+{{style inline=site_css}}
+{{style external=site_css}}
+
+{{script inline=site_js}}
+{{script external=site_js}}
+```
+
+The resulting markup is fixed by the directive and cannot carry arbitrary
+attributes or URLs:
+
+```html
+<style type="text/css">...resource bytes...</style>
+<link rel="stylesheet" type="text/css" href="/assets/site.css?v=...">
+<script>...resource bytes...</script>
+<script src="/assets/site.js?v=..."></script>
+```
+
+`style` accepts only CSS resources and `script` accepts only JavaScript
+resources. A resource's content type is checked at compile time. Inline bodies
+contain only the embedded resource bytes: template interpolation, runtime
+context values, and nested template directives are not allowed inside them. An
+inline resource containing an HTML closing-tag sequence for its element is a
+compile-time error; the initial implementation rejects such bytes rather than
+allowing the resource to terminate its own element.
+External mode uses the resource's `href()` and therefore retains the ordinary
+static-resource route, ETag, and cache policy. A resource must be a
+compile-time `StaticResource`; runtime URLs, filesystem paths, arbitrary
+`src`/`href` values, and `FilesystemStatic` values are not valid inputs. The
+`href()` may include the resource's optional content-hash query version; the
+template syntax does not require every resource to use URL versioning.
+
+The compiled template records the hashes required by its inline style and
+script resources. Each hash is the base64-encoded SHA-256 digest of the exact
+bytes emitted between the element's tags, represented as a CSP source such as
+`'sha256-...'`. This digest is separate from an optional URL content hash. The
+response layer adds the CSP hashes to the appropriate directives. A page
+containing an inline script therefore remains protected by CSP without
+enabling unrestricted inline execution.
+
+Inline resource directives are valid only when the active template surface is
+`.document`. A complete document may compose components containing inline
+resources; their hashes are aggregated into the parent document's CSP policy.
+Templates rendered as HTMX fragments must use external resources because a
+fragment response cannot extend the CSP of the document that receives it. The
+template declaration records a surface of `.document` or `.fragment`; the
+default is `.fragment` so inline resources require an explicit opt-in. A
+fragment surface cannot be elevated by a component, layout slot, or render
+call. Snippets and components inherit the active outer surface, and a complete
+document may compose fragment components without changing that surface. The
+same document template may use inline and external modes for one resource, but
+each occurrence remains compile-time fixed.
+
+These directives do not change the document-content safety profile:
+document-authored CSS, JavaScript, raw HTML, event handlers, and runtime asset
+injection remain unsupported. Interactive modules continue to require their
+separate versioning, review, and isolation design.
+
 ## 4. Components, Local Snippets, and Composition
 
 Components are parsed templates registered under comptime-known names. A parent
@@ -363,6 +459,10 @@ references to nonexistent snippet or component parameters. Diagnostics should
 identify the snippet or component name, template expression, and relevant Zig
 type, for example `unknown field 'titel'` in `post.titel` on `Post`.
 
+Resource directives report unknown resource names, invalid mode arguments,
+unsupported resource kinds, and content-type mismatches at comptime. Inline
+resources also contribute their exact bytes to the compiled CSP hash metadata.
+
 The comptime representation is a compact AST equivalent to:
 
 ```zig
@@ -374,6 +474,8 @@ const Node = union(enum) {
     for_block,
     snippet_declaration,
     component,
+    style_resource,
+    script_resource,
 };
 
 const Expr = union(enum) {
@@ -398,6 +500,8 @@ if          -> evaluate, render selected branch
 for         -> iterate, render body for each element
 snippet      -> produce no output
 component   -> resolve fragment, assemble child context, render child template
+style       -> write fixed style tag and embedded resource bytes
+script      -> write fixed script tag and embedded resource bytes
 ```
 
 It avoids tokenization, grammar parsing, filesystem template lookup, dynamic
@@ -427,6 +531,9 @@ before and after declaration; snippets in loops; nested lexical scope and
 shadowing; layout composition; independent fragment rendering; and compile
 failures for malformed templates, unknown fields, invalid conditions, invalid
 iteration, missing components, duplicate snippets, and invalid snippet calls.
+Resource tests must additionally cover inline and external style/script output,
+content-type validation, content-hash URLs, CSP SHA-256 metadata, rejection of
+inline fragment resources, closing-tag safety, and invalid resource references.
 
 Application templates are owned by compile-time modules under
 `src/web/templates/`. Each HTML source is embedded and parsed by one exported

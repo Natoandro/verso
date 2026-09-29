@@ -36,7 +36,9 @@ The initial implementation focuses on:
   later version;
 * planned support for interactive JavaScript and WASM modules, disabled until
   their security design is specified;
-* configurable publication appearance and behavior.
+* configurable publication appearance and behavior, including trusted
+  compile-time CSS and JavaScript resources with explicit inline or external
+  emission modes.
 
 Verso is not tied to any particular publication.
 

@@ -174,6 +174,7 @@ require a separate frontend build or Node.js at runtime.
 
 Initial versions intentionally do not target PostgreSQL/MySQL support,
 distributed server clusters, real-time character-level collaboration, CRDTs,
-arbitrary scripts in the main page context, visual no-code page building,
+arbitrary editor-provided scripts in the main page context, visual no-code page
+building,
 generic relational-data construction, plugin marketplaces, complex workflow
 engines, local MCP editing, or Git-based publishing/storage.

@@ -538,6 +538,15 @@ document layouts
 
 The first implementation should define a small, coherent theme contract rather than a completely generic theme engine.
 
+Theme and application templates may register compile-time static CSS and
+JavaScript resources and choose inline or external emission through the typed
+template directives. External resources use the normal static routes and any
+configured content-hash versioning; inline resources are limited to embedded
+bytes and require their CSP hashes.
+This customization applies to trusted deployment-owned presentation code and
+does not grant document authors or editors a raw HTML, CSS, or JavaScript
+capability.
+
 ---
 
 ## 6. Failure Principles
@@ -600,7 +609,7 @@ The first versions do not need to provide:
 * distributed Verso server clusters;
 * real-time character-by-character collaborative editing;
 * CRDTs;
-* arbitrary script execution in the main page;
+* arbitrary editor-provided script execution in the main page;
 * enabling interactive module execution before its dedicated security design;
 * visual no-code page building;
 * generic relational-data construction;

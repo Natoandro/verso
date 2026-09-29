@@ -156,3 +156,34 @@ when the stated outcome and every nested division are complete.
   - [ ] **Integration tests and docs:** Verify complete pages and HTMX fragments
     through their real render paths, document supported template syntax, and
     confirm no runtime parsing or template lookup occurs on requests.
+
+- [ ] **TPL-008 — Emit typed static CSS and JavaScript resources**
+
+  Trusted templates can register named compile-time `StaticResource` values and
+  emit each CSS or JavaScript resource in either inline mode (`<style>` or
+  `<script>`) or external mode (`<link rel="stylesheet">` or `<script
+  src="...">`). The syntax accepts no runtime URLs, filesystem paths,
+  arbitrary attributes, or document-provided code. External output uses the
+  resource's `href()` and optional content-hash URL version, while inline output
+  embeds the exact resource bytes and contributes a SHA-256 CSP hash to the
+  response policy. Inline mode is restricted to complete document templates;
+  HTMX fragment templates use external mode.
+
+  - [ ] **Resource registration:** Extend template parse options with a
+    comptime-known named resource set and a document/fragment surface. The
+    surface defaults to `.fragment`, only `.document` permits inline resources,
+    nested components inherit that surface, and fragment surfaces cannot be
+    elevated. Validate `StaticResource` values and retain their bytes, URLs,
+    content types, and hashes without a runtime registry.
+  - [ ] **Directive parsing and validation:** Add explicit `style` and `script`
+    resource directives with `inline` and `external` modes. Reject unknown
+    resources, invalid modes, unsupported resource kinds, content-type
+    mismatches, arbitrary attributes, and nested/runtime expressions.
+  - [ ] **Markup and CSP integration:** Generate fixed escaped tags, use
+    `href()` for external resources, compute base64-encoded SHA-256 hashes over
+    exact inline bytes, reject inline resources for fragment templates, expose
+    hash metadata to the response policy, and preserve the restrictive public
+    and editorial CSP boundaries.
+  - [ ] **Tests and documentation:** Cover both modes, versioned URLs, exact
+    inline bytes, CSP hash output, compile-time diagnostics, resource isolation,
+    and complete page/fragment rendering through the real server paths.

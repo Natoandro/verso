@@ -95,17 +95,25 @@ fragments, and the `https`, `http`, and `mailto` schemes. An authored
 asset collection and replaced with an authorized version-scoped URL before
 normal URL validation; it must never be emitted as an HTML URL. Renderers must
 reject scriptable or ambiguous schemes such as `javascript:` and `data:`.
-Inline event handlers, executable inline scripts, and editor-provided
-stylesheets are not part of the initial content profile.
+Inline event handlers, document-authored executable inline scripts, and
+editor-provided stylesheets are not part of the initial content profile.
+Developer-authored templates may emit compile-time static style and script
+resources through the typed resource directives in [compile-time markup
+templates](template-engine.md). Those directives are outside document content,
+accept only registered `StaticResource` values, and cannot receive runtime
+document data or URLs.
 
 The same safe rendering path applies before output is placed in the published
 cache or returned from an explicit server preview. The public and editorial
 responses should send a restrictive Content Security Policy appropriate to
 their separate interfaces. At minimum, public pages must forbid plugins and
-object embedding, disallow inline executable scripts, restrict `base-uri`, and
-allow scripts, styles, images, and connections only from explicitly configured
-origins. The editorial policy must be at least as restrictive for untrusted
-content.
+object embedding, disallow inline executable scripts except for hashes of
+trusted compile-time static resources, restrict `base-uri`, and allow scripts,
+styles, images, and connections only from explicitly configured origins. A
+template that emits an inline static style or script must add the
+resource's exact CSP hash to the corresponding directive; it must not enable a
+general inline allowance. The editorial policy must be at least as restrictive
+for untrusted content.
 
 ---
 

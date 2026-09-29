@@ -415,6 +415,11 @@ outside the initial implementation.
     content versions, option validation, cache headers, ETags, conditional
     requests, `HEAD`, and preservation of filesystem-static boundaries.
 
+  Typed template emission of these resources is a separate rendering-library
+  slice, `TPL-008`, in the [template engine implementation
+  plan](template-engine-implementation-plan.md). It depends on this completed
+  resource contract and on template/server-rendering integration.
+
 - [x] **WEB-006 — Extract typed endpoint form values**
 
   Replace the generic all-fields `web.form.Values` bag with endpoint-owned

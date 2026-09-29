@@ -268,6 +268,15 @@ in the URL.
 `FilesystemStatic`, with runtime file handling and response policy defined by
 that handler.
 
+Trusted compile-time templates may consume a `StaticResource` in either
+external or inline mode. External mode uses `href()` and the ordinary resource
+route. Inline mode uses the same embedded bytes without making a request to the
+route; the template compiler records the bytes' CSP hash for the response
+policy. Only the typed style/script directives may select inline mode, and they
+must validate the resource content type. A resource declaration remains
+eligible for ordinary routing even when a template currently uses only its
+inline mode.
+
 ### Embedded static content
 
 `EmbeddedStatic` serves a compile-time byte slice with an explicit content type
